@@ -36,6 +36,7 @@ type SimpleEditorProps = {
     content?: SimpleEditorContent;
     properties?: DocumentPropertiesValue;
     linkableNotes?: { id: string; title: string; path?: string; href?: string }[];
+    language?: 'nl' | 'en';
     onSaveStatusChange?: (status: EditorSaveStatus) => void;
     onDebugJsonChange?: (json: string) => void;
 };
@@ -46,6 +47,7 @@ export function SimpleEditor({
     content = '',
     properties = {},
     linkableNotes = [],
+    language = 'nl',
     onSaveStatusChange,
     onDebugJsonChange,
 }: SimpleEditorProps) {
@@ -66,8 +68,9 @@ export function SimpleEditor({
         () =>
             createSimpleEditorExtensions({
                 wikiLinkNotes: linkableNotes,
+                language,
             }),
-        [linkableNotes],
+        [language, linkableNotes],
     );
 
     const initialContent = useMemo(() => {

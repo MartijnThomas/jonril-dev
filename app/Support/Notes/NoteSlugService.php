@@ -3,7 +3,7 @@
 namespace App\Support\Notes;
 
 use App\Models\Note;
-use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Support\Str;
 
 class NoteSlugService
@@ -15,7 +15,7 @@ class NoteSlugService
         'journal',
     ];
 
-    public function findByReference(User $user, string $reference): ?Note
+    public function findByReference(Workspace $workspace, string $reference): ?Note
     {
         $trimmed = trim($reference, '/');
         if ($trimmed === '') {
@@ -23,13 +23,13 @@ class NoteSlugService
         }
 
         if (Str::isUuid($trimmed)) {
-            $byId = $user->notes()->where('id', $trimmed)->first();
+            $byId = $workspace->notes()->where('id', $trimmed)->first();
             if ($byId) {
                 return $byId;
             }
         }
 
-        return $user->notes()->where('slug', $trimmed)->first();
+        return $workspace->notes()->where('slug', $trimmed)->first();
     }
 
     public function urlFor(Note $note): string
@@ -122,7 +122,7 @@ class NoteSlugService
             $current = $suffix === 0 ? $base : "{$base}-{$suffix}";
 
             $exists = Note::query()
-                ->where('user_id', $note->user_id)
+                ->where('workspace_id', $note->workspace_id)
                 ->where('slug', $current)
                 ->where('id', '!=', $note->id)
                 ->exists();

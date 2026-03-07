@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\User;
+use App\Models\Workspace;
 use App\Support\Notes\NoteTaskIndexer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,12 +20,12 @@ class ReindexAllNoteTasksJob implements ShouldQueue
 
     public function handle(NoteTaskIndexer $noteTaskIndexer): void
     {
-        User::query()
+        Workspace::query()
             ->select('id')
             ->orderBy('id')
-            ->chunk(100, function ($users) use ($noteTaskIndexer): void {
-                foreach ($users as $user) {
-                    $noteTaskIndexer->reindexUser($user);
+            ->chunk(100, function ($workspaces) use ($noteTaskIndexer): void {
+                foreach ($workspaces as $workspace) {
+                    $noteTaskIndexer->reindexWorkspace($workspace);
                 }
             });
     }

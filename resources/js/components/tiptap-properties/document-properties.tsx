@@ -17,12 +17,12 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 export type DocumentPropertiesValue = Record<string, string>;
 
@@ -419,44 +419,50 @@ export function DocumentProperties({
 
     return (
         <div className="mb-4">
-            <div className="flex items-center justify-between border-b pb-1">
-                <button
-                    type="button"
-                    onClick={() => setCollapsed((current) => !current)}
-                    className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    {collapsed ? (
-                        <ChevronRight className="h-3.5 w-3.5" />
-                    ) : (
-                        <ChevronDown className="h-3.5 w-3.5" />
-                    )}
-                    <span>
-                        Properties ({entries.length + draftRows.length})
-                    </span>
-                </button>
+            <div
+                className={cn(
+                    'rounded-md px-2 py-1 transition-colors duration-200',
+                    collapsed ? 'bg-transparent' : 'bg-muted/30',
+                )}
+            >
+                <div className="flex items-center justify-between">
+                    <button
+                        type="button"
+                        onClick={() => setCollapsed((current) => !current)}
+                        className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                    >
+                        {collapsed ? (
+                            <ChevronRight className="h-3.5 w-3.5" />
+                        ) : (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                        <span>
+                            Properties ({entries.length + draftRows.length})
+                        </span>
+                    </button>
 
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 rounded-sm text-muted-foreground"
-                    onClick={addEmptyRow}
-                >
-                    <Plus className="h-3.5 w-3.5" />
-                </Button>
-            </div>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded-sm text-muted-foreground"
+                        onClick={addEmptyRow}
+                    >
+                        <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                </div>
 
-            {!collapsed && (
-                <div className="pt-2">
-                    <div className="grid grid-cols-[18px_minmax(120px,180px)_minmax(0,1fr)_20px] items-center gap-3 px-1 pb-1 text-xs text-muted-foreground">
-                        <div />
-                        <div>Key</div>
-                        <div>Value</div>
-                        <div />
-                    </div>
+                {!collapsed && (
+                    <div className="pt-2">
+                        <div className="grid grid-cols-[18px_minmax(120px,180px)_minmax(0,1fr)_20px] items-center gap-3 px-1 pb-1 text-xs text-muted-foreground">
+                            <div />
+                            <div>Key</div>
+                            <div>Value</div>
+                            <div />
+                        </div>
 
-                    <div className="space-y-px">
-                        {entries.map(([key, propertyValue]) => {
+                        <div className="space-y-px">
+                            {entries.map(([key, propertyValue]) => {
                             const rowId = `existing:${key}`;
                             const keyDraft = existingKeyDrafts[key] ?? key;
 
@@ -816,8 +822,9 @@ export function DocumentProperties({
                             <span>Add property</span>
                         </button>
                     </div>
-                </div>
-            )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

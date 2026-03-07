@@ -4,14 +4,14 @@ namespace App\Support\Notes;
 
 use App\Models\Note;
 use App\Models\NoteTask;
-use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Support\Arr;
 
 class NoteTaskIndexer
 {
-    public function reindexUser(User $user): void
+    public function reindexWorkspace(Workspace $workspace): void
     {
-        $notes = $user->notes()->get(['id', 'user_id', 'title', 'parent_id', 'content']);
+        $notes = $workspace->notes()->get(['id', 'workspace_id', 'title', 'parent_id', 'content']);
 
         foreach ($notes as $note) {
             $this->reindexNote($note);
@@ -42,8 +42,9 @@ class NoteTaskIndexer
                 $attrs = Arr::get($taskItem, 'attrs', []);
 
                 $rows[] = [
-                    'user_id' => $note->user_id,
+                    'workspace_id' => $note->workspace_id,
                     'note_id' => $note->id,
+                    'block_id' => Arr::get($attrs, 'id'),
                     'note_title' => $note->title,
                     'parent_note_id' => $note->parent_id,
                     'parent_note_title' => $note->parent?->title,

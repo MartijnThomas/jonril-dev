@@ -1,6 +1,11 @@
-import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid, ListChecks } from 'lucide-react';
-import AppLogo from '@/components/app-logo';
+import { format } from 'date-fns';
+import {
+    BookOpen,
+    CalendarDays,
+    FolderGit2,
+    ListChecks,
+    Settings,
+} from 'lucide-react';
 import { NavFooter } from '@/components/nav-footer';
 import { NavJournalLinks } from '@/components/nav-journal-links';
 import { NavMain } from '@/components/nav-main';
@@ -11,19 +16,11 @@ import {
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
+import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
     {
         title: 'Tasks',
         href: '/tasks',
@@ -34,14 +31,10 @@ const mainNavItems: NavItem[] = [
 
 const footerNavItems: NavItem[] = [
     {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
         title: 'Documentation',
         href: 'https://laravel.com/docs/starter-kits#react',
         icon: BookOpen,
+        external: true,
     },
 ];
 
@@ -49,15 +42,7 @@ export function AppSidebar() {
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
-                                <AppLogo />
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
+                <WorkspaceSwitcher />
             </SidebarHeader>
 
             <SidebarContent>

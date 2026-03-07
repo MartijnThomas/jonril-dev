@@ -1,13 +1,26 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { format, parseISO } from 'date-fns';
+import { enUS, nl } from 'date-fns/locale';
+import { ArrowDown, ArrowUp, CalendarIcon, ChevronsUpDown } from 'lucide-react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import type { DateRange } from 'react-day-picker';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
 
 type TaskItem = {
     id: number;
+    block_id: string | null;
+    position: number;
     checked: boolean;
     content: string;
     due_date: string | null;
@@ -18,6 +31,8 @@ type TaskItem = {
         id: string;
         title: string;
         href: string;
+        workspace_id: string;
+        workspace_name: string | null;
         parent_id: string | null;
         parent_title: string | null;
     };
@@ -32,14 +47,12 @@ type PaginatorLink = {
 
 type Filters = {
     q: string;
-    note_id: string;
-    parent_id: string;
+    workspace_id: string;
+    note_scope_id: string;
     mention: string;
     hashtag: string;
-    due_from: string;
-    due_to: string;
-    deadline_from: string;
-    deadline_to: string;
+    date_from: string;
+    date_to: string;
     show_completed: boolean;
     sort: 'updated' | 'due' | 'deadline' | 'note' | 'position';
     direction: 'asc' | 'desc';
@@ -52,7 +65,8 @@ type Props = {
         total: number;
     };
     filters: Filters;
-    notes: { id: string; title: string }[];
+    workspaces: { id: string; name: string }[];
+    noteTreeOptions: { id: string; title: string }[];
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -62,45 +76,181 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function TasksIndex({ tasks, filters, notes }: Props) {
+export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions }: Props) {
+    const pageProps = usePage().props as {
+        auth?: {
+            user?: {
+                settings?: {
+                    language?: string;
+                };
+            };
+        };
+    };
+    const language = pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
+    const dateLocale = language === 'en' ? enUS : nl;
+
     const [localFilters, setLocalFilters] = useState<Filters>(filters);
+    const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
 
-    const parentOptions = useMemo(() => {
-        return notes.filter((note) => note.id !== localFilters.note_id);
-    }, [localFilters.note_id, notes]);
+    const toQuery = (state: Filters) => {
+        const query: Record<string, string | number> = {
+            sort: state.sort,
+            direction: state.direction,
+        };
 
-    const applyFilters = (next: Partial<Filters>) => {
-        const merged = { ...localFilters, ...next };
-        setLocalFilters(merged);
+        if (state.q.trim() !== '') query.q = state.q.trim();
+        if (state.workspace_id) query.workspace_id = state.workspace_id;
+        if (state.note_scope_id) query.note_scope_id = state.note_scope_id;
+        if (state.mention.trim() !== '') query.mention = state.mention.trim();
+        if (state.hashtag.trim() !== '') query.hashtag = state.hashtag.trim();
+        if (state.date_from) query.date_from = state.date_from;
+        if (state.date_to) query.date_to = state.date_to;
+        if (state.show_completed) query.show_completed = 1;
 
-        router.get('/tasks', merged, {
+        return query;
+    };
+
+    const visitWithFilters = (state: Filters) => {
+        router.get('/tasks', toQuery(state), {
             preserveState: true,
             preserveScroll: true,
             replace: true,
         });
     };
 
+    const applyFilters = (next: Partial<Filters>, submit = false) => {
+        const merged = { ...localFilters, ...next };
+        setLocalFilters(merged);
+
+        if (submit) {
+            visitWithFilters(merged);
+        }
+    };
+
+    const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        visitWithFilters(localFilters);
+    };
+
     const resetFilters = () => {
         const reset: Filters = {
             q: '',
-            note_id: '',
-            parent_id: '',
+            workspace_id: '',
+            note_scope_id: '',
             mention: '',
             hashtag: '',
-            due_from: '',
-            due_to: '',
-            deadline_from: '',
-            deadline_to: '',
+            date_from: '',
+            date_to: '',
             show_completed: false,
             sort: 'due',
             direction: 'asc',
         };
 
         setLocalFilters(reset);
-        router.get('/tasks', reset, {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
+        visitWithFilters(reset);
+    };
+
+    const toggleDateSort = (field: 'due' | 'deadline') => {
+        if (localFilters.sort !== field) {
+            applyFilters({ sort: field, direction: 'asc' }, true);
+            return;
+        }
+
+        applyFilters(
+            {
+                direction: localFilters.direction === 'asc' ? 'desc' : 'asc',
+            },
+            true,
+        );
+    };
+
+    const updateTaskChecked = (
+        task: TaskItem,
+        checked: boolean,
+        options?: {
+            onSuccess?: () => void;
+            onError?: () => void;
+        },
+    ) => {
+        const taskId = task.id;
+        if (pendingTaskIds.includes(taskId)) {
+            return;
+        }
+
+        setPendingTaskIds((current) => [...current, taskId]);
+
+        router.patch(
+            '/tasks/checked',
+            {
+                note_id: task.note.id,
+                block_id: task.block_id,
+                position: task.position,
+                checked,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onSuccess: options?.onSuccess,
+                onError: options?.onError,
+                onFinish: () => {
+                    setPendingTaskIds((current) =>
+                        current.filter((id) => id !== taskId),
+                    );
+                },
+            },
+        );
+    };
+
+    const toggleTaskChecked = (task: TaskItem) => {
+        if (pendingTaskIds.includes(task.id)) {
+            return;
+        }
+
+        const nextChecked = !task.checked;
+
+        updateTaskChecked(task, nextChecked, {
+            onSuccess: () => {
+                toast.success(
+                    nextChecked
+                        ? language === 'en'
+                            ? 'Task completed.'
+                            : 'Taak afgerond.'
+                        : language === 'en'
+                          ? 'Task reopened.'
+                          : 'Taak heropend.',
+                    {
+                        action: {
+                            label: language === 'en' ? 'Undo' : 'Ongedaan maken',
+                            onClick: () => {
+                                updateTaskChecked(task, task.checked, {
+                                    onSuccess: () => {
+                                        toast.success(
+                                            language === 'en'
+                                                ? 'Task change undone.'
+                                                : 'Taakwijziging ongedaan gemaakt.',
+                                        );
+                                    },
+                                    onError: () => {
+                                        toast.error(
+                                            language === 'en'
+                                                ? 'Failed to undo task change.'
+                                                : 'Ongedaan maken van taakwijziging mislukt.',
+                                        );
+                                    },
+                                });
+                            },
+                        },
+                    },
+                );
+            },
+            onError: () => {
+                toast.error(
+                    language === 'en'
+                        ? 'Failed to update task status.'
+                        : 'Bijwerken van taakstatus mislukt.',
+                );
+            },
         });
     };
 
@@ -111,243 +261,313 @@ export default function TasksIndex({ tasks, filters, notes }: Props) {
             .replace(/<[^>]+>/g, '')
             .trim();
 
+    const parseDate = (value: string): Date | undefined => {
+        if (!value) {
+            return undefined;
+        }
+
+        return parseISO(value);
+    };
+
+    const selectedDateRange: DateRange = {
+        from: parseDate(localFilters.date_from),
+        to: parseDate(localFilters.date_to),
+    };
+
+    const formatDateRangeLabel = () => {
+        if (selectedDateRange.from && selectedDateRange.to) {
+            return `${format(selectedDateRange.from, 'PPP', { locale: dateLocale })} - ${format(selectedDateRange.to, 'PPP', { locale: dateLocale })}`;
+        }
+
+        if (selectedDateRange.from) {
+            return `From ${format(selectedDateRange.from, 'PPP', { locale: dateLocale })}`;
+        }
+
+        return 'Date range (due + deadline)';
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Tasks" />
 
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-6">
-                <section className="grid grid-cols-1 gap-3 rounded-xl border bg-card p-4 md:grid-cols-6">
-                    <Input
-                        value={localFilters.q}
-                        onChange={(event) =>
-                            setLocalFilters((prev) => ({
-                                ...prev,
-                                q: event.target.value,
-                            }))
-                        }
-                        onBlur={() => applyFilters({ q: localFilters.q })}
-                        placeholder="Search task text or note"
-                        className="md:col-span-2"
-                    />
+            <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 md:p-6">
+                <section className="rounded-xl border bg-card p-4">
+                    <div className="flex items-center justify-between gap-2">
+                        <h1 className="text-lg font-semibold">Tasks</h1>
+                        <span className="text-sm text-muted-foreground">{tasks.total} results</span>
+                    </div>
 
-                    <Select
-                        value={localFilters.note_id || '__all__'}
-                        onValueChange={(value) =>
-                            applyFilters({ note_id: value === '__all__' ? '' : value })
-                        }
-                    >
-                        <SelectTrigger className="w-full md:col-span-1">
-                            <SelectValue placeholder="All notes" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="__all__">All notes</SelectItem>
-                            {notes.map((note) => (
-                                <SelectItem key={note.id} value={note.id}>
-                                    {note.title}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <form onSubmit={onSubmit} className="mt-4 space-y-3">
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
+                            <Input
+                                value={localFilters.q}
+                                onChange={(event) => applyFilters({ q: event.target.value })}
+                                placeholder="Search tasks, notes, parents..."
+                                className="md:col-span-4"
+                            />
 
-                    <Select
-                        value={localFilters.parent_id || '__all__'}
-                        onValueChange={(value) =>
-                            applyFilters({ parent_id: value === '__all__' ? '' : value })
-                        }
-                    >
-                        <SelectTrigger className="w-full md:col-span-1">
-                            <SelectValue placeholder="All parents" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="__all__">All parents</SelectItem>
-                            {parentOptions.map((note) => (
-                                <SelectItem key={note.id} value={note.id}>
-                                    {note.title}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                            <Select
+                                value={localFilters.workspace_id || '__all__'}
+                                onValueChange={(value) =>
+                                    applyFilters(
+                                        {
+                                            workspace_id: value === '__all__' ? '' : value,
+                                            note_scope_id: '',
+                                        },
+                                        true,
+                                    )
+                                }
+                            >
+                                <SelectTrigger className="md:col-span-2">
+                                    <SelectValue placeholder="All workspaces" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All workspaces</SelectItem>
+                                    {workspaces.map((workspace) => (
+                                        <SelectItem key={workspace.id} value={workspace.id}>
+                                            {workspace.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
 
-                    <Select
-                        value={localFilters.sort}
-                        onValueChange={(value) =>
-                            applyFilters({ sort: value as Filters['sort'] })
-                        }
-                    >
-                        <SelectTrigger className="w-full md:col-span-1">
-                            <SelectValue placeholder="Sort by" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="due">Sort: due date</SelectItem>
-                            <SelectItem value="deadline">Sort: deadline</SelectItem>
-                            <SelectItem value="updated">Sort: updated</SelectItem>
-                            <SelectItem value="note">Sort: note</SelectItem>
-                            <SelectItem value="position">Sort: position</SelectItem>
-                        </SelectContent>
-                    </Select>
+                            <Select
+                                value={localFilters.note_scope_id || '__all__'}
+                                onValueChange={(value) =>
+                                    applyFilters(
+                                        { note_scope_id: value === '__all__' ? '' : value },
+                                        true,
+                                    )
+                                }
+                            >
+                                <SelectTrigger className="md:col-span-3">
+                                    <SelectValue placeholder="All notes / parents" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All notes / parents</SelectItem>
+                                    {noteTreeOptions.map((note) => (
+                                        <SelectItem key={note.id} value={note.id}>
+                                            {note.title}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
 
-                    <Select
-                        value={localFilters.direction}
-                        onValueChange={(value) =>
-                            applyFilters({ direction: value as Filters['direction'] })
-                        }
-                    >
-                        <SelectTrigger className="w-full md:col-span-1">
-                            <SelectValue placeholder="Direction" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="asc">Asc</SelectItem>
-                            <SelectItem value="desc">Desc</SelectItem>
-                        </SelectContent>
-                    </Select>
+                            <div className="md:col-span-3" />
+                        </div>
 
-                    <Input
-                        value={localFilters.mention}
-                        onChange={(event) =>
-                            setLocalFilters((prev) => ({
-                                ...prev,
-                                mention: event.target.value,
-                            }))
-                        }
-                        onBlur={() => applyFilters({ mention: localFilters.mention })}
-                        placeholder="Mention (without @)"
-                        className="md:col-span-1"
-                    />
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
+                            <Input
+                                value={localFilters.mention}
+                                onChange={(event) => applyFilters({ mention: event.target.value })}
+                                placeholder="Mention"
+                                className="md:col-span-2"
+                            />
 
-                    <Input
-                        value={localFilters.hashtag}
-                        onChange={(event) =>
-                            setLocalFilters((prev) => ({
-                                ...prev,
-                                hashtag: event.target.value,
-                            }))
-                        }
-                        onBlur={() => applyFilters({ hashtag: localFilters.hashtag })}
-                        placeholder="Hashtag (without #)"
-                        className="md:col-span-1"
-                    />
+                            <Input
+                                value={localFilters.hashtag}
+                                onChange={(event) => applyFilters({ hashtag: event.target.value })}
+                                placeholder="Hashtag"
+                                className="md:col-span-2"
+                            />
 
-                    <Input
-                        type="date"
-                        value={localFilters.due_from}
-                        onChange={(event) => applyFilters({ due_from: event.target.value })}
-                        className="md:col-span-1"
-                    />
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="justify-start gap-2 md:col-span-6"
+                                    >
+                                        <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                                        <span className="truncate">{formatDateRangeLabel()}</span>
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="range"
+                                        selected={selectedDateRange}
+                                        onSelect={(range) => {
+                                            const from = range?.from
+                                                ? format(range.from, 'yyyy-MM-dd')
+                                                : '';
+                                            const to = range?.to
+                                                ? format(range.to, 'yyyy-MM-dd')
+                                                : from;
 
-                    <Input
-                        type="date"
-                        value={localFilters.due_to}
-                        onChange={(event) => applyFilters({ due_to: event.target.value })}
-                        className="md:col-span-1"
-                    />
+                                            applyFilters(
+                                                {
+                                                    date_from: from,
+                                                    date_to: to,
+                                                },
+                                                true,
+                                            );
+                                        }}
+                                        numberOfMonths={2}
+                                    />
+                                    <div className="border-t p-2">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                                applyFilters(
+                                                    {
+                                                        date_from: '',
+                                                        date_to: '',
+                                                    },
+                                                    true,
+                                                )
+                                            }
+                                        >
+                                            Clear date range
+                                        </Button>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
 
-                    <Input
-                        type="date"
-                        value={localFilters.deadline_from}
-                        onChange={(event) =>
-                            applyFilters({ deadline_from: event.target.value })
-                        }
-                        className="md:col-span-1"
-                    />
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                            <label className="text-muted-foreground flex items-center gap-2 text-sm">
+                                <Switch
+                                    checked={localFilters.show_completed}
+                                    onCheckedChange={(checked) =>
+                                        applyFilters({ show_completed: checked }, true)
+                                    }
+                                />
+                                Show completed
+                            </label>
 
-                    <Input
-                        type="date"
-                        value={localFilters.deadline_to}
-                        onChange={(event) => applyFilters({ deadline_to: event.target.value })}
-                        className="md:col-span-1"
-                    />
-
-                    <label className="text-muted-foreground flex items-center justify-between gap-2 rounded-md border px-3 text-sm md:col-span-1">
-                        Show completed
-                        <Switch
-                            checked={localFilters.show_completed}
-                            onCheckedChange={(checked) =>
-                                applyFilters({ show_completed: checked })
-                            }
-                        />
-                    </label>
-
-                    <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground rounded-md border px-3 text-sm transition-colors md:col-span-1"
-                        onClick={resetFilters}
-                    >
-                        Reset
-                    </button>
+                            <div className="flex items-center gap-2">
+                                <Button type="button" variant="outline" onClick={resetFilters}>
+                                    Reset
+                                </Button>
+                                <Button type="submit">Apply</Button>
+                            </div>
+                        </div>
+                    </form>
                 </section>
 
                 <section className="rounded-xl border bg-card">
-                    <div className="border-b px-4 py-3 text-sm text-muted-foreground">
-                        {tasks.total} tasks
-                    </div>
-
-                    <div className="divide-y">
-                        {tasks.data.length === 0 ? (
-                            <div className="p-4 text-sm text-muted-foreground">
-                                No tasks match these filters.
-                            </div>
-                        ) : (
-                            tasks.data.map((task) => (
-                                <article key={task.id} className="space-y-2 p-4">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-10">Done</TableHead>
+                                <TableHead className="w-[55%]">Task</TableHead>
+                                <TableHead>
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 text-left"
+                                        onClick={() => toggleDateSort('due')}
+                                    >
+                                        Due
+                                        {localFilters.sort === 'due' ? (
+                                            localFilters.direction === 'asc' ? (
+                                                <ArrowUp className="h-3.5 w-3.5" />
+                                            ) : (
+                                                <ArrowDown className="h-3.5 w-3.5" />
+                                            )
+                                        ) : (
+                                            <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                        )}
+                                    </button>
+                                </TableHead>
+                                <TableHead>
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 text-left"
+                                        onClick={() => toggleDateSort('deadline')}
+                                    >
+                                        Deadline
+                                        {localFilters.sort === 'deadline' ? (
+                                            localFilters.direction === 'asc' ? (
+                                                <ArrowUp className="h-3.5 w-3.5" />
+                                            ) : (
+                                                <ArrowDown className="h-3.5 w-3.5" />
+                                            )
+                                        ) : (
+                                            <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                        )}
+                                    </button>
+                                </TableHead>
+                                <TableHead>Tags</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {tasks.data.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                                        No tasks match these filters.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                tasks.data.map((task) => (
+                                    <TableRow key={task.id}>
+                                        <TableCell>
+                                            <input
+                                                type="checkbox"
+                                                checked={task.checked}
+                                                disabled={pendingTaskIds.includes(task.id)}
+                                                onChange={() => toggleTaskChecked(task)}
+                                                className="h-4 w-4 rounded border-border"
+                                            />
+                                        </TableCell>
+                                        <TableCell className="max-w-0 whitespace-normal">
                                             <div
-                                                className={`leading-6 ${task.checked ? 'text-muted-foreground line-through' : ''}`}
+                                                className={task.checked ? 'text-muted-foreground line-through' : ''}
                                             >
                                                 {task.content || 'Untitled task'}
                                             </div>
                                             <div className="mt-1 text-xs text-muted-foreground">
-                                                {task.note.parent_title
-                                                    ? `${task.note.parent_title} / `
-                                                    : ''}
+                                                {!localFilters.workspace_id && task.note.workspace_name ? (
+                                                    <span>{task.note.workspace_name} / </span>
+                                                ) : null}
+                                                {task.note.parent_title ? `${task.note.parent_title} / ` : ''}
                                                 <Link
                                                     href={task.note.href}
-                                                    className="hover:text-foreground underline-offset-2 hover:underline"
+                                                    className="text-foreground underline-offset-2 hover:underline"
                                                 >
                                                     {task.note.title}
                                                 </Link>
                                             </div>
-                                        </div>
+                                        </TableCell>
+                                        <TableCell>{task.due_date ?? '—'}</TableCell>
+                                        <TableCell>{task.deadline_date ?? '—'}</TableCell>
+                                        <TableCell className="whitespace-normal">
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {task.mentions.map((mention) => (
+                                                    <Badge
+                                                        key={`${task.id}-mention-${mention}`}
+                                                        variant="secondary"
+                                                        className="bg-purple-500/10 text-purple-700"
+                                                    >
+                                                        @{mention}
+                                                    </Badge>
+                                                ))}
+                                                {task.hashtags.map((hashtag) => (
+                                                    <Badge
+                                                        key={`${task.id}-hashtag-${hashtag}`}
+                                                        variant="secondary"
+                                                        className="bg-blue-500/10 text-blue-700"
+                                                    >
+                                                        #{hashtag}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
 
-                                        <div className="text-right text-xs text-muted-foreground">
-                                            {task.due_date && <div>Due: {task.due_date}</div>}
-                                            {task.deadline_date && (
-                                                <div>Deadline: {task.deadline_date}</div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2 text-xs">
-                                        {task.mentions.map((mention) => (
-                                            <span
-                                                key={`${task.id}-mention-${mention}`}
-                                                className="rounded bg-purple-500/10 px-2 py-0.5 text-purple-700"
-                                            >
-                                                @{mention}
-                                            </span>
-                                        ))}
-                                        {task.hashtags.map((hashtag) => (
-                                            <span
-                                                key={`${task.id}-hashtag-${hashtag}`}
-                                                className="rounded bg-blue-500/10 px-2 py-0.5 text-blue-700"
-                                            >
-                                                #{hashtag}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </article>
-                            ))
-                        )}
-                    </div>
-
-                    {tasks.links.length > 3 && (
+                    {tasks.links.length > 3 ? (
                         <div className="flex flex-wrap items-center gap-2 border-t p-3 text-sm">
                             {tasks.links.map((link, index) => {
                                 if (!link.url) {
                                     return (
                                         <span
                                             key={`ellipsis-${index}`}
-                                            className="text-muted-foreground px-2 py-1"
+                                            className="px-2 py-1 text-muted-foreground"
                                         >
                                             {labelText(link.label)}
                                         </span>
@@ -370,7 +590,7 @@ export default function TasksIndex({ tasks, filters, notes }: Props) {
                                 );
                             })}
                         </div>
-                    )}
+                    ) : null}
                 </section>
             </div>
         </AppLayout>

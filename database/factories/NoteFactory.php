@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Note;
-use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Tiptap\Editor;
 
@@ -25,7 +25,7 @@ class NoteFactory extends Factory
         $body = fake()->paragraph();
 
         return [
-            'user_id' => User::factory(),
+            'workspace_id' => Workspace::factory(),
             'parent_id' => null,
             'type' => 'note',
             'title' => $title,
@@ -61,4 +61,3 @@ class NoteFactory extends Factory
             ->getDocument();
     }
 }
-

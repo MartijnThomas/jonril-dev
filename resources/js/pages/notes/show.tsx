@@ -11,6 +11,7 @@ type Props = {
     properties: any;
     linkableNotes: { id: string; title: string; path?: string; href?: string }[];
     breadcrumbs: BreadcrumbItem[];
+    language: 'nl' | 'en';
 };
 
 export default function Dashboard({
@@ -20,6 +21,7 @@ export default function Dashboard({
     properties,
     linkableNotes,
     breadcrumbs,
+    language,
 }: Props) {
     const page = usePage();
     const isAdmin = page.props.auth?.user?.role === 'admin';
@@ -65,6 +67,7 @@ export default function Dashboard({
                 content={content}
                 properties={properties}
                 linkableNotes={linkableNotes}
+                language={language}
                 onSaveStatusChange={setSaveStatus}
                 onDebugJsonChange={isAdmin ? setEditorJson : undefined}
             />

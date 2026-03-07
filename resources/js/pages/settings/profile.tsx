@@ -23,9 +23,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function Profile({
     mustVerifyEmail,
     status,
+    language,
 }: {
     mustVerifyEmail: boolean;
     status?: string;
+    language: 'nl' | 'en';
 }) {
     const { auth } = usePage().props;
 
@@ -88,6 +90,23 @@ export default function Profile({
                                     <InputError
                                         className="mt-2"
                                         message={errors.email}
+                                    />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="language">Language</Label>
+                                    <select
+                                        id="language"
+                                        name="language"
+                                        defaultValue={language}
+                                        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-[3px] focus-visible:outline-none"
+                                    >
+                                        <option value="nl">Nederlands</option>
+                                        <option value="en">English</option>
+                                    </select>
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.language}
                                     />
                                 </div>
 

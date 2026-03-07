@@ -3,20 +3,20 @@
 namespace App\Support\Notes;
 
 use App\Models\Note;
-use App\Models\User;
+use App\Models\Workspace;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class JournalNoteService
 {
-    public function resolveOrCreate(User $user, string $granularity, string $period): Note
+    public function resolveOrCreate(Workspace $workspace, string $granularity, string $period, ?string $locale = null): Note
     {
         $normalizedGranularity = $this->normalizeGranularity($granularity);
         $date = $this->parsePeriod($normalizedGranularity, $period);
 
         $existing = Note::query()
-            ->where('user_id', $user->id)
+            ->where('workspace_id', $workspace->id)
             ->where('type', Note::TYPE_JOURNAL)
             ->where('journal_granularity', $normalizedGranularity)
             ->whereDate('journal_date', $date->toDateString())
@@ -28,9 +28,9 @@ class JournalNoteService
             return $existing;
         }
 
-        $title = $this->titleFor($normalizedGranularity, $date);
+        $title = $this->titleFor($normalizedGranularity, $date, $locale);
 
-        return $user->notes()->create([
+        return $workspace->notes()->create([
             'type' => Note::TYPE_JOURNAL,
             'title' => $title,
             'slug' => $this->slugFor($normalizedGranularity, $date),
@@ -54,10 +54,10 @@ class JournalNoteService
         };
     }
 
-    public function titleFor(string $granularity, mixed $journalDate): string
+    public function titleFor(string $granularity, mixed $journalDate, ?string $locale = null): string
     {
         $normalizedGranularity = $this->normalizeGranularity($granularity);
-        $date = $this->normalizeDate($journalDate)->locale('nl');
+        $date = $this->normalizeDate($journalDate)->locale($this->normalizeLocale($locale));
 
         return match ($normalizedGranularity) {
             Note::JOURNAL_DAILY => Str::ucfirst($date->isoFormat('dddd D MMMM YYYY')),
@@ -65,6 +65,13 @@ class JournalNoteService
             Note::JOURNAL_MONTHLY => Str::ucfirst($date->isoFormat('MMMM YYYY')),
             Note::JOURNAL_YEARLY => $date->format('Y'),
         };
+    }
+
+    private function normalizeLocale(?string $locale): string
+    {
+        $normalized = strtolower(trim((string) $locale));
+
+        return in_array($normalized, ['nl', 'en'], true) ? $normalized : 'nl';
     }
 
     public function parsePeriod(string $granularity, string $period): CarbonImmutable

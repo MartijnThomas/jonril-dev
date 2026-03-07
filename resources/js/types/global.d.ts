@@ -6,6 +6,16 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            workspaces: Array<{
+                id: string;
+                name: string;
+                role: string;
+            }>;
+            currentWorkspace: {
+                id: string;
+                name: string;
+                role: string;
+            } | null;
             notesTree: SidebarNoteTreeItem[];
             noteSearchIndex: Array<{
                 id: string;

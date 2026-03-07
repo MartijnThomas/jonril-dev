@@ -8,6 +8,10 @@ export type User = {
     two_factor_enabled?: boolean;
     created_at: string;
     updated_at: string;
+    settings?: {
+        language?: 'nl' | 'en' | string;
+        [key: string]: unknown;
+    };
     [key: string]: unknown;
 };
 

@@ -32,9 +32,9 @@ class Note extends Model
         );
     }
 
-    public function owner(): BelongsTo
+    public function workspace(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Workspace::class);
     }
 
     public function parent(): BelongsTo

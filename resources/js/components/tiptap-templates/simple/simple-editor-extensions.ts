@@ -29,11 +29,14 @@ type WikiLinkNote = {
 
 type CreateSimpleEditorExtensionsOptions = {
     wikiLinkNotes?: WikiLinkNote[];
+    language?: string;
 };
 
 export function createSimpleEditorExtensions({
     wikiLinkNotes = [],
+    language = 'nl',
 }: CreateSimpleEditorExtensionsOptions = {}) {
+    const displayLocale = language === 'en' ? 'en-US' : 'nl-NL';
     const MentionExtension = Mention.configure({
         HTMLAttributes: {
             class: 'mention',
@@ -79,7 +82,7 @@ export function createSimpleEditorExtensions({
         HorizontalRule,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         TaskList,
-        TaskItemWithDates.configure({ nested: true }),
+        TaskItemWithDates.configure({ nested: true, displayLocale }),
         Highlight.configure({ multicolor: true }),
         Image,
         Typography.configure({

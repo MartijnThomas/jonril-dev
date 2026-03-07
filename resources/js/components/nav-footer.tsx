@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef } from 'react';
+import { Link } from '@inertiajs/react';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -29,16 +30,23 @@ export function NavFooter({
                                 asChild
                                 className="text-neutral-600 hover:text-neutral-800 dark:text-neutral-300 dark:hover:text-neutral-100"
                             >
-                                <a
-                                    href={toUrl(item.href)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    {item.icon && (
-                                        <item.icon className="h-5 w-5" />
-                                    )}
-                                    <span>{item.title}</span>
-                                </a>
+                                {item.external === false ? (
+                                    <Link href={item.href} prefetch={item.prefetch ?? true}>
+                                        {item.icon && <item.icon className="h-5 w-5" />}
+                                        <span>{item.title}</span>
+                                    </Link>
+                                ) : (
+                                    <a
+                                        href={toUrl(item.href)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        {item.icon && (
+                                            <item.icon className="h-5 w-5" />
+                                        )}
+                                        <span>{item.title}</span>
+                                    </a>
+                                )}
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     ))}

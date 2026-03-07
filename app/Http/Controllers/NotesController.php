@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Note;
+use App\Models\Workspace;
 use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\NoteRevisionRecorder;
 use App\Support\Notes\NoteSlugService;
@@ -30,13 +31,15 @@ class NotesController extends Controller
                 'nullable',
                 'uuid',
                 Rule::exists('notes', 'id')->where(
-                    fn ($query) => $query->where('user_id', Auth::id()),
+                    fn ($query) => $query->where('workspace_id', $this->currentWorkspace()->id),
                 ),
             ],
         ]);
 
+        $workspace = $this->currentWorkspace();
+
         /** @var Note $note */
-        $note = Auth::user()->notes()->create([
+        $note = $workspace->notes()->create([
             'type' => Note::TYPE_NOTE,
             'parent_id' => $data['parent_id'] ?? null,
         ]);
@@ -57,9 +60,10 @@ class NotesController extends Controller
     {
         try {
             $note = $this->journalNoteService->resolveOrCreate(
-                $request->user(),
+                $this->currentWorkspace(),
                 $granularity,
                 $period,
+                $this->userLanguage(),
             );
         } catch (InvalidArgumentException) {
             abort(404);
@@ -81,7 +85,7 @@ class NotesController extends Controller
                 'nullable',
                 'uuid',
                 Rule::exists('notes', 'id')->where(
-                    fn ($query) => $query->where('user_id', Auth::id()),
+                    fn ($query) => $query->where('workspace_id', $this->currentWorkspace()->id),
                 ),
             ],
         ]);
@@ -116,7 +120,7 @@ class NotesController extends Controller
         }
 
         $allNotes = Note::query()
-            ->where('user_id', Auth::id())
+            ->where('workspace_id', $this->currentWorkspace()->id)
             ->orderBy('created_at')
             ->get([
                 'id',
@@ -213,6 +217,7 @@ class NotesController extends Controller
             'properties' => $note->properties ?? [],
             'linkableNotes' => $linkableNotes,
             'breadcrumbs' => $breadcrumbs,
+            'language' => $this->userLanguage(),
         ]);
     }
 
@@ -222,6 +227,49 @@ class NotesController extends Controller
     private function buildBreadcrumbs(Note $note, array $noteTrail, mixed $noteById): array
     {
         if ($note->type === Note::TYPE_JOURNAL) {
+            if ($note->journal_granularity && $note->journal_date) {
+                $date = $note->journal_date->locale($this->userLanguage());
+                $yearPeriod = $this->journalNoteService->periodFor(Note::JOURNAL_YEARLY, $date);
+                $monthPeriod = $this->journalNoteService->periodFor(Note::JOURNAL_MONTHLY, $date);
+                $weekPeriod = $this->journalNoteService->periodFor(Note::JOURNAL_WEEKLY, $date);
+                $dayPeriod = $this->journalNoteService->periodFor(Note::JOURNAL_DAILY, $date);
+
+                $breadcrumbs = [[
+                    'title' => 'Journal',
+                    'href' => "/journal/daily/{$dayPeriod}",
+                ]];
+
+                if (in_array($note->journal_granularity, [Note::JOURNAL_YEARLY, Note::JOURNAL_MONTHLY, Note::JOURNAL_WEEKLY, Note::JOURNAL_DAILY], true)) {
+                    $breadcrumbs[] = [
+                        'title' => $date->format('Y'),
+                        'href' => "/journal/yearly/{$yearPeriod}",
+                    ];
+                }
+
+                if (in_array($note->journal_granularity, [Note::JOURNAL_MONTHLY, Note::JOURNAL_WEEKLY, Note::JOURNAL_DAILY], true)) {
+                    $breadcrumbs[] = [
+                        'title' => ucfirst($date->isoFormat('MMMM')),
+                        'href' => "/journal/monthly/{$monthPeriod}",
+                    ];
+                }
+
+                if (in_array($note->journal_granularity, [Note::JOURNAL_WEEKLY, Note::JOURNAL_DAILY], true)) {
+                    $breadcrumbs[] = [
+                        'title' => "Week {$date->isoWeek()}",
+                        'href' => "/journal/weekly/{$weekPeriod}",
+                    ];
+                }
+
+                if ($note->journal_granularity === Note::JOURNAL_DAILY) {
+                    $breadcrumbs[] = [
+                        'title' => $note->title ?? 'Untitled',
+                        'href' => "/journal/daily/{$dayPeriod}",
+                    ];
+                }
+
+                return $breadcrumbs;
+            }
+
             return [
                 [
                     'title' => 'Journal',
@@ -255,15 +303,33 @@ class NotesController extends Controller
         return $breadcrumbs;
     }
 
+    private function userLanguage(): string
+    {
+        $language = strtolower((string) data_get(Auth::user()?->settings, 'language', 'nl'));
+
+        return in_array($language, ['nl', 'en'], true) ? $language : 'nl';
+    }
+
     private function resolveNoteOrFail(string $reference): Note
     {
-        $note = $this->noteSlugService->findByReference(Auth::user(), $reference);
+        $workspace = $this->currentWorkspace();
+        $note = $this->noteSlugService->findByReference($workspace, $reference);
 
         if (! $note) {
             abort(404);
         }
 
         return $note;
+    }
+
+    private function currentWorkspace(): Workspace
+    {
+        $workspace = Auth::user()?->currentWorkspace();
+        if (! $workspace) {
+            abort(403, 'No workspace available.');
+        }
+
+        return $workspace;
     }
 
     private function normalizeContentForEditor(mixed $content): mixed
@@ -297,7 +363,9 @@ class NotesController extends Controller
             ]);
         }
 
-        $candidateParent = Note::query()->find($parentId);
+        $candidateParent = Note::query()
+            ->where('workspace_id', $note->workspace_id)
+            ->find($parentId);
         if (! $candidateParent) {
             return;
         }

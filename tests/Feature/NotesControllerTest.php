@@ -8,11 +8,12 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 test('start creates a note for the authenticated user and redirects to it', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
     $this->actingAs($user);
 
     $response = $this->get(route('notes.start'));
 
-    $note = Note::query()->where('user_id', $user->id)->first();
+    $note = Note::query()->where('workspace_id', $workspace?->id)->first();
 
     expect($note)->not()->toBeNull();
     expect($note->slug)->not()->toBeNull();
@@ -38,6 +39,7 @@ test('show resolves notes by slug', function () {
 
 test('journal route creates and reuses daily journal notes', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
 
     $response = $this
         ->actingAs($user)
@@ -50,7 +52,7 @@ test('journal route creates and reuses daily journal notes', function () {
     );
 
     $journal = Note::query()
-        ->where('user_id', $user->id)
+        ->where('workspace_id', $workspace?->id)
         ->where('type', 'journal')
         ->where('journal_granularity', 'daily')
         ->whereDate('journal_date', '2026-03-07')
@@ -62,7 +64,7 @@ test('journal route creates and reuses daily journal notes', function () {
 
     expect(
         Note::query()
-            ->where('user_id', $user->id)
+            ->where('workspace_id', $workspace?->id)
             ->where('type', 'journal')
             ->where('journal_granularity', 'daily')
             ->whereDate('journal_date', '2026-03-07')
@@ -192,6 +194,7 @@ test('property title overrides derived title through model accessor', function (
 
 test('start can create a child note when parent_id is provided', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
     $parent = $user->notes()->create();
 
     $response = $this->actingAs($user)->get(route('notes.start', [
@@ -199,7 +202,7 @@ test('start can create a child note when parent_id is provided', function () {
     ], absolute: false));
 
     $child = Note::query()
-        ->where('user_id', $user->id)
+        ->where('workspace_id', $workspace?->id)
         ->where('parent_id', $parent->id)
         ->latest('created_at')
         ->first();
@@ -334,6 +337,42 @@ test('show returns breadcrumb path for the current note', function () {
             ->where('breadcrumbs.2.href', "/notes/{$project->id}")
             ->where('breadcrumbs.3.title', 'Some note')
             ->where('breadcrumbs.3.href', '/notes/acme/project-1/some-note'),
+        );
+});
+
+test('daily journal note shows year month week and day breadcrumbs', function () {
+    $user = User::factory()->create();
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/daily/2026-03-07')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('breadcrumbs', 5)
+            ->where('breadcrumbs.0.title', 'Journal')
+            ->where('breadcrumbs.0.href', '/journal/daily/2026-03-07')
+            ->where('breadcrumbs.1.title', '2026')
+            ->where('breadcrumbs.1.href', '/journal/yearly/2026')
+            ->where('breadcrumbs.2.title', 'Maart')
+            ->where('breadcrumbs.2.href', '/journal/monthly/2026-03')
+            ->where('breadcrumbs.3.title', 'Week 10')
+            ->where('breadcrumbs.3.href', '/journal/weekly/2026-W10')
+            ->where('breadcrumbs.4.title', 'Zaterdag 7 maart 2026')
+            ->where('breadcrumbs.4.href', '/journal/daily/2026-03-07'),
+        );
+});
+
+test('daily journal note uses english title and breadcrumbs when user language is english', function () {
+    $user = User::factory()->create([
+        'settings' => ['language' => 'en'],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/daily/2026-03-07')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('breadcrumbs.2.title', 'March')
+            ->where('breadcrumbs.4.title', 'Saturday 7 March 2026')
+            ->where('content.content.0.content.0.text', 'Saturday 7 March 2026'),
         );
 });
 

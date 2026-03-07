@@ -1,6 +1,11 @@
 import { Link } from '@inertiajs/react';
 import { format, getISOWeek, getISOWeekYear } from 'date-fns';
-import { CalendarDays, CalendarRange, CalendarSync, Calendar1 } from 'lucide-react';
+import {
+    CalendarDays,
+    CalendarRange,
+    CalendarSync,
+    Calendar1,
+} from 'lucide-react';
 import {
     SidebarGroup,
     SidebarGroupLabel,
@@ -18,22 +23,22 @@ export function NavJournalLinks() {
 
     const items = [
         {
-            title: 'Daily note',
+            title: 'Daily',
             href: `/journal/daily/${format(today, 'yyyy-MM-dd')}`,
             icon: CalendarDays,
         },
         {
-            title: 'Weekly note',
+            title: 'Weekly',
             href: `/journal/weekly/${isoYear}-W${isoWeek}`,
             icon: CalendarRange,
         },
         {
-            title: 'Monthly note',
+            title: 'Monthly',
             href: `/journal/monthly/${format(today, 'yyyy-MM')}`,
             icon: CalendarSync,
         },
         {
-            title: 'Yearly note',
+            title: 'Yearly',
             href: `/journal/yearly/${format(today, 'yyyy')}`,
             icon: Calendar1,
         },
@@ -41,7 +46,7 @@ export function NavJournalLinks() {
 
     return (
         <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel>Journal</SidebarGroupLabel>
+            <SidebarGroupLabel>Journals</SidebarGroupLabel>
             <SidebarMenu>
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
@@ -61,4 +66,3 @@ export function NavJournalLinks() {
         </SidebarGroup>
     );
 }
-

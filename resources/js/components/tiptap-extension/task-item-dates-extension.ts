@@ -143,14 +143,14 @@ function resolveDateKeyword(keyword: string, now: Date): string | null {
     return null;
 }
 
-function formatDutchDate(isoDate: string): string {
+function formatLocalizedDate(isoDate: string, localeTag: string): string {
     if (!isValidIsoDate(isoDate)) {
         return isoDate;
     }
 
     const date = new Date(`${isoDate}T00:00:00`);
 
-    return new Intl.DateTimeFormat('nl-NL', {
+    return new Intl.DateTimeFormat(localeTag, {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -340,11 +340,12 @@ function buildTokenDecorations(
     doc: any,
     selectionFrom: number,
     selectionTo: number,
+    localeTag: string,
 ): DecorationSet {
     const decorations: Decoration[] = [];
     let hasGhostSuggestion = false;
 
-    doc.descendants((node: any, pos: number, parent: any) => {
+    doc.descendants((node: any, pos: number) => {
         if (!node.isText || !node.text || !isInsideTaskItem(doc, pos)) {
             return;
         }
@@ -380,7 +381,7 @@ function buildTokenDecorations(
                 continue;
             }
 
-            const formatted = formatDutchDate(resolvedIso);
+            const formatted = formatLocalizedDate(resolvedIso, localeTag);
 
             decorations.push(
                 Decoration.inline(start, end, {
@@ -439,6 +440,13 @@ function buildTokenDecorations(
 }
 
 export const TaskItemWithDates = TaskItem.extend({
+    addOptions() {
+        return {
+            ...(this.parent?.() ?? {}),
+            displayLocale: 'nl-NL',
+        };
+    },
+
     addAttributes() {
         return {
             ...(this.parent?.() ?? {}),
@@ -605,6 +613,7 @@ export const TaskItemWithDates = TaskItem.extend({
                         state.doc,
                         state.selection.from,
                         state.selection.to,
+                        this.options.displayLocale,
                     ),
                 apply: (tr, decorationSet) => {
                     if (!tr.docChanged && !tr.selectionSet) {
@@ -615,6 +624,7 @@ export const TaskItemWithDates = TaskItem.extend({
                         tr.doc,
                         tr.selection.from,
                         tr.selection.to,
+                        this.options.displayLocale,
                     );
                 },
             },

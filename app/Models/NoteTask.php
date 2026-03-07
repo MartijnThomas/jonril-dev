@@ -8,8 +8,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class NoteTask extends Model
 {
     protected $fillable = [
-        'user_id',
+        'workspace_id',
         'note_id',
+        'block_id',
         'note_title',
         'parent_note_id',
         'parent_note_title',
@@ -39,5 +40,10 @@ class NoteTask extends Model
     public function note(): BelongsTo
     {
         return $this->belongsTo(Note::class);
+    }
+
+    public function workspace(): BelongsTo
+    {
+        return $this->belongsTo(Workspace::class);
     }
 }

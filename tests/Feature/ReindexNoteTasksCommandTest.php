@@ -7,12 +7,13 @@ use Illuminate\Support\Str;
 
 test('reindex tasks command rebuilds task index for notes', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
 
     $noteId = (string) Str::uuid();
 
     DB::table('notes')->insert([
         'id' => $noteId,
-        'user_id' => $user->id,
+        'workspace_id' => $workspace?->id,
         'title' => 'Imported note',
         'type' => 'note',
         'content' => json_encode([

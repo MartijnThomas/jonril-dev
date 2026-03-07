@@ -4,6 +4,8 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -38,9 +40,67 @@ class User extends Authenticatable
         'remember_token',
     ];
 
-    public function notes()
+    protected static function booted(): void
     {
-        return $this->hasMany(Note::class, 'user_id');
+        static::created(function (self $user): void {
+            if ($user->workspaces()->exists()) {
+                return;
+            }
+
+            $workspace = Workspace::query()->create([
+                'owner_id' => $user->id,
+                'name' => trim("{$user->name} Workspace"),
+            ]);
+
+            $user->workspaces()->attach($workspace->id, [
+                'role' => 'owner',
+            ]);
+
+            $settings = is_array($user->settings) ? $user->settings : [];
+            $settings['workspace_id'] = $workspace->id;
+
+            $user->forceFill([
+                'settings' => $settings,
+            ])->saveQuietly();
+        });
+    }
+
+    public function ownedWorkspaces(): HasMany
+    {
+        return $this->hasMany(Workspace::class, 'owner_id');
+    }
+
+    public function workspaces(): BelongsToMany
+    {
+        return $this->belongsToMany(Workspace::class, 'workspace_user')
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    public function notes(): HasMany
+    {
+        $workspace = $this->currentWorkspace();
+        if (! $workspace) {
+            throw new \RuntimeException('No workspace available for notes relation.');
+        }
+
+        return $workspace->notes();
+    }
+
+    public function currentWorkspace(): ?Workspace
+    {
+        $preferredWorkspaceId = data_get($this->settings, 'workspace_id');
+        if (is_string($preferredWorkspaceId)) {
+            $preferred = $this->workspaces()->where('workspaces.id', $preferredWorkspaceId)->first();
+            if ($preferred) {
+                return $preferred;
+            }
+        }
+
+        return $this->workspaces()
+            ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
+            ->orderBy('workspaces.created_at')
+            ->first();
     }
 
     /**

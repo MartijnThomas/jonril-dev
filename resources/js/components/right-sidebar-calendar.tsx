@@ -1,7 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
 import { format, getISOWeek, getISOWeekYear, parseISO } from 'date-fns';
-import { nl } from 'date-fns/locale';
-import { useEffect, useMemo, useState } from 'react';
+import { enUS, nl } from 'date-fns/locale';
+import { useMemo } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
@@ -9,6 +9,13 @@ type JournalPageProps = {
     noteType?: string;
     journalGranularity?: string | null;
     journalPeriod?: string | null;
+    auth?: {
+        user?: {
+            settings?: {
+                language?: string;
+            };
+        };
+    };
 };
 
 function parseJournalPeriod(
@@ -71,6 +78,7 @@ function parseJournalPeriod(
 
 export function RightSidebarCalendar() {
     const pageProps = usePage().props as JournalPageProps;
+    const language = pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
     const activeDailyDate =
         pageProps.noteType === 'journal' &&
         pageProps.journalGranularity === 'daily' &&
@@ -85,15 +93,9 @@ export function RightSidebarCalendar() {
             ),
         [pageProps.journalGranularity, pageProps.journalPeriod],
     );
-    const [month, setMonth] = useState<Date>(anchorDate ?? new Date());
-
-    useEffect(() => {
-        if (!anchorDate) {
-            return;
-        }
-
-        setMonth(anchorDate);
-    }, [anchorDate]);
+    const calendarKey = anchorDate
+        ? format(anchorDate, 'yyyy-MM-dd')
+        : 'default-month';
 
     const visitJournal = (path: string) => {
         router.get(path, {}, { preserveScroll: true, preserveState: false });
@@ -102,9 +104,9 @@ export function RightSidebarCalendar() {
     return (
         <section className="mx-1 mb-2 mt-0 space-y-1 overflow-hidden rounded-xl border border-sidebar-border bg-background shadow-sm">
             <Calendar
-                locale={nl}
-                month={month}
-                onMonthChange={setMonth}
+                key={calendarKey}
+                locale={language === 'en' ? enUS : nl}
+                defaultMonth={anchorDate ?? new Date()}
                 showWeekNumber
                 mode="single"
                 className="w-full bg-transparent !p-1 [--cell-size:2.1rem]"

@@ -44,11 +44,31 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'workspaces' => fn () => $this->workspaceSummary($request),
+            'currentWorkspace' => fn () => $this->currentWorkspaceSummary($request),
             'notesTree' => fn () => $this->buildNotesTree($request),
             'noteSearchIndex' => fn () => $this->buildNoteSearchIndex($request),
-            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
-            'rightSidebarOpen' => ! $request->hasCookie('right_sidebar_state') || $request->cookie('right_sidebar_state') === 'true',
+            'sidebarOpen' => $this->sidebarDefaultOpenState($request, 'left'),
+            'rightSidebarOpen' => $this->sidebarDefaultOpenState($request, 'right'),
         ];
+    }
+
+    private function sidebarDefaultOpenState(Request $request, string $side): bool
+    {
+        $cookieName = $side === 'right' ? 'right_sidebar_state' : 'sidebar_state';
+        $cookieValue = $request->cookie($cookieName);
+
+        if ($cookieValue !== null) {
+            return $cookieValue === 'true';
+        }
+
+        $userSettings = is_array($request->user()?->settings) ? $request->user()?->settings : [];
+
+        return (bool) data_get(
+            $userSettings,
+            $side === 'right' ? 'editor.sidebar_right_open_default' : 'editor.sidebar_left_open_default',
+            true,
+        );
     }
 
     /**
@@ -60,10 +80,14 @@ class HandleInertiaRequests extends Middleware
         if (! $user) {
             return [];
         }
+        $workspace = $user->currentWorkspace();
+        if (! $workspace) {
+            return [];
+        }
 
         /** @var Collection<int, Note> $notes */
         $notes = Note::query()
-            ->where('user_id', $user->id)
+            ->where('workspace_id', $workspace->id)
             ->where(function ($query) {
                 $query->whereNull('type')
                     ->orWhere('type', '!=', 'journal');
@@ -114,10 +138,14 @@ class HandleInertiaRequests extends Middleware
         if (! $user) {
             return [];
         }
+        $workspace = $user->currentWorkspace();
+        if (! $workspace) {
+            return [];
+        }
 
         /** @var Collection<int, Note> $notes */
         $notes = Note::query()
-            ->where('user_id', $user->id)
+            ->where('workspace_id', $workspace->id)
             ->orderBy('created_at')
             ->get([
                 'id',
@@ -180,5 +208,56 @@ class HandleInertiaRequests extends Middleware
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, array{id: string, name: string, role: string}>
+     */
+    private function workspaceSummary(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return [];
+        }
+
+        return $user->workspaces()
+            ->select('workspaces.id', 'workspaces.name', 'workspace_user.role')
+            ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
+            ->orderBy('workspaces.name')
+            ->get()
+            ->map(fn ($workspace) => [
+                'id' => $workspace->id,
+                'name' => $workspace->name,
+                'role' => (string) ($workspace->pivot->role ?? 'member'),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{id: string, name: string, role: string}|null
+     */
+    private function currentWorkspaceSummary(Request $request): ?array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+
+        $workspace = $user->currentWorkspace();
+        if (! $workspace) {
+            return null;
+        }
+
+        $membership = $user->workspaces()
+            ->where('workspaces.id', $workspace->id)
+            ->select('workspace_user.role')
+            ->first();
+
+        return [
+            'id' => $workspace->id,
+            'name' => $workspace->name,
+            'role' => (string) ($membership?->pivot->role ?? 'member'),
+        ];
     }
 }
