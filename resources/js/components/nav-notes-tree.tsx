@@ -176,7 +176,7 @@ export function NavNotesTree() {
     const items = (notesTree ?? []) as SidebarNoteTreeItem[];
 
     return (
-        <SidebarGroup className="px-2 py-0">
+        <SidebarGroup className="px-2 py-0 group-data-[collapsible=icon]:hidden">
             <SidebarGroupLabel>Notes</SidebarGroupLabel>
             <SidebarMenu>
                 {items.length === 0 && (

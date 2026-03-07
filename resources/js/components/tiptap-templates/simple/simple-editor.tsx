@@ -9,6 +9,7 @@ import type { DocumentPropertiesValue } from '@/components/tiptap-properties/doc
 import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
 import { useWindowSize } from '@/hooks/use-window-size';
+import type { EditorSaveStatus } from '@/types';
 import {
     EditorBubbleToolbar,
     MobileEditorToolbar,
@@ -31,16 +32,22 @@ type SimpleEditorContent = string | Record<string, any> | null;
 
 type SimpleEditorProps = {
     id: string;
+    noteUpdateUrl: string;
     content?: SimpleEditorContent;
     properties?: DocumentPropertiesValue;
-    showDebug?: boolean;
+    linkableNotes?: { id: string; title: string; path?: string; href?: string }[];
+    onSaveStatusChange?: (status: EditorSaveStatus) => void;
+    onDebugJsonChange?: (json: string) => void;
 };
 
 export function SimpleEditor({
     id,
+    noteUpdateUrl,
     content = '',
     properties = {},
-    showDebug = true,
+    linkableNotes = [],
+    onSaveStatusChange,
+    onDebugJsonChange,
 }: SimpleEditorProps) {
     const isMobile = useIsBreakpoint();
     const { height } = useWindowSize();
@@ -53,8 +60,15 @@ export function SimpleEditor({
         useState<DocumentPropertiesValue>(properties);
 
     const toolbarRef = useRef<HTMLDivElement>(null);
+    const previousNoteIdRef = useRef<string | null>(null);
 
-    const extensions = useMemo(() => createSimpleEditorExtensions(), []);
+    const extensions = useMemo(
+        () =>
+            createSimpleEditorExtensions({
+                wikiLinkNotes: linkableNotes,
+            }),
+        [linkableNotes],
+    );
 
     const initialContent = useMemo(() => {
         if (typeof content === 'string') {
@@ -80,6 +94,7 @@ export function SimpleEditor({
                 autocomplete: 'off',
                 autocorrect: 'off',
                 autocapitalize: 'off',
+                spellcheck: 'false',
                 'aria-label': 'Main content area, start typing to enter text.',
                 class: 'simple-editor',
             },
@@ -98,8 +113,52 @@ export function SimpleEditor({
             return;
         }
 
+        if (previousNoteIdRef.current === null) {
+            previousNoteIdRef.current = id;
+            return;
+        }
+
+        if (previousNoteIdRef.current === id) {
+            return;
+        }
+
+        previousNoteIdRef.current = id;
+        editor.commands.setContent(initialContent);
+    }, [editor, id, initialContent]);
+
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+
         editor.isMobile = isMobile;
     }, [editor, isMobile]);
+
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+
+        const updateWikiLinkEditClass = () => {
+            const dom = editor.view.dom as HTMLElement;
+            const isEditingWikiLink = editor.isActive('wikiLink');
+            dom.classList.toggle('md-wikilink-edit-active', isEditingWikiLink);
+        };
+
+        updateWikiLinkEditClass();
+        editor.on('selectionUpdate', updateWikiLinkEditClass);
+        editor.on('focus', updateWikiLinkEditClass);
+        editor.on('blur', updateWikiLinkEditClass);
+
+        return () => {
+            editor.off('selectionUpdate', updateWikiLinkEditClass);
+            editor.off('focus', updateWikiLinkEditClass);
+            editor.off('blur', updateWikiLinkEditClass);
+            (editor.view.dom as HTMLElement).classList.remove(
+                'md-wikilink-edit-active',
+            );
+        };
+    }, [editor]);
 
     useEffect(() => {
         if (!isMobile && mobileView !== 'main') {
@@ -107,28 +166,42 @@ export function SimpleEditor({
         }
     }, [isMobile, mobileView]);
 
-    const { saveEditor } = useEditorSave({
+    const { status } = useEditorSave({
         editor,
         noteId: id,
+        noteUpdateUrl,
         properties: documentProperties,
         idleMs: 1500,
     });
+
+    useEffect(() => {
+        onSaveStatusChange?.(status);
+    }, [onSaveStatusChange, status]);
 
     const rect = useCursorVisibility({
         editor,
         overlayHeight: toolbarRef.current?.getBoundingClientRect().height ?? 0,
     });
 
-    const editorJson = useMemo(() => {
-        if (!editor || !showDebug) {
-            return '';
+    useEffect(() => {
+        if (!editor || !onDebugJsonChange) {
+            return;
         }
 
-        return JSON.stringify(editor.getJSON(), null, 2);
-    }, [editor, showDebug, editor?.state]);
+        const emit = () => {
+            onDebugJsonChange(JSON.stringify(editor.getJSON(), null, 2));
+        };
+
+        emit();
+        editor.on('update', emit);
+
+        return () => {
+            editor.off('update', emit);
+        };
+    }, [editor, onDebugJsonChange]);
 
     return (
-        <div className="">
+        <div className="mx-auto mb-12 max-w-3xl px-8">
             <EditorContext.Provider value={{ editor }}>
                 <div className="pt-4">
                     <DocumentProperties
@@ -154,20 +227,10 @@ export function SimpleEditor({
                 <EditorContent
                     editor={editor}
                     role="presentation"
-                    className="simple-editor-content"
+                    className="simple-editor-content pb-12"
                 />
             </EditorContext.Provider>
 
-            {showDebug && (
-                <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
-                    <div className="mb-2 text-sm font-medium text-muted-foreground">
-                        Editor JSON
-                    </div>
-                    <pre className="max-h-96 overflow-auto text-xs leading-5 break-words whitespace-pre-wrap">
-                        <code>{editorJson}</code>
-                    </pre>
-                </div>
-            )}
         </div>
     );
 }

@@ -7,7 +7,16 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             notesTree: SidebarNoteTreeItem[];
+            noteSearchIndex: Array<{
+                id: string;
+                title: string;
+                href: string;
+                slug: string | null;
+                path: string | null;
+                type: string | null;
+            }>;
             sidebarOpen: boolean;
+            rightSidebarOpen: boolean;
             [key: string]: unknown;
         };
     }

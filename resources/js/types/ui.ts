@@ -1,9 +1,14 @@
 import type { ReactNode } from 'react';
 import type { BreadcrumbItem } from '@/types/navigation';
 
+export type EditorSaveStatus = 'ready' | 'dirty' | 'saving' | 'error';
+
 export type AppLayoutProps = {
     children: ReactNode;
     breadcrumbs?: BreadcrumbItem[];
+    saveStatus?: EditorSaveStatus | null;
+    rightSidebar?: ReactNode;
+    statusBarContent?: ReactNode;
 };
 
 export type AuthLayoutProps = {

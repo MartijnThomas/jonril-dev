@@ -19,6 +19,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('notes/', [NotesController::class, 'start'])
         ->name('notes.start');
 
+    Route::get('journal/{granularity}/{period}', [NotesController::class, 'showJournal'])
+        ->name('journal.show');
+
     Route::get('notes/{note}', [NotesController::class, 'show'])
         ->where('note', '.*')
         ->name('notes.show');

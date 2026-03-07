@@ -17,12 +17,12 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
 
 export type DocumentPropertiesValue = Record<string, string>;
 
@@ -418,7 +418,7 @@ export function DocumentProperties({
     };
 
     return (
-        <div className="mx-auto mb-4 max-w-2xl">
+        <div className="mb-4">
             <div className="flex items-center justify-between border-b pb-1">
                 <button
                     type="button"
@@ -472,7 +472,9 @@ export function DocumentProperties({
                                     <Popover
                                         open={openRowId === rowId}
                                         onOpenChange={(nextOpen) => {
-                                            setOpenRowId(nextOpen ? rowId : null);
+                                            setOpenRowId(
+                                                nextOpen ? rowId : null,
+                                            );
                                             if (!nextOpen) {
                                                 setSearchByRow((current) => {
                                                     const next = { ...current };
@@ -481,7 +483,8 @@ export function DocumentProperties({
                                                 });
                                                 commitExistingKeyRename(
                                                     key,
-                                                    existingKeyDrafts[key] ?? key,
+                                                    existingKeyDrafts[key] ??
+                                                        key,
                                                 );
                                             }
                                         }}
@@ -491,10 +494,12 @@ export function DocumentProperties({
                                                 value={keyDraft}
                                                 onFocus={() => {
                                                     setOpenRowId(rowId);
-                                                    setSearchByRow((current) => ({
-                                                        ...current,
-                                                        [rowId]: keyDraft,
-                                                    }));
+                                                    setSearchByRow(
+                                                        (current) => ({
+                                                            ...current,
+                                                            [rowId]: keyDraft,
+                                                        }),
+                                                    );
                                                 }}
                                                 onChange={(event) => {
                                                     const nextValue =
@@ -506,10 +511,12 @@ export function DocumentProperties({
                                                             [key]: nextValue,
                                                         }),
                                                     );
-                                                    setSearchByRow((current) => ({
-                                                        ...current,
-                                                        [rowId]: nextValue,
-                                                    }));
+                                                    setSearchByRow(
+                                                        (current) => ({
+                                                            ...current,
+                                                            [rowId]: nextValue,
+                                                        }),
+                                                    );
                                                     setOpenRowId(rowId);
                                                 }}
                                                 onKeyDown={(event) => {
@@ -537,8 +544,9 @@ export function DocumentProperties({
 
                                     <Input
                                         ref={(element) => {
-                                            existingValueInputRefs.current[key] =
-                                                element;
+                                            existingValueInputRefs.current[
+                                                key
+                                            ] = element;
                                         }}
                                         value={propertyValue}
                                         onChange={(event) =>

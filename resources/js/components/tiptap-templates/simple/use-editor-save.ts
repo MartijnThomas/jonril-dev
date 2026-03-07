@@ -1,12 +1,14 @@
 import { router } from '@inertiajs/react';
 import type { Editor } from '@tiptap/react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { EditorSaveStatus } from '@/types';
 
 export type DocumentPropertiesValue = Record<string, string>;
 
 type UseEditorSaveProps = {
     editor: Editor | null;
     noteId: string;
+    noteUpdateUrl: string;
     properties?: DocumentPropertiesValue;
     idleMs?: number;
 };
@@ -14,6 +16,7 @@ type UseEditorSaveProps = {
 export function useEditorSave({
     editor,
     noteId,
+    noteUpdateUrl,
     properties = {},
     idleMs = 1500,
 }: UseEditorSaveProps) {
@@ -21,6 +24,7 @@ export function useEditorSave({
     const lastSavedContentRef = useRef<string>('');
     const lastSavedPropertiesRef = useRef<string>(JSON.stringify(properties));
     const isSavingRef = useRef(false);
+    const [status, setStatus] = useState<EditorSaveStatus>('ready');
 
     const saveEditor = useCallback(
         (force = false) => {
@@ -37,6 +41,7 @@ export function useEditorSave({
                 serialized === lastSavedContentRef.current &&
                 serializedProperties === lastSavedPropertiesRef.current
             ) {
+                setStatus('ready');
                 return;
             }
 
@@ -45,12 +50,14 @@ export function useEditorSave({
             }
 
             isSavingRef.current = true;
+            setStatus('saving');
 
             router.put(
-                `/notes/${noteId}`,
+                noteUpdateUrl,
                 {
                     content: json,
                     properties,
+                    save_mode: force ? 'manual' : 'auto',
                 },
                 {
                     preserveState: true,
@@ -59,6 +66,10 @@ export function useEditorSave({
                     onSuccess: () => {
                         lastSavedContentRef.current = serialized;
                         lastSavedPropertiesRef.current = serializedProperties;
+                        setStatus('ready');
+                    },
+                    onError: () => {
+                        setStatus('error');
                     },
                     onFinish: () => {
                         isSavingRef.current = false;
@@ -66,7 +77,7 @@ export function useEditorSave({
                 },
             );
         },
-        [editor, noteId, properties],
+        [editor, noteUpdateUrl, properties],
     );
 
     const queueSave = useCallback(() => {
@@ -85,11 +96,15 @@ export function useEditorSave({
         }
 
         lastSavedContentRef.current = JSON.stringify(editor.getJSON());
-    }, [editor]);
-
-    useEffect(() => {
         lastSavedPropertiesRef.current = JSON.stringify(properties);
-    }, [properties]);
+        isSavingRef.current = false;
+        setStatus('ready');
+
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+    }, [editor, noteId]);
 
     useEffect(() => {
         if (!editor) {
@@ -97,6 +112,7 @@ export function useEditorSave({
         }
 
         const handleUpdate = () => {
+            setStatus('dirty');
             queueSave();
         };
 
@@ -112,6 +128,7 @@ export function useEditorSave({
             return;
         }
 
+        setStatus('dirty');
         queueSave();
     }, [properties, queueSave]);
 
@@ -156,5 +173,6 @@ export function useEditorSave({
     return {
         saveEditor,
         queueSave,
+        status,
     };
 }

@@ -21,7 +21,9 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'role',
         'password',
+        'settings',
     ];
 
     /**
@@ -51,7 +53,24 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'settings' => 'array',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    public function noteRevisionAutosaveIntervalMinutes(): int
+    {
+        $default = (int) config('note-revisions.autosave.default_interval_minutes', 15);
+        $min = (int) config('note-revisions.autosave.min_interval_minutes', 5);
+        $max = (int) config('note-revisions.autosave.max_interval_minutes', 60);
+
+        $value = data_get($this->settings, 'notes.revision_autosave_interval_minutes');
+        if (! is_numeric($value)) {
+            return $default;
+        }
+
+        $interval = (int) $value;
+
+        return max($min, min($max, $interval));
     }
 }

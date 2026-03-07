@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
+import { NavJournalLinks } from '@/components/nav-journal-links';
 import { NavMain } from '@/components/nav-main';
 import { NavNotesTree } from '@/components/nav-notes-tree';
 import { NavUser } from '@/components/nav-user';
@@ -55,6 +56,7 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
+                <NavJournalLinks />
                 <NavNotesTree />
             </SidebarContent>
 
