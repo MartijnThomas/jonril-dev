@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\NotesController;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 Route::inertia('/', 'welcome', [
@@ -8,7 +10,22 @@ Route::inertia('/', 'welcome', [
 ])->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('dashboard', function () {
+        return Inertia::render('dashboard', [
+            'content' => '<h1>Hallo wereld</h1>',
+        ]);
+    })->name('dashboard');
+
+    Route::get('notes/', [NotesController::class, 'start'])
+        ->name('notes.start');
+
+    Route::get('notes/{note}', [NotesController::class, 'show'])
+        ->where('note', '.*')
+        ->name('notes.show');
+
+    Route::put('notes/{note}', [NotesController::class, 'update'])
+        ->where('note', '.*')
+        ->name('notes.update');
 });
 
 require __DIR__.'/settings.php';

@@ -12,3 +12,10 @@ export type NavItem = {
     icon?: LucideIcon | null;
     isActive?: boolean;
 };
+
+export type SidebarNoteTreeItem = {
+    id: string;
+    title: string;
+    href: NonNullable<InertiaLinkProps['href']>;
+    children: SidebarNoteTreeItem[];
+};

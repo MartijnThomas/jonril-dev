@@ -3,6 +3,7 @@ import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
+import { NavNotesTree } from '@/components/nav-notes-tree';
 import { NavUser } from '@/components/nav-user';
 import {
     Sidebar,
@@ -54,6 +55,7 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
+                <NavNotesTree />
             </SidebarContent>
 
             <SidebarFooter>

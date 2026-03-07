@@ -1,0 +1,38 @@
+@reference "tailwindcss";
+
+.inline-command-ghost {
+  color: color-mix(in srgb, currentColor 45%, transparent);
+  pointer-events: none;
+  user-select: none;
+}
+
+.md-priority,
+.hashtag,
+.mention,
+.md-highlight {
+    line-height: 1.35;
+    @apply rounded-xs;
+}
+.md-priority--critical {
+    @apply bg-red-400/10;
+}
+
+.md-priority--medium {
+    @apply bg-orange-400/10;
+}
+
+.md-priority--low {
+    @apply bg-yellow-400/10;
+}
+
+.md-priority--working-on {
+    @apply bg-blue-400/10;
+}
+
+.mention {
+    @apply bg-purple-400/10 text-purple-600;
+}
+
+.hashtag {
+    @apply bg-blue-400/10 text-blue-600;
+}
