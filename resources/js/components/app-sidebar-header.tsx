@@ -1,14 +1,14 @@
-import { Button } from '@/components/ui/button';
 import { router, usePage } from '@inertiajs/react';
 import { addDays, addMonths, addWeeks, addYears, format } from 'date-fns';
-import { Breadcrumbs } from '@/components/breadcrumbs';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
     ChevronLeft,
     ChevronRight,
     PanelRightClose,
     PanelRightOpen,
 } from 'lucide-react';
+import { Breadcrumbs } from '@/components/breadcrumbs';
+import { Button } from '@/components/ui/button';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
 
 type JournalPageProps = {
@@ -134,7 +134,11 @@ export function AppSidebarHeader({
         Boolean(pageProps.journalPeriod);
 
     const navigateJournal = (direction: -1 | 1) => {
-        if (!isJournal || !pageProps.journalGranularity || !pageProps.journalPeriod) {
+        if (
+            !isJournal ||
+            !pageProps.journalGranularity ||
+            !pageProps.journalPeriod
+        ) {
             return;
         }
 
@@ -146,7 +150,11 @@ export function AppSidebarHeader({
             return;
         }
 
-        const nextDate = shiftDate(pageProps.journalGranularity, baseDate, direction);
+        const nextDate = shiftDate(
+            pageProps.journalGranularity,
+            baseDate,
+            direction,
+        );
         const nextPeriod = periodFor(pageProps.journalGranularity, nextDate);
 
         router.get(
@@ -157,7 +165,7 @@ export function AppSidebarHeader({
     };
 
     return (
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/50 px-6 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-4">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 backdrop-blur-lg transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 supports-[backdrop-filter]:bg-background/90 md:px-4">
             <div className="flex min-w-0 flex-1 items-center gap-2">
                 <SidebarTrigger className="-ml-1" />
                 <Breadcrumbs breadcrumbs={breadcrumbs} />

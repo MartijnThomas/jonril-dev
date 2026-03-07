@@ -68,6 +68,7 @@ class Note extends Model
             'content' => 'json',
             'properties' => 'array',
             'journal_date' => 'date',
+            'word_count' => 'integer',
         ];
     }
 

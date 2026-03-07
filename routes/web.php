@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\CommandSearchController;
 use App\Http\Controllers\NotesController;
 use App\Http\Controllers\TasksController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\WorkspaceSuggestionController;
 use App\Http\Controllers\WorkspaceSwitchController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
@@ -26,6 +28,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     })->name('notes.landing');
 
+    Route::get('notes/list', [NotesController::class, 'index'])
+        ->name('notes.index');
+    Route::get('notes/tree', [NotesController::class, 'tree'])
+        ->name('notes.tree');
+
     Route::get('notes/create', [NotesController::class, 'start'])
         ->name('notes.start');
 
@@ -42,6 +49,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('tasks', [TasksController::class, 'index'])
         ->name('tasks.index');
+    Route::get('search/command', CommandSearchController::class)
+        ->name('search.command');
     Route::patch('tasks/checked', [TasksController::class, 'updateCheckedByReference'])
         ->name('tasks.checked-by-reference');
     Route::patch('tasks/{task}/checked', [TasksController::class, 'updateChecked'])
@@ -51,6 +60,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('workspaces.switch');
     Route::post('workspaces', [WorkspaceController::class, 'store'])
         ->name('workspaces.store');
+    Route::post('workspaces/suggestions', WorkspaceSuggestionController::class)
+        ->name('workspaces.suggestions.store');
     Route::get('workspaces/settings', [WorkspaceController::class, 'edit'])
         ->name('workspaces.settings.edit');
     Route::patch('workspaces/settings', [WorkspaceController::class, 'update'])

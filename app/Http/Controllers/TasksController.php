@@ -135,6 +135,7 @@ class TasksController extends Controller
                     'position' => $task->position,
                     'checked' => $task->checked,
                     'content' => $task->content_text,
+                    'render_fragments' => $task->render_fragments ?? [],
                     'due_date' => $task->due_date?->toDateString(),
                     'deadline_date' => $task->deadline_date?->toDateString(),
                     'mentions' => $task->mentions ?? [],

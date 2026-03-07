@@ -7,15 +7,15 @@ import { Superscript } from '@tiptap/extension-superscript';
 import { TextAlign } from '@tiptap/extension-text-align';
 import { Typography } from '@tiptap/extension-typography';
 import UniqueID from '@tiptap/extension-unique-id';
-import { Selection } from '@tiptap/extensions';
+import { CharacterCount, Selection } from '@tiptap/extensions';
 import { StarterKit } from '@tiptap/starter-kit';
 
+import { HeadingAnchorIdExtension } from '@/components/tiptap-extension/heading-anchor-id-extension';
 import { TaskItemWithDates } from '@/components/tiptap-extension/task-item-dates-extension';
 import { WikiLinkMark } from '@/components/tiptap-extension/wiki-link-mark-extension';
 import { WikiLinkSuggestion } from '@/components/tiptap-extension/wiki-link-suggestion-extension';
 import { InlineCommands } from '@/components/tiptap-inline-commands/InlineCommands';
-import hashtagSuggestion from '@/components/tiptap-mention/HashtagSuggestion';
-import mentionSuggestion from '@/components/tiptap-mention/MentionSuggestion';
+import { createWorkspaceTokenSuggestion } from '@/components/tiptap-mention/workspace-token-suggestion';
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension';
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
 import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils';
@@ -29,21 +29,86 @@ type WikiLinkNote = {
 
 type CreateSimpleEditorExtensionsOptions = {
     wikiLinkNotes?: WikiLinkNote[];
+    workspaceSuggestions?: {
+        mentions: string[];
+        hashtags: string[];
+    };
     language?: string;
 };
 
 export function createSimpleEditorExtensions({
     wikiLinkNotes = [],
+    workspaceSuggestions = { mentions: [], hashtags: [] },
     language = 'nl',
 }: CreateSimpleEditorExtensionsOptions = {}) {
     const displayLocale = language === 'en' ? 'en-US' : 'nl-NL';
+    const mentionItemsRef = { current: [...workspaceSuggestions.mentions] };
+    const hashtagItemsRef = { current: [...workspaceSuggestions.hashtags] };
+
+    const getCookie = (name: string): string | null => {
+        const match = document.cookie
+            .split('; ')
+            .find((part) => part.startsWith(`${name}=`));
+
+        if (!match) {
+            return null;
+        }
+
+        return decodeURIComponent(match.split('=').slice(1).join('='));
+    };
+
+    const persistWorkspaceToken = async (
+        kind: 'mention' | 'hashtag',
+        value: string,
+    ): Promise<string[]> => {
+        const xsrfToken = getCookie('XSRF-TOKEN');
+
+        const response = await fetch('/workspaces/suggestions', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
+            },
+            body: JSON.stringify({
+                kind,
+                value,
+            }),
+        });
+
+        if (!response.ok) {
+            return kind === 'mention'
+                ? mentionItemsRef.current
+                : hashtagItemsRef.current;
+        }
+
+        const payload = (await response.json()) as { items?: string[] };
+        const items = Array.isArray(payload.items) ? payload.items : [];
+
+        if (kind === 'mention') {
+            mentionItemsRef.current = items;
+        } else {
+            hashtagItemsRef.current = items;
+        }
+
+        return items;
+    };
+
     const MentionExtension = Mention.configure({
         HTMLAttributes: {
             class: 'mention',
         },
         suggestion: {
             char: '@',
-            ...mentionSuggestion,
+            ...createWorkspaceTokenSuggestion({
+                char: '@',
+                heading: 'Mentions',
+                itemsRef: mentionItemsRef,
+                persistItem: async (value) =>
+                    persistWorkspaceToken('mention', value),
+            }),
         },
     });
 
@@ -55,7 +120,13 @@ export function createSimpleEditorExtensions({
         },
         suggestion: {
             char: '#',
-            ...hashtagSuggestion,
+            ...createWorkspaceTokenSuggestion({
+                char: '#',
+                heading: 'Hashtags',
+                itemsRef: hashtagItemsRef,
+                persistItem: async (value) =>
+                    persistWorkspaceToken('hashtag', value),
+            }),
         },
     });
 
@@ -71,6 +142,7 @@ export function createSimpleEditorExtensions({
                 'listItem',
             ],
         }),
+        HeadingAnchorIdExtension,
         StarterKit.configure({
             horizontalRule: false,
             link: {
@@ -95,6 +167,9 @@ export function createSimpleEditorExtensions({
         InlineCommands,
         WikiLinkSuggestion.configure({
             notes: wikiLinkNotes,
+        }),
+        CharacterCount.configure({
+            mode: 'textSize',
         }),
         MentionExtension,
         HashtagExtension,

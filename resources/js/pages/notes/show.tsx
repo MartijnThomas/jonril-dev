@@ -12,6 +12,68 @@ type Props = {
     linkableNotes: { id: string; title: string; path?: string; href?: string }[];
     breadcrumbs: BreadcrumbItem[];
     language: 'nl' | 'en';
+    noteType: string | null;
+    journalGranularity: string | null;
+    workspaceSuggestions: {
+        mentions: string[];
+        hashtags: string[];
+    };
+    relatedTasks: {
+        id: number;
+        note_id: string;
+        block_id: string | null;
+        position: number;
+        checked: boolean;
+        content: string;
+        render_fragments: {
+            type:
+                | 'text'
+                | 'mention'
+                | 'hashtag'
+                | 'wikilink'
+                | 'due_date_token'
+                | 'deadline_date_token';
+            text?: string;
+            label?: string;
+            note_id?: string | null;
+            href?: string | null;
+            date?: string;
+        }[];
+        due_date: string | null;
+        deadline_date: string | null;
+        note: {
+            id: string;
+            title: string;
+            href: string;
+        };
+    }[];
+    backlinks: {
+        id: string;
+        block_id: string;
+        heading: string | null;
+        heading_level: number | null;
+        excerpt: string;
+        render_fragments: {
+            type:
+                | 'text'
+                | 'mention'
+                | 'hashtag'
+                | 'wikilink'
+                | 'due_date_token'
+                | 'deadline_date_token';
+            text?: string;
+            label?: string;
+            note_id?: string | null;
+            href?: string | null;
+            date?: string;
+        }[];
+        note: {
+            id: string;
+            title: string;
+            href: string;
+        };
+        href: string;
+    }[];
 };
 
 export default function Dashboard({
@@ -22,12 +84,28 @@ export default function Dashboard({
     linkableNotes,
     breadcrumbs,
     language,
+    noteType,
+    journalGranularity,
+    workspaceSuggestions,
+    relatedTasks,
+    backlinks,
 }: Props) {
     const page = usePage();
     const isAdmin = page.props.auth?.user?.role === 'admin';
     const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('ready');
     const [editorJson, setEditorJson] = useState<string>('');
     const [jsonOpen, setJsonOpen] = useState(false);
+    const [contentStats, setContentStats] = useState<{
+        words: number;
+        characters: number;
+        tasksTotal: number;
+        tasksClosed: number;
+    }>({
+        words: 0,
+        characters: 0,
+        tasksTotal: 0,
+        tasksClosed: 0,
+    });
     const pageTitle = breadcrumbs.at(-1)?.title ?? 'Note';
 
     return (
@@ -35,15 +113,22 @@ export default function Dashboard({
             breadcrumbs={breadcrumbs}
             saveStatus={saveStatus}
             statusBarContent={
-                isAdmin ? (
-                    <button
-                        type="button"
-                        className="hover:text-foreground transition-colors"
-                        onClick={() => setJsonOpen((value) => !value)}
-                    >
-                        JSON
-                    </button>
-                ) : null
+                <div className="flex items-center gap-3">
+                    <span>Words {contentStats.words}</span>
+                    <span>Chars {contentStats.characters}</span>
+                    <span>
+                        Tasks {contentStats.tasksClosed}/{contentStats.tasksTotal}
+                    </span>
+                    {isAdmin ? (
+                        <button
+                            type="button"
+                            className="hover:text-foreground transition-colors"
+                            onClick={() => setJsonOpen((value) => !value)}
+                        >
+                            JSON
+                        </button>
+                    ) : null}
+                </div>
             }
             bottomPane={
                 isAdmin && jsonOpen ? (
@@ -67,9 +152,17 @@ export default function Dashboard({
                 content={content}
                 properties={properties}
                 linkableNotes={linkableNotes}
+                workspaceSuggestions={workspaceSuggestions}
+                relatedTasks={relatedTasks}
+                backlinks={backlinks}
+                showRelatedPanel={
+                    noteType !== 'journal' ||
+                    (noteType === 'journal' && journalGranularity === 'daily')
+                }
                 language={language}
                 onSaveStatusChange={setSaveStatus}
                 onDebugJsonChange={isAdmin ? setEditorJson : undefined}
+                onContentStatsChange={setContentStats}
             />
         </AppLayout>
     );

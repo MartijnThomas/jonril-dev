@@ -16,7 +16,20 @@ class Workspace extends Model
     protected $fillable = [
         'owner_id',
         'name',
+        'mention_suggestions',
+        'hashtag_suggestions',
     ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'mention_suggestions' => 'array',
+            'hashtag_suggestions' => 'array',
+        ];
+    }
 
     public function owner(): BelongsTo
     {

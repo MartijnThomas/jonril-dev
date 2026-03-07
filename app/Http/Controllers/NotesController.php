@@ -3,13 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Note;
+use App\Models\NoteRevision;
+use App\Models\NoteTask;
 use App\Models\Workspace;
 use App\Support\Notes\JournalNoteService;
+use App\Support\Notes\NoteRelatedPanelBuilder;
 use App\Support\Notes\NoteRevisionRecorder;
 use App\Support\Notes\NoteSlugService;
 use App\Support\Notes\NoteTitleExtractor;
+use App\Support\Notes\NoteWordCountExtractor;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -22,6 +28,8 @@ class NotesController extends Controller
         private readonly NoteRevisionRecorder $noteRevisionRecorder,
         private readonly NoteSlugService $noteSlugService,
         private readonly JournalNoteService $journalNoteService,
+        private readonly NoteWordCountExtractor $noteWordCountExtractor,
+        private readonly NoteRelatedPanelBuilder $noteRelatedPanelBuilder,
     ) {}
 
     public function start(Request $request)
@@ -47,6 +55,35 @@ class NotesController extends Controller
         $this->noteSlugService->syncSingleNote($note);
 
         return redirect($this->noteSlugService->urlFor($note));
+    }
+
+    public function index(Request $request)
+    {
+        $filters = $this->validateNotesListFilters($request);
+        $roots = $this->buildNotesTreeLevel($this->currentWorkspace()->id, null, $filters);
+
+        return Inertia::render('notes/index', [
+            'roots' => $roots,
+            'filters' => $filters,
+        ]);
+    }
+
+    public function tree(Request $request): JsonResponse
+    {
+        $filters = $this->validateNotesListFilters($request);
+        $data = $request->validate([
+            'parent_id' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $nodes = $this->buildNotesTreeLevel(
+            $this->currentWorkspace()->id,
+            $data['parent_id'] ?? null,
+            $filters,
+        );
+
+        return response()->json([
+            'nodes' => $nodes,
+        ]);
     }
 
     public function show(string $note)
@@ -98,6 +135,7 @@ class NotesController extends Controller
         $resolved->content = $data['content'];
         $resolved->properties = $data['properties'];
         $resolved->title = $this->noteTitleExtractor->extract($data['content']);
+        $resolved->word_count = $this->noteWordCountExtractor->count($data['content']);
         $resolved->save();
 
         if ($resolved->type === Note::TYPE_NOTE) {
@@ -203,12 +241,13 @@ class NotesController extends Controller
         }
 
         $breadcrumbs = $this->buildBreadcrumbs($note, $noteTrail, $noteById);
+        $relatedPanel = $this->noteRelatedPanelBuilder->build($note);
 
         return Inertia::render('notes/show', [
             'content' => $this->normalizeContentForEditor($note->content),
             'noteId' => $note->id,
             'noteUrl' => $this->noteSlugService->urlFor($note),
-            'noteUpdateUrl' => '/notes/'.($note->slug ?: $note->id),
+            'noteUpdateUrl' => '/notes/'.$note->id,
             'noteType' => $note->type,
             'journalGranularity' => $note->journal_granularity,
             'journalPeriod' => ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date)
@@ -218,6 +257,12 @@ class NotesController extends Controller
             'linkableNotes' => $linkableNotes,
             'breadcrumbs' => $breadcrumbs,
             'language' => $this->userLanguage(),
+            'relatedTasks' => $relatedPanel['tasks'],
+            'backlinks' => $relatedPanel['backlinks'],
+            'workspaceSuggestions' => [
+                'mentions' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->mention_suggestions),
+                'hashtags' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->hashtag_suggestions),
+            ],
         ]);
     }
 
@@ -310,6 +355,24 @@ class NotesController extends Controller
         return in_array($language, ['nl', 'en'], true) ? $language : 'nl';
     }
 
+    /**
+     * @param  mixed  $value
+     * @return array<int, string>
+     */
+    private function normalizeWorkspaceSuggestions(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return collect($value)
+            ->filter(fn ($item) => is_string($item))
+            ->map(fn (string $item) => trim($item))
+            ->filter(fn (string $item) => $item !== '')
+            ->values()
+            ->all();
+    }
+
     private function resolveNoteOrFail(string $reference): Note
     {
         $workspace = $this->currentWorkspace();
@@ -320,6 +383,501 @@ class NotesController extends Controller
         }
 
         return $note;
+    }
+
+    /**
+     * @return array{type:string,context:string,tags:string,tokens:string,q:string}
+     */
+    private function validateNotesListFilters(Request $request): array
+    {
+        $data = $request->validate([
+            'type' => ['nullable', Rule::in(['all', Note::TYPE_NOTE, Note::TYPE_JOURNAL])],
+            'context' => ['nullable', 'string', 'max:120'],
+            'tags' => ['nullable', 'string', 'max:255'],
+            'tokens' => ['nullable', 'string', 'max:255'],
+            'q' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        return [
+            'type' => (string) ($data['type'] ?? Note::TYPE_NOTE),
+            'context' => trim((string) ($data['context'] ?? '')),
+            'tags' => trim((string) ($data['tags'] ?? '')),
+            'tokens' => trim((string) ($data['tokens'] ?? '')),
+            'q' => trim((string) ($data['q'] ?? '')),
+        ];
+    }
+
+    /**
+     * @param  array{type:string,context:string,tags:string,tokens:string,q:string}  $filters
+     * @return array<int, array{
+     *   id:string,
+     *   title:string,
+     *   href:string|null,
+     *   type:string|null,
+     *   context:string|null,
+     *   tags:array<int,string>,
+     *   has_children:bool,
+     *   tasks_total:int,
+     *   tasks_open:int,
+     *   word_count:int|null,
+     *   revision_count:int,
+     *   created_at:string|null,
+     *   updated_at:string|null,
+     *   has_note:bool,
+     *   is_virtual:bool
+     * }>
+     */
+    private function buildNotesTreeLevel(string $workspaceId, ?string $parentId, array $filters): array
+    {
+        $notes = Note::query()
+            ->where('workspace_id', $workspaceId)
+            ->when(
+                $filters['type'] === Note::TYPE_NOTE,
+                fn ($query) => $query->where(function ($inner) {
+                    $inner->whereNull('type')->orWhere('type', Note::TYPE_NOTE);
+                }),
+            )
+            ->when(
+                $filters['type'] === Note::TYPE_JOURNAL,
+                fn ($query) => $query->where('type', Note::TYPE_JOURNAL),
+            )
+            ->orderBy('created_at')
+            ->get([
+                'id',
+                'parent_id',
+                'slug',
+                'type',
+                'journal_granularity',
+                'journal_date',
+                'title',
+                'properties',
+                'word_count',
+                'created_at',
+                'updated_at',
+            ]);
+
+        $byId = $notes->keyBy('id');
+
+        $contextFilter = mb_strtolower($filters['context']);
+        $queryFilter = mb_strtolower($filters['q']);
+        $tagFilters = collect(explode(',', $filters['tags']))
+            ->map(fn (string $item) => trim($item))
+            ->filter(fn (string $item) => $item !== '')
+            ->map(fn (string $item) => mb_strtolower(ltrim($item, '#')))
+            ->values()
+            ->all();
+        $tokenFilters = collect(explode(',', $filters['tokens']))
+            ->map(fn (string $item) => trim($item))
+            ->filter(fn (string $item) => $item !== '')
+            ->values()
+            ->all();
+        $tokenContextFilters = collect($tokenFilters)
+            ->filter(fn (string $token) => str_starts_with($token, '@'))
+            ->map(fn (string $token) => mb_strtolower(ltrim($token, '@')))
+            ->filter(fn (string $token) => $token !== '')
+            ->values()
+            ->all();
+        $tokenTagFilters = collect($tokenFilters)
+            ->filter(fn (string $token) => str_starts_with($token, '#'))
+            ->map(fn (string $token) => mb_strtolower(ltrim($token, '#')))
+            ->filter(fn (string $token) => $token !== '')
+            ->values()
+            ->all();
+
+        $hasContentFilters = $contextFilter !== '' || $queryFilter !== '' || $tagFilters !== [] || $tokenFilters !== [];
+        $allowedIds = null;
+
+        if ($hasContentFilters) {
+            $matchedIds = [];
+
+            foreach ($notes as $note) {
+                $properties = is_array($note->properties) ? $note->properties : [];
+                $context = trim((string) ($properties['context'] ?? ''));
+                $normalizedContext = mb_strtolower($context);
+                $tags = $this->normalizePropertyTags($properties['tags'] ?? null);
+                $normalizedTags = array_map(
+                    static fn (string $tag) => mb_strtolower($tag),
+                    $tags,
+                );
+
+                if ($contextFilter !== '' && $normalizedContext !== $contextFilter) {
+                    continue;
+                }
+
+                if ($tagFilters !== []) {
+                    $containsAllTags = collect($tagFilters)
+                        ->every(fn (string $needle) => in_array($needle, $normalizedTags, true));
+
+                    if (! $containsAllTags) {
+                        continue;
+                    }
+                }
+
+                if ($tokenFilters !== []) {
+                    $matchesContext = $tokenContextFilters !== [] && in_array($normalizedContext, $tokenContextFilters, true);
+                    $matchesTag = $tokenTagFilters !== [] && collect($tokenTagFilters)
+                        ->contains(fn (string $needle) => in_array($needle, $normalizedTags, true));
+
+                    if (! $matchesContext && ! $matchesTag) {
+                        continue;
+                    }
+                }
+
+                if ($queryFilter !== '') {
+                    $haystack = mb_strtolower(implode(' ', [
+                        (string) ($note->title ?? ''),
+                        (string) ($note->slug ?? ''),
+                    ]));
+
+                    if (! str_contains($haystack, $queryFilter)) {
+                        continue;
+                    }
+                }
+
+                $matchedIds[$note->id] = true;
+            }
+
+            $allowedIds = $matchedIds;
+
+            foreach (array_keys($matchedIds) as $matchId) {
+                $cursor = $byId->get($matchId);
+                while ($cursor && $cursor->parent_id) {
+                    $parent = $byId->get($cursor->parent_id);
+                    if (! $parent) {
+                        break;
+                    }
+
+                    $allowedIds[$parent->id] = true;
+                    $cursor = $parent;
+                }
+            }
+        }
+
+        $isVisible = static function (Note $note) use ($allowedIds): bool {
+            if ($allowedIds === null) {
+                return true;
+            }
+
+            return isset($allowedIds[$note->id]);
+        };
+
+        $visibleNotes = $notes->filter($isVisible)->values();
+        $visibleJournalNotes = $visibleNotes->filter(
+            fn (Note $note) => $note->type === Note::TYPE_JOURNAL,
+        )->values();
+        $visibleNormalNotes = $visibleNotes->filter(
+            fn (Note $note) => $note->type !== Note::TYPE_JOURNAL,
+        )->values();
+
+        $visibleChildCounts = [];
+        foreach ($visibleNormalNotes as $note) {
+            if (! $isVisible($note) || ! $note->parent_id) {
+                continue;
+            }
+
+            $visibleChildCounts[$note->parent_id] = ($visibleChildCounts[$note->parent_id] ?? 0) + 1;
+        }
+
+        $levelNodes = $notes
+            ->filter(function (Note $note) use ($parentId) {
+                if ($parentId === null) {
+                    return $note->parent_id === null;
+                }
+
+                return $note->parent_id === $parentId;
+            })
+            ->filter($isVisible)
+            ->sort(function (Note $a, Note $b) use ($visibleChildCounts) {
+                $aHasChildren = ($visibleChildCounts[$a->id] ?? 0) > 0;
+                $bHasChildren = ($visibleChildCounts[$b->id] ?? 0) > 0;
+
+                if ($aHasChildren !== $bHasChildren) {
+                    return $aHasChildren ? -1 : 1;
+                }
+
+                return strcasecmp($a->title ?? 'Untitled', $b->title ?? 'Untitled');
+            })
+            ->values();
+
+        $taskCounts = NoteTask::query()
+            ->where('workspace_id', $workspaceId)
+            ->selectRaw('note_id, COUNT(*) as total_count, SUM(CASE WHEN checked = 0 THEN 1 ELSE 0 END) as open_count')
+            ->groupBy('note_id')
+            ->get()
+            ->keyBy('note_id');
+
+        $revisionCounts = NoteRevision::query()
+            ->join('notes', 'notes.id', '=', 'note_revisions.note_id')
+            ->where('notes.workspace_id', $workspaceId)
+            ->selectRaw('note_revisions.note_id, COUNT(*) as revision_count')
+            ->groupBy('note_revisions.note_id')
+            ->get()
+            ->keyBy('note_id');
+
+        $buildNotePayload = function (Note $note, bool $hasChildren) use ($taskCounts, $revisionCounts): array {
+            $properties = is_array($note->properties) ? $note->properties : [];
+            $taskCountRow = $taskCounts->get($note->id);
+            $revisionCountRow = $revisionCounts->get($note->id);
+
+            return [
+                'id' => $note->id,
+                'title' => $note->title ?? 'Untitled',
+                'href' => $this->noteSlugService->urlFor($note),
+                'type' => $note->type,
+                'context' => is_string($properties['context'] ?? null)
+                    ? trim((string) $properties['context'])
+                    : null,
+                'tags' => $this->normalizePropertyTags($properties['tags'] ?? null),
+                'has_children' => $hasChildren,
+                'tasks_total' => (int) ($taskCountRow?->total_count ?? 0),
+                'tasks_open' => (int) ($taskCountRow?->open_count ?? 0),
+                'word_count' => $note->word_count !== null ? (int) $note->word_count : null,
+                'revision_count' => (int) ($revisionCountRow?->revision_count ?? 0),
+                'created_at' => $note->created_at?->toIso8601String(),
+                'updated_at' => $note->updated_at?->toIso8601String(),
+                'has_note' => true,
+                'is_virtual' => false,
+            ];
+        };
+
+        $buildJournalVirtual = function (
+            string $id,
+            string $title,
+            bool $hasChildren,
+            string $fallbackHref,
+            ?Note $backingNote = null,
+        ) use ($buildNotePayload): array {
+            if ($backingNote) {
+                $payload = $buildNotePayload($backingNote, $hasChildren);
+                $payload['id'] = $id;
+                $payload['title'] = $title;
+                $payload['has_children'] = $hasChildren;
+                $payload['is_virtual'] = true;
+
+                return $payload;
+            }
+
+            return [
+                'id' => $id,
+                'title' => $title,
+                'href' => $fallbackHref,
+                'type' => Note::TYPE_JOURNAL,
+                'context' => null,
+                'tags' => [],
+                'has_children' => $hasChildren,
+                'tasks_total' => 0,
+                'tasks_open' => 0,
+                'word_count' => null,
+                'revision_count' => 0,
+                'created_at' => null,
+                'updated_at' => null,
+                'has_note' => false,
+                'is_virtual' => true,
+            ];
+        };
+
+        $buildJournalLevel = function (string $levelParentId) use (
+            $visibleJournalNotes,
+            $buildJournalVirtual,
+            $buildNotePayload,
+        ): array {
+            if ($levelParentId === 'journal') {
+                $years = $visibleJournalNotes
+                    ->filter(fn (Note $note) => $note->journal_date !== null)
+                    ->map(fn (Note $note) => $note->journal_date->format('Y'))
+                    ->unique()
+                    ->sort()
+                    ->values();
+
+                return $years->map(function (string $year) use ($visibleJournalNotes, $buildJournalVirtual) {
+                    $yearNotes = $visibleJournalNotes->filter(
+                        fn (Note $note) => $note->journal_date?->format('Y') === $year,
+                    );
+                    $backing = $yearNotes->first(
+                        fn (Note $note) => $note->journal_granularity === Note::JOURNAL_YEARLY,
+                    );
+                    $hasChildren = $yearNotes->contains(
+                        fn (Note $note) => in_array($note->journal_granularity, [
+                            Note::JOURNAL_MONTHLY,
+                            Note::JOURNAL_WEEKLY,
+                            Note::JOURNAL_DAILY,
+                        ], true),
+                    );
+
+                    return $buildJournalVirtual(
+                        "journal:year:{$year}",
+                        $year,
+                        $hasChildren,
+                        "/journal/yearly/{$year}",
+                        $backing,
+                    );
+                })->all();
+            }
+
+            if (preg_match('/^journal:year:(\d{4})$/', $levelParentId, $matches) === 1) {
+                $year = $matches[1];
+                $yearNotes = $visibleJournalNotes->filter(
+                    fn (Note $note) => $note->journal_date?->format('Y') === $year,
+                );
+
+                $months = $yearNotes
+                    ->filter(
+                        fn (Note $note) => in_array($note->journal_granularity, [
+                            Note::JOURNAL_MONTHLY,
+                            Note::JOURNAL_WEEKLY,
+                            Note::JOURNAL_DAILY,
+                        ], true),
+                    )
+                    ->map(fn (Note $note) => $note->journal_date->format('Y-m'))
+                    ->unique()
+                    ->sort()
+                    ->values();
+
+                return $months->map(function (string $month) use ($yearNotes, $buildJournalVirtual) {
+                    $monthNotes = $yearNotes->filter(
+                        fn (Note $note) => $note->journal_date?->format('Y-m') === $month,
+                    );
+                    $backing = $monthNotes->first(
+                        fn (Note $note) => $note->journal_granularity === Note::JOURNAL_MONTHLY,
+                    );
+                    $hasChildren = $monthNotes->contains(
+                        fn (Note $note) => in_array($note->journal_granularity, [
+                            Note::JOURNAL_WEEKLY,
+                            Note::JOURNAL_DAILY,
+                        ], true),
+                    );
+                    $title = ucfirst($monthNotes->first()?->journal_date?->locale($this->userLanguage())->isoFormat('MMMM YYYY') ?? $month);
+
+                    return $buildJournalVirtual(
+                        "journal:month:{$month}",
+                        $title,
+                        $hasChildren,
+                        "/journal/monthly/{$month}",
+                        $backing,
+                    );
+                })->all();
+            }
+
+            if (preg_match('/^journal:month:(\d{4}-\d{2})$/', $levelParentId, $matches) === 1) {
+                $month = $matches[1];
+                $monthNotes = $visibleJournalNotes->filter(
+                    fn (Note $note) => $note->journal_date?->format('Y-m') === $month,
+                );
+
+                $weeks = $monthNotes
+                    ->filter(
+                        fn (Note $note) => in_array($note->journal_granularity, [
+                            Note::JOURNAL_WEEKLY,
+                            Note::JOURNAL_DAILY,
+                        ], true),
+                    )
+                    ->map(fn (Note $note) => $this->journalNoteService->periodFor(Note::JOURNAL_WEEKLY, $note->journal_date))
+                    ->unique()
+                    ->sort()
+                    ->values();
+
+                return $weeks->map(function (string $weekPeriod) use ($monthNotes, $buildJournalVirtual) {
+                    [$weekYear, $weekNumRaw] = explode('-W', $weekPeriod);
+                    $weekNum = ltrim($weekNumRaw, '0');
+                    $weekNotes = $monthNotes->filter(
+                        fn (Note $note) => $this->journalNoteService->periodFor(Note::JOURNAL_WEEKLY, $note->journal_date) === $weekPeriod,
+                    );
+                    $backing = $weekNotes->first(
+                        fn (Note $note) => $note->journal_granularity === Note::JOURNAL_WEEKLY,
+                    );
+                    $hasChildren = $weekNotes->contains(
+                        fn (Note $note) => $note->journal_granularity === Note::JOURNAL_DAILY,
+                    );
+
+                    return $buildJournalVirtual(
+                        "journal:week:{$weekPeriod}",
+                        "Week {$weekNum} {$weekYear}",
+                        $hasChildren,
+                        "/journal/weekly/{$weekPeriod}",
+                        $backing,
+                    );
+                })->all();
+            }
+
+            if (preg_match('/^journal:week:(\d{4}-W\d{2})$/', $levelParentId, $matches) === 1) {
+                $weekPeriod = $matches[1];
+
+                return $visibleJournalNotes
+                    ->filter(fn (Note $note) => $note->journal_granularity === Note::JOURNAL_DAILY)
+                    ->filter(
+                        fn (Note $note) => $this->journalNoteService->periodFor(Note::JOURNAL_WEEKLY, $note->journal_date) === $weekPeriod,
+                    )
+                    ->sortBy(fn (Note $note) => $note->journal_date?->toDateString())
+                    ->map(fn (Note $note) => $buildNotePayload($note, false))
+                    ->values()
+                    ->all();
+            }
+
+            return [];
+        };
+
+        if ($parentId !== null && Str::startsWith($parentId, 'journal')) {
+            return $buildJournalLevel($parentId);
+        }
+
+        $normalLevelNodes = $levelNodes
+            ->filter(fn (Note $note) => $note->type !== Note::TYPE_JOURNAL)
+            ->map(fn (Note $note) => $buildNotePayload(
+                $note,
+                ((int) ($visibleChildCounts[$note->id] ?? 0)) > 0,
+            ))
+            ->values()
+            ->all();
+
+        if ($parentId !== null) {
+            return $normalLevelNodes;
+        }
+
+        $includeJournal = $filters['type'] !== Note::TYPE_NOTE;
+        if (! $includeJournal || $visibleJournalNotes->isEmpty()) {
+            return $normalLevelNodes;
+        }
+
+        $journalTopLevelNodes = $buildJournalLevel('journal');
+
+        $combined = collect([...$normalLevelNodes, ...$journalTopLevelNodes])
+            ->sort(function (array $a, array $b): int {
+                if ($a['has_children'] !== $b['has_children']) {
+                    return $a['has_children'] ? -1 : 1;
+                }
+
+                return strcasecmp((string) $a['title'], (string) $b['title']);
+            })
+            ->values()
+            ->all();
+
+        return $combined;
+    }
+
+    /**
+     * @param  mixed  $value
+     * @return array<int, string>
+     */
+    private function normalizePropertyTags(mixed $value): array
+    {
+        if (is_array($value)) {
+            return collect($value)
+                ->filter(fn ($item) => is_string($item))
+                ->map(fn (string $item) => trim(ltrim($item, '#')))
+                ->filter(fn (string $item) => $item !== '')
+                ->values()
+                ->all();
+        }
+
+        if (! is_string($value)) {
+            return [];
+        }
+
+        return collect(explode(',', $value))
+            ->map(fn (string $item) => trim(ltrim($item, '#')))
+            ->filter(fn (string $item) => $item !== '')
+            ->values()
+            ->all();
     }
 
     private function currentWorkspace(): Workspace

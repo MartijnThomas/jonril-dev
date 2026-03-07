@@ -3,7 +3,6 @@
 namespace App\Http\Middleware;
 
 use App\Models\Note;
-use App\Support\Notes\JournalNoteService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -47,7 +46,6 @@ class HandleInertiaRequests extends Middleware
             'workspaces' => fn () => $this->workspaceSummary($request),
             'currentWorkspace' => fn () => $this->currentWorkspaceSummary($request),
             'notesTree' => fn () => $this->buildNotesTree($request),
-            'noteSearchIndex' => fn () => $this->buildNoteSearchIndex($request),
             'sidebarOpen' => $this->sidebarDefaultOpenState($request, 'left'),
             'rightSidebarOpen' => $this->sidebarDefaultOpenState($request, 'right'),
         ];
@@ -127,87 +125,6 @@ class HandleInertiaRequests extends Middleware
         $stripParent($tree);
 
         return $tree;
-    }
-
-    /**
-     * @return array<int, array{id: string, title: string, href: string, slug: string|null, path: string|null, type: string|null}>
-     */
-    private function buildNoteSearchIndex(Request $request): array
-    {
-        $user = $request->user();
-        if (! $user) {
-            return [];
-        }
-        $workspace = $user->currentWorkspace();
-        if (! $workspace) {
-            return [];
-        }
-
-        /** @var Collection<int, Note> $notes */
-        $notes = Note::query()
-            ->where('workspace_id', $workspace->id)
-            ->orderBy('created_at')
-            ->get([
-                'id',
-                'title',
-                'slug',
-                'parent_id',
-                'type',
-                'journal_granularity',
-                'journal_date',
-            ]);
-
-        $noteById = $notes->keyBy('id');
-        $pathById = [];
-
-        $resolvePath = function (string $noteId) use (&$resolvePath, &$pathById, $noteById): string {
-            if (isset($pathById[$noteId])) {
-                return $pathById[$noteId];
-            }
-
-            /** @var Note|null $current */
-            $current = $noteById->get($noteId);
-            if (! $current) {
-                return '';
-            }
-
-            $title = $current->title ?? 'Untitled';
-            if (! $current->parent_id) {
-                $pathById[$noteId] = $title;
-
-                return $title;
-            }
-
-            $parentPath = $resolvePath($current->parent_id);
-            $path = $parentPath !== '' ? "{$parentPath} / {$title}" : $title;
-            $pathById[$noteId] = $path;
-
-            return $path;
-        };
-
-        return $notes
-            ->map(function (Note $note) use ($resolvePath) {
-                $href = '/notes/'.($note->slug ?: $note->id);
-
-                if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date) {
-                    $period = app(JournalNoteService::class)->periodFor(
-                        $note->journal_granularity,
-                        $note->journal_date,
-                    );
-                    $href = "/journal/{$note->journal_granularity}/{$period}";
-                }
-
-                return [
-                    'id' => $note->id,
-                    'title' => $note->title ?? 'Untitled',
-                    'href' => $href,
-                    'slug' => $note->slug,
-                    'path' => $note->parent_id ? $resolvePath($note->parent_id) : null,
-                    'type' => $note->type,
-                ];
-            })
-            ->values()
-            ->all();
     }
 
     /**

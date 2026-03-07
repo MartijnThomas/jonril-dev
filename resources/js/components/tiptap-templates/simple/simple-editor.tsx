@@ -3,19 +3,19 @@
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { NoteRelatedPanel } from '@/components/note-related-panel';
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
 import type { DocumentPropertiesValue } from '@/components/tiptap-properties/document-properties';
-
-import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
-import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
-import { useWindowSize } from '@/hooks/use-window-size';
-import type { EditorSaveStatus } from '@/types';
 import {
     EditorBubbleToolbar,
     MobileEditorToolbar,
 } from '@/components/tiptap-templates/simple/editor-toolbar';
 import { createSimpleEditorExtensions } from '@/components/tiptap-templates/simple/simple-editor-extensions';
 import { useEditorSave } from '@/components/tiptap-templates/simple/use-editor-save';
+import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
+import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
+import { useWindowSize } from '@/hooks/use-window-size';
+import type { EditorSaveStatus } from '@/types';
 
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss';
 import '@/components/tiptap-node/code-block-node/code-block-node.scss';
@@ -29,6 +29,7 @@ import '@/components/tiptap-templates/simple/simple-editor.scss';
 import '@/components/tiptap-templates/simple/styling.css';
 
 type SimpleEditorContent = string | Record<string, any> | null;
+const EMPTY_SUGGESTIONS: string[] = [];
 
 type SimpleEditorProps = {
     id: string;
@@ -36,9 +37,76 @@ type SimpleEditorProps = {
     content?: SimpleEditorContent;
     properties?: DocumentPropertiesValue;
     linkableNotes?: { id: string; title: string; path?: string; href?: string }[];
+    workspaceSuggestions?: {
+        mentions: string[];
+        hashtags: string[];
+    };
+    relatedTasks?: {
+        id: number;
+        note_id: string;
+        block_id: string | null;
+        position: number;
+        checked: boolean;
+        content: string;
+        render_fragments: {
+            type:
+                | 'text'
+                | 'mention'
+                | 'hashtag'
+                | 'wikilink'
+                | 'due_date_token'
+                | 'deadline_date_token';
+            text?: string;
+            label?: string;
+            note_id?: string | null;
+            href?: string | null;
+            date?: string;
+        }[];
+        due_date: string | null;
+        deadline_date: string | null;
+        note: {
+            id: string;
+            title: string;
+            href: string;
+        };
+    }[];
+    backlinks?: {
+        id: string;
+        block_id: string;
+        heading: string | null;
+        heading_level: number | null;
+        excerpt: string;
+        render_fragments: {
+            type:
+                | 'text'
+                | 'mention'
+                | 'hashtag'
+                | 'wikilink'
+                | 'due_date_token'
+                | 'deadline_date_token';
+            text?: string;
+            label?: string;
+            note_id?: string | null;
+            href?: string | null;
+            date?: string;
+        }[];
+        note: {
+            id: string;
+            title: string;
+            href: string;
+        };
+        href: string;
+    }[];
+    showRelatedPanel?: boolean;
     language?: 'nl' | 'en';
     onSaveStatusChange?: (status: EditorSaveStatus) => void;
     onDebugJsonChange?: (json: string) => void;
+    onContentStatsChange?: (stats: {
+        words: number;
+        characters: number;
+        tasksTotal: number;
+        tasksClosed: number;
+    }) => void;
 };
 
 export function SimpleEditor({
@@ -47,9 +115,14 @@ export function SimpleEditor({
     content = '',
     properties = {},
     linkableNotes = [],
+    workspaceSuggestions,
+    relatedTasks = [],
+    backlinks = [],
+    showRelatedPanel = false,
     language = 'nl',
     onSaveStatusChange,
     onDebugJsonChange,
+    onContentStatsChange,
 }: SimpleEditorProps) {
     const isMobile = useIsBreakpoint();
     const { height } = useWindowSize();
@@ -60,6 +133,10 @@ export function SimpleEditor({
 
     const [documentProperties, setDocumentProperties] =
         useState<DocumentPropertiesValue>(properties);
+    const mentionSuggestions =
+        workspaceSuggestions?.mentions ?? EMPTY_SUGGESTIONS;
+    const hashtagSuggestions =
+        workspaceSuggestions?.hashtags ?? EMPTY_SUGGESTIONS;
 
     const toolbarRef = useRef<HTMLDivElement>(null);
     const previousNoteIdRef = useRef<string | null>(null);
@@ -68,9 +145,13 @@ export function SimpleEditor({
         () =>
             createSimpleEditorExtensions({
                 wikiLinkNotes: linkableNotes,
+                workspaceSuggestions: {
+                    mentions: mentionSuggestions,
+                    hashtags: hashtagSuggestions,
+                },
                 language,
             }),
-        [language, linkableNotes],
+        [language, linkableNotes, mentionSuggestions, hashtagSuggestions],
     );
 
     const initialContent = useMemo(() => {
@@ -134,6 +215,7 @@ export function SimpleEditor({
             return;
         }
 
+        // eslint-disable-next-line react-hooks/immutability
         editor.isMobile = isMobile;
     }, [editor, isMobile]);
 
@@ -169,7 +251,7 @@ export function SimpleEditor({
         }
     }, [isMobile, mobileView]);
 
-    const { status } = useEditorSave({
+    const { status, saveEditor } = useEditorSave({
         editor,
         noteId: id,
         noteUpdateUrl,
@@ -203,6 +285,51 @@ export function SimpleEditor({
         };
     }, [editor, onDebugJsonChange]);
 
+    useEffect(() => {
+        if (!editor || !onContentStatsChange) {
+            return;
+        }
+
+        const emit = () => {
+            const words =
+                editor.storage.characterCount?.words?.() ??
+                editor.getText().trim().split(/\s+/).filter(Boolean).length;
+            const characters =
+                editor.storage.characterCount?.characters?.() ??
+                editor.getText().length;
+
+            let tasksTotal = 0;
+            let tasksClosed = 0;
+
+            editor.state.doc.descendants((node) => {
+                if (node.type.name !== 'taskItem') {
+                    return true;
+                }
+
+                tasksTotal += 1;
+                if (node.attrs.checked === true) {
+                    tasksClosed += 1;
+                }
+
+                return true;
+            });
+
+            onContentStatsChange({
+                words,
+                characters,
+                tasksTotal,
+                tasksClosed,
+            });
+        };
+
+        emit();
+        editor.on('update', emit);
+
+        return () => {
+            editor.off('update', emit);
+        };
+    }, [editor, onContentStatsChange]);
+
     return (
         <div className="mx-auto mb-12 max-w-3xl px-8">
             <EditorContext.Provider value={{ editor }}>
@@ -210,8 +337,21 @@ export function SimpleEditor({
                     <DocumentProperties
                         value={documentProperties}
                         onChange={setDocumentProperties}
+                        onPersistRequested={() => saveEditor(false)}
+                        workspaceSuggestions={{
+                            mentions: mentionSuggestions,
+                            hashtags: hashtagSuggestions,
+                        }}
                     />
                 </div>
+                {showRelatedPanel ? (
+                    <NoteRelatedPanel
+                        key={id}
+                        relatedTasks={relatedTasks}
+                        backlinks={backlinks}
+                        language={language}
+                    />
+                ) : null}
 
                 {editor && !isMobile && <EditorBubbleToolbar editor={editor} />}
 

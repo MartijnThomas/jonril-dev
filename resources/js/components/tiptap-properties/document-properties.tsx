@@ -1,11 +1,14 @@
 import {
+    Check,
     ChevronDown,
     ChevronRight,
     GripVertical,
     Plus,
     Trash2,
+    X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -18,6 +21,7 @@ import {
 } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
 import {
+    PopoverAnchor,
     Popover,
     PopoverContent,
     PopoverTrigger,
@@ -25,18 +29,25 @@ import {
 import { cn } from '@/lib/utils';
 
 export type DocumentPropertiesValue = Record<string, string>;
+type WorkspaceSuggestions = {
+    mentions: string[];
+    hashtags: string[];
+};
 
 type DocumentPropertiesProps = {
     value: DocumentPropertiesValue;
     onChange: (value: DocumentPropertiesValue) => void;
+    onPersistRequested?: () => void;
     options?: string[];
     defaultCollapsed?: boolean;
+    workspaceSuggestions?: WorkspaceSuggestions;
 };
 
 const DEFAULT_PROPERTY_OPTIONS = [
     'type',
     'title',
     'context',
+    'tags',
     'project',
 ] as const;
 
@@ -61,11 +72,291 @@ function createDraftRow(): DraftRow {
     };
 }
 
+const normalizeTokenValue = (value: string) =>
+    value.trim().replace(/^[@#]/, '').trim();
+
+const isValidTokenValue = (value: string) => {
+    if (value === '' || /\s/u.test(value)) {
+        return false;
+    }
+
+    return Array.from(value).every((char) => {
+        if (char === '_' || char === '-') {
+            return true;
+        }
+
+        if (/[0-9]/.test(char)) {
+            return true;
+        }
+
+        return char.toLowerCase() !== char.toUpperCase();
+    });
+};
+
+const splitTags = (value: string) =>
+    value
+        .split(',')
+        .map((part) => normalizeTokenValue(part))
+        .filter(Boolean);
+
+type TokenPropertyInputProps = {
+    mode: 'context' | 'tags';
+    value: string;
+    onChange: (next: string) => void;
+    onPersist: (kind: 'mention' | 'hashtag', value: string) => Promise<string[]>;
+    options: string[];
+    className?: string;
+    placeholder?: string;
+    inputRef?: (element: HTMLInputElement | null) => void;
+    onBlur?: () => void;
+    onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+};
+
+function TokenPropertyInput({
+    mode,
+    value,
+    onChange,
+    onPersist,
+    options,
+    className,
+    placeholder,
+    inputRef,
+    onBlur,
+    onKeyDown,
+}: TokenPropertyInputProps) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const isTags = mode === 'tags';
+    const char = isTags ? '#' : '@';
+
+    const selectedTokens = useMemo(() => {
+        if (isTags) {
+            return splitTags(value);
+        }
+
+        const normalized = normalizeTokenValue(value);
+        return normalized ? [normalized] : [];
+    }, [isTags, value]);
+
+    const currentQuery = normalizeTokenValue(query);
+
+    const filteredOptions = useMemo(() => {
+        const selected =
+            isTags
+                ? new Set(selectedTokens.map((item) => item.toLowerCase()))
+                : new Set(selectedTokens.map((item) => item.toLowerCase()));
+        const queryLower = currentQuery.toLowerCase();
+
+        return options
+            .filter((option) =>
+                option.toLowerCase().includes(queryLower),
+            )
+            .filter((option) => !selected.has(option.toLowerCase()));
+    }, [currentQuery, isTags, options, selectedTokens]);
+
+    const canCreate =
+        isValidTokenValue(currentQuery) &&
+        !options.some(
+            (option) => option.toLowerCase() === currentQuery.toLowerCase(),
+        );
+
+    const applyValue = (token: string) => {
+        if (!isTags) {
+            onChange(token);
+            setQuery('');
+            setOpen(false);
+            return;
+        }
+
+        const base = selectedTokens;
+        const alreadyExists = base.some(
+            (item) => item.toLowerCase() === token.toLowerCase(),
+        );
+        const next = alreadyExists ? base : [...base, token];
+        onChange(next.join(', '));
+        setQuery('');
+        setOpen(true);
+    };
+
+    const persistAndApply = async (token: string) => {
+        const kind = isTags ? 'hashtag' : 'mention';
+        const updated = await onPersist(kind, token);
+        const canonical =
+            updated.find(
+                (item) => item.toLowerCase() === token.toLowerCase(),
+            ) ?? token;
+        applyValue(canonical);
+    };
+
+    const handleBlur = () => {
+        if (currentQuery && isValidTokenValue(currentQuery)) {
+            void persistAndApply(currentQuery);
+        } else if (isTags) {
+            onChange(selectedTokens.join(', '));
+        }
+
+        window.setTimeout(() => {
+            setOpen(false);
+            onBlur?.();
+        }, 100);
+    };
+
+    const removeToken = (token: string) => {
+        if (!isTags) {
+            onChange('');
+            return;
+        }
+
+        const next = selectedTokens.filter(
+            (item) => item.toLowerCase() !== token.toLowerCase(),
+        );
+        onChange(next.join(', '));
+    };
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <div
+                    className={cn(
+                        'flex h-8 w-full items-center gap-1 rounded-sm border-0 bg-transparent px-2 text-left text-sm shadow-none focus-within:bg-muted/60',
+                        className,
+                    )}
+                >
+                    {selectedTokens.map((token) => (
+                        <span
+                            key={token}
+                            className={cn(
+                                'inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs',
+                                isTags
+                                    ? 'bg-blue-400/10 text-blue-600'
+                                    : 'bg-purple-400/10 text-purple-600',
+                            )}
+                        >
+                            {char}
+                            {token}
+                            <button
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => removeToken(token)}
+                                className="opacity-70 hover:opacity-100"
+                                aria-label={`Remove ${char}${token}`}
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </span>
+                    ))}
+
+                    <input
+                        ref={inputRef}
+                        value={query}
+                        onFocus={() => setOpen(true)}
+                        onBlur={handleBlur}
+                        onChange={(event) => {
+                            setQuery(event.target.value);
+                            setOpen(true);
+                        }}
+                        onKeyDown={async (event) => {
+                            if (
+                                event.key === 'Enter' &&
+                                (event.metaKey || event.ctrlKey)
+                            ) {
+                                onKeyDown?.(event);
+                                return;
+                            }
+
+                            if (event.key === 'Enter') {
+                                event.preventDefault();
+                                if (filteredOptions.length > 0) {
+                                    applyValue(filteredOptions[0]);
+                                    return;
+                                }
+                                if (canCreate) {
+                                    await persistAndApply(currentQuery);
+                                }
+                                return;
+                            }
+
+                            if (event.key === 'Tab' && filteredOptions.length > 0) {
+                                event.preventDefault();
+                                applyValue(filteredOptions[0]);
+                                return;
+                            }
+
+                            if (
+                                event.key === 'Backspace' &&
+                                query === '' &&
+                                selectedTokens.length > 0 &&
+                                isTags
+                            ) {
+                                removeToken(selectedTokens[selectedTokens.length - 1]);
+                                return;
+                            }
+
+                            onKeyDown?.(event);
+                        }}
+                        placeholder={selectedTokens.length === 0 ? placeholder : ''}
+                        className="min-w-[6rem] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    />
+                </div>
+            </PopoverTrigger>
+            <PopoverContent
+                align="start"
+                className="w-72 p-0"
+                onOpenAutoFocus={(event) => {
+                    event.preventDefault();
+                }}
+                onCloseAutoFocus={(event) => {
+                    event.preventDefault();
+                }}
+            >
+                <Command shouldFilter={false}>
+                    <CommandList>
+                        <CommandEmpty className="px-3 py-2 text-xs text-muted-foreground">
+                            {isTags
+                                ? 'Type a hashtag and press Enter to create.'
+                                : 'Type a mention and press Enter to create.'}
+                        </CommandEmpty>
+                        <CommandGroup heading={isTags ? 'Hashtags' : 'Mentions'}>
+                            {filteredOptions.map((option) => (
+                                <CommandItem
+                                    key={option}
+                                    value={option}
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onSelect={() => applyValue(option)}
+                                >
+                                    <Check className="h-3.5 w-3.5 opacity-40" />
+                                    {char}
+                                    {option}
+                                </CommandItem>
+                            ))}
+                            {canCreate && (
+                                <CommandItem
+                                    value={`create-${currentQuery}`}
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onSelect={() => {
+                                        void persistAndApply(currentQuery);
+                                    }}
+                                >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    Create {char}
+                                    {currentQuery}
+                                </CommandItem>
+                            )}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+}
+
 export function DocumentProperties({
     value,
     onChange,
+    onPersistRequested,
     options = [...DEFAULT_PROPERTY_OPTIONS],
     defaultCollapsed = true,
+    workspaceSuggestions,
 }: DocumentPropertiesProps) {
     const [collapsed, setCollapsed] = useState(defaultCollapsed);
     const [searchByRow, setSearchByRow] = useState<Record<string, string>>({});
@@ -79,6 +370,12 @@ export function DocumentProperties({
     );
     const [pendingExistingValueFocusKey, setPendingExistingValueFocusKey] =
         useState<string | null>(null);
+    const [mentionOptions, setMentionOptions] = useState<string[]>(
+        workspaceSuggestions?.mentions ?? [],
+    );
+    const [hashtagOptions, setHashtagOptions] = useState<string[]>(
+        workspaceSuggestions?.hashtags ?? [],
+    );
 
     const keyInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const valueInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -87,6 +384,64 @@ export function DocumentProperties({
     >({});
 
     const entries = useMemo(() => Object.entries(value), [value]);
+
+    useEffect(() => {
+        setMentionOptions(workspaceSuggestions?.mentions ?? []);
+        setHashtagOptions(workspaceSuggestions?.hashtags ?? []);
+    }, [workspaceSuggestions]);
+
+    const getCookie = (name: string): string | null => {
+        const match = document.cookie
+            .split('; ')
+            .find((part) => part.startsWith(`${name}=`));
+
+        if (!match) {
+            return null;
+        }
+
+        return decodeURIComponent(match.split('=').slice(1).join('='));
+    };
+
+    const persistWorkspaceToken = async (
+        kind: 'mention' | 'hashtag',
+        rawValue: string,
+    ): Promise<string[]> => {
+        const normalized = normalizeTokenValue(rawValue);
+        if (!isValidTokenValue(normalized)) {
+            return kind === 'mention' ? mentionOptions : hashtagOptions;
+        }
+
+        const xsrfToken = getCookie('XSRF-TOKEN');
+        const response = await fetch('/workspaces/suggestions', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
+            },
+            body: JSON.stringify({
+                kind,
+                value: normalized,
+            }),
+        });
+
+        if (!response.ok) {
+            return kind === 'mention' ? mentionOptions : hashtagOptions;
+        }
+
+        const payload = (await response.json()) as { items?: string[] };
+        const items = Array.isArray(payload.items) ? payload.items : [];
+
+        if (kind === 'mention') {
+            setMentionOptions(items);
+        } else {
+            setHashtagOptions(items);
+        }
+
+        return items;
+    };
 
     const availableOptions = useMemo(() => {
         const existing = new Set([
@@ -132,6 +487,7 @@ export function DocumentProperties({
             ...value,
             [trimmed]: nextValue,
         });
+        onPersistRequested?.();
 
         setDraftRows((current) => current.filter((row) => row.id !== rowId));
         setSearchByRow((current) => {
@@ -190,6 +546,7 @@ export function DocumentProperties({
             return next;
         });
         setPendingExistingValueFocusKey(trimmed);
+        onPersistRequested?.();
     };
 
     const updatePropertyValue = (key: string, nextValue: string) => {
@@ -203,6 +560,7 @@ export function DocumentProperties({
         const next = { ...value };
         delete next[key];
         onChange(next);
+        onPersistRequested?.();
     };
 
     useEffect(() => {
@@ -243,6 +601,20 @@ export function DocumentProperties({
             }
             valueInputRefs.current[rowId]?.focus();
         });
+    };
+
+    const valueFieldMode = (
+        key: string,
+    ): 'default' | 'context' | 'tags' => {
+        const normalized = key.trim().toLowerCase();
+        if (normalized === 'context') {
+            return 'context';
+        }
+        if (normalized === 'tags') {
+            return 'tags';
+        }
+
+        return 'default';
     };
 
     const renderDraftKeyPopoverContent = (rowId: string) => {
@@ -338,7 +710,8 @@ export function DocumentProperties({
 
     const renderExistingKeyPopoverContent = (oldKey: string, rowId: string) => {
         const draftValue = existingKeyDrafts[oldKey] ?? oldKey;
-        const search = searchByRow[rowId] ?? draftValue;
+        const search = searchByRow[rowId] ?? '';
+        const selectedKey = draftValue.trim().toLowerCase();
 
         const existingKeys = new Set(Object.keys(value));
         existingKeys.delete(oldKey);
@@ -407,6 +780,15 @@ export function DocumentProperties({
                                             );
                                         }}
                                     >
+                                        <Check
+                                            className={cn(
+                                                'h-3.5 w-3.5',
+                                                option.toLowerCase() ===
+                                                    selectedKey
+                                                    ? 'opacity-100'
+                                                    : 'opacity-0',
+                                            )}
+                                        />
                                         {option}
                                     </CommandItem>
                                 ))}
@@ -454,12 +836,14 @@ export function DocumentProperties({
 
                 {!collapsed && (
                     <div className="pt-2">
-                        <div className="grid grid-cols-[18px_minmax(120px,180px)_minmax(0,1fr)_20px] items-center gap-3 px-1 pb-1 text-xs text-muted-foreground">
-                            <div />
-                            <div>Key</div>
-                            <div>Value</div>
-                            <div />
-                        </div>
+                        {entries.length + draftRows.length > 0 && (
+                            <div className="grid grid-cols-[18px_minmax(120px,180px)_minmax(0,1fr)_20px] items-center gap-3 px-1 pb-1 text-xs text-muted-foreground">
+                                <div />
+                                <div>Key</div>
+                                <div>Value</div>
+                                <div />
+                            </div>
+                        )}
 
                         <div className="space-y-px">
                             {entries.map(([key, propertyValue]) => {
@@ -495,52 +879,56 @@ export function DocumentProperties({
                                             }
                                         }}
                                     >
-                                        <PopoverTrigger asChild>
-                                            <Input
-                                                value={keyDraft}
-                                                onFocus={() => {
-                                                    setOpenRowId(rowId);
-                                                    setSearchByRow(
-                                                        (current) => ({
-                                                            ...current,
-                                                            [rowId]: keyDraft,
-                                                        }),
-                                                    );
-                                                }}
-                                                onChange={(event) => {
-                                                    const nextValue =
-                                                        event.target.value;
-
-                                                    setExistingKeyDrafts(
-                                                        (current) => ({
-                                                            ...current,
-                                                            [key]: nextValue,
-                                                        }),
-                                                    );
-                                                    setSearchByRow(
-                                                        (current) => ({
-                                                            ...current,
-                                                            [rowId]: nextValue,
-                                                        }),
-                                                    );
-                                                    setOpenRowId(rowId);
-                                                }}
-                                                onKeyDown={(event) => {
-                                                    if (event.key === 'Enter') {
-                                                        event.preventDefault();
-                                                        setOpenRowId(null);
-                                                        commitExistingKeyRename(
-                                                            key,
-                                                            existingKeyDrafts[
-                                                                key
-                                                            ] ?? key,
+                                        <PopoverAnchor asChild>
+                                            <div>
+                                                <Input
+                                                    value={keyDraft}
+                                                    onFocus={() => {
+                                                        setOpenRowId(rowId);
+                                                        setSearchByRow(
+                                                            (current) => ({
+                                                                ...current,
+                                                                [rowId]: '',
+                                                            }),
                                                         );
-                                                    }
-                                                }}
-                                                placeholder="Key"
-                                                className="h-8 border-0 bg-transparent px-2 text-left text-sm shadow-none focus:bg-muted/60 focus-visible:ring-0"
-                                            />
-                                        </PopoverTrigger>
+                                                    }}
+                                                    onChange={(event) => {
+                                                        const nextValue =
+                                                            event.target.value;
+
+                                                        setExistingKeyDrafts(
+                                                            (current) => ({
+                                                                ...current,
+                                                                [key]: nextValue,
+                                                            }),
+                                                        );
+                                                        setSearchByRow(
+                                                            (current) => ({
+                                                                ...current,
+                                                                [rowId]: nextValue,
+                                                            }),
+                                                        );
+                                                        setOpenRowId(rowId);
+                                                    }}
+                                                    onKeyDown={(event) => {
+                                                        if (
+                                                            event.key === 'Enter'
+                                                        ) {
+                                                            event.preventDefault();
+                                                            setOpenRowId(null);
+                                                            commitExistingKeyRename(
+                                                                key,
+                                                                existingKeyDrafts[
+                                                                    key
+                                                                ] ?? key,
+                                                            );
+                                                        }
+                                                    }}
+                                                    placeholder="Key"
+                                                    className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus:border-muted-foreground/25 focus:bg-white focus-visible:ring-0"
+                                                />
+                                            </div>
+                                        </PopoverAnchor>
 
                                         {renderExistingKeyPopoverContent(
                                             key,
@@ -548,31 +936,80 @@ export function DocumentProperties({
                                         )}
                                     </Popover>
 
-                                    <Input
-                                        ref={(element) => {
-                                            existingValueInputRefs.current[
-                                                key
-                                            ] = element;
-                                        }}
-                                        value={propertyValue}
-                                        onChange={(event) =>
-                                            updatePropertyValue(
-                                                key,
-                                                event.target.value,
-                                            )
-                                        }
-                                        onKeyDown={(event) => {
-                                            if (
-                                                event.key === 'Enter' &&
-                                                (event.metaKey || event.ctrlKey)
-                                            ) {
-                                                event.preventDefault();
-                                                addEmptyRow();
+                                    {valueFieldMode(key) === 'default' ? (
+                                        <Input
+                                            ref={(element) => {
+                                                existingValueInputRefs.current[
+                                                    key
+                                                ] = element;
+                                            }}
+                                            value={propertyValue}
+                                            onChange={(event) =>
+                                                updatePropertyValue(
+                                                    key,
+                                                    event.target.value,
+                                                )
                                             }
-                                        }}
-                                        placeholder="Value"
-                                        className="h-8 border-0 bg-transparent px-2 text-left text-sm shadow-none focus:bg-muted/60 focus-visible:ring-0"
-                                    />
+                                            onKeyDown={(event) => {
+                                                if (
+                                                    event.key === 'Enter' &&
+                                                    (event.metaKey ||
+                                                        event.ctrlKey)
+                                                ) {
+                                                    event.preventDefault();
+                                                    addEmptyRow();
+                                                }
+                                            }}
+                                            onBlur={() => {
+                                                onPersistRequested?.();
+                                            }}
+                                            placeholder="Value"
+                                            className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus:border-muted-foreground/25 focus:bg-white focus-visible:ring-0"
+                                        />
+                                    ) : (
+                                        <TokenPropertyInput
+                                            mode={valueFieldMode(key)}
+                                            inputRef={(element) => {
+                                                existingValueInputRefs.current[
+                                                    key
+                                                ] = element;
+                                            }}
+                                            value={propertyValue}
+                                            onChange={(nextValue) =>
+                                                updatePropertyValue(
+                                                    key,
+                                                    nextValue,
+                                                )
+                                            }
+                                            onPersist={persistWorkspaceToken}
+                                            options={
+                                                valueFieldMode(key) ===
+                                                'context'
+                                                    ? mentionOptions
+                                                    : hashtagOptions
+                                            }
+                                            placeholder={
+                                                valueFieldMode(key) ===
+                                                'context'
+                                                    ? '@mention'
+                                                    : '#tag1, #tag2'
+                                            }
+                                            onKeyDown={(event) => {
+                                                if (
+                                                    event.key === 'Enter' &&
+                                                    (event.metaKey ||
+                                                        event.ctrlKey)
+                                                ) {
+                                                    event.preventDefault();
+                                                    addEmptyRow();
+                                                }
+                                            }}
+                                            onBlur={() => {
+                                                onPersistRequested?.();
+                                            }}
+                                            className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus:border-muted-foreground/25 focus:bg-white focus-visible:ring-0"
+                                        />
+                                    )}
 
                                     <Button
                                         type="button"
@@ -690,7 +1127,7 @@ export function DocumentProperties({
                                                 }
                                             }}
                                             placeholder="Key"
-                                            className="h-8 border-0 bg-transparent px-2 text-left text-sm shadow-none focus:bg-muted/60 focus-visible:ring-0"
+                                            className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus:border-muted-foreground/25 focus:bg-white focus-visible:ring-0"
                                         />
                                     </PopoverTrigger>
 
@@ -698,77 +1135,29 @@ export function DocumentProperties({
                                 </Popover>
 
                                 <div>
-                                    <Input
-                                        data-value-input="true"
-                                        ref={(element) => {
-                                            valueInputRefs.current[row.id] =
-                                                element;
-                                        }}
-                                        value={row.value}
-                                        onChange={(event) =>
-                                            setDraftRows((current) =>
-                                                current.map((draftRow) =>
-                                                    draftRow.id === row.id
-                                                        ? {
-                                                              ...draftRow,
-                                                              value: event
-                                                                  .target.value,
-                                                          }
-                                                        : draftRow,
-                                                ),
-                                            )
-                                        }
-                                        onBlur={() => {
-                                            const currentRow = draftRows.find(
-                                                (draftRow) =>
-                                                    draftRow.id === row.id,
-                                            );
-
-                                            if (!currentRow) {
-                                                return;
-                                            }
-
-                                            if (currentRow.key.trim()) {
-                                                commitDraftRow(
-                                                    row.id,
-                                                    currentRow.key,
-                                                    currentRow.value,
-                                                );
-                                            }
-                                        }}
-                                        onKeyDown={(event) => {
-                                            if (
-                                                event.key === 'Enter' &&
-                                                (event.metaKey || event.ctrlKey)
-                                            ) {
-                                                event.preventDefault();
-                                                const currentRow =
-                                                    draftRows.find(
-                                                        (draftRow) =>
-                                                            draftRow.id ===
-                                                            row.id,
-                                                    );
-
-                                                if (!currentRow) {
-                                                    return;
-                                                }
-
-                                                commitDraftRow(
-                                                    row.id,
-                                                    currentRow.key,
-                                                    currentRow.value,
-                                                );
-                                                addEmptyRow();
-                                            }
-
-                                            if (
-                                                event.key === 'Enter' &&
-                                                !(
-                                                    event.metaKey ||
-                                                    event.ctrlKey
+                                    {valueFieldMode(row.key) === 'default' ? (
+                                        <Input
+                                            data-value-input="true"
+                                            ref={(element) => {
+                                                valueInputRefs.current[row.id] =
+                                                    element;
+                                            }}
+                                            value={row.value}
+                                            onChange={(event) =>
+                                                setDraftRows((current) =>
+                                                    current.map((draftRow) =>
+                                                        draftRow.id === row.id
+                                                            ? {
+                                                                  ...draftRow,
+                                                                  value: event
+                                                                      .target
+                                                                      .value,
+                                                              }
+                                                            : draftRow,
+                                                    ),
                                                 )
-                                            ) {
-                                                event.preventDefault();
+                                            }
+                                            onBlur={() => {
                                                 const currentRow =
                                                     draftRows.find(
                                                         (draftRow) =>
@@ -780,16 +1169,181 @@ export function DocumentProperties({
                                                     return;
                                                 }
 
-                                                commitDraftRow(
-                                                    row.id,
-                                                    currentRow.key,
-                                                    currentRow.value,
-                                                );
+                                                if (currentRow.key.trim()) {
+                                                    commitDraftRow(
+                                                        row.id,
+                                                        currentRow.key,
+                                                        currentRow.value,
+                                                    );
+                                                }
+
+                                                onPersistRequested?.();
+                                            }}
+                                            onKeyDown={(event) => {
+                                                if (
+                                                    event.key === 'Enter' &&
+                                                    (event.metaKey ||
+                                                        event.ctrlKey)
+                                                ) {
+                                                    event.preventDefault();
+                                                    const currentRow =
+                                                        draftRows.find(
+                                                            (draftRow) =>
+                                                                draftRow.id ===
+                                                                row.id,
+                                                        );
+
+                                                    if (!currentRow) {
+                                                        return;
+                                                    }
+
+                                                    commitDraftRow(
+                                                        row.id,
+                                                        currentRow.key,
+                                                        currentRow.value,
+                                                    );
+                                                    addEmptyRow();
+                                                }
+
+                                                if (
+                                                    event.key === 'Enter' &&
+                                                    !(
+                                                        event.metaKey ||
+                                                        event.ctrlKey
+                                                    )
+                                                ) {
+                                                    event.preventDefault();
+                                                    const currentRow =
+                                                        draftRows.find(
+                                                            (draftRow) =>
+                                                                draftRow.id ===
+                                                                row.id,
+                                                        );
+
+                                                    if (!currentRow) {
+                                                        return;
+                                                    }
+
+                                                    commitDraftRow(
+                                                        row.id,
+                                                        currentRow.key,
+                                                        currentRow.value,
+                                                    );
+                                                }
+                                            }}
+                                            placeholder="Value"
+                                            className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus:border-muted-foreground/25 focus:bg-white focus-visible:ring-0"
+                                        />
+                                    ) : (
+                                        <TokenPropertyInput
+                                            mode={valueFieldMode(row.key)}
+                                            inputRef={(element) => {
+                                                valueInputRefs.current[row.id] =
+                                                    element;
+                                            }}
+                                            value={row.value}
+                                            onChange={(nextValue) =>
+                                                setDraftRows((current) =>
+                                                    current.map((draftRow) =>
+                                                        draftRow.id === row.id
+                                                            ? {
+                                                                  ...draftRow,
+                                                                  value: nextValue,
+                                                              }
+                                                            : draftRow,
+                                                    ),
+                                                )
                                             }
-                                        }}
-                                        placeholder="Value"
-                                        className="h-8 border-0 bg-transparent px-2 text-left text-sm shadow-none focus:bg-muted/60 focus-visible:ring-0"
-                                    />
+                                            onPersist={persistWorkspaceToken}
+                                            options={
+                                                valueFieldMode(row.key) ===
+                                                'context'
+                                                    ? mentionOptions
+                                                    : hashtagOptions
+                                            }
+                                            onBlur={() => {
+                                                const currentRow =
+                                                    draftRows.find(
+                                                        (draftRow) =>
+                                                            draftRow.id ===
+                                                            row.id,
+                                                    );
+
+                                                if (!currentRow) {
+                                                    return;
+                                                }
+
+                                                if (currentRow.key.trim()) {
+                                                    commitDraftRow(
+                                                        row.id,
+                                                        currentRow.key,
+                                                        currentRow.value,
+                                                    );
+                                                }
+
+                                                onPersistRequested?.();
+                                            }}
+                                            onKeyDown={(event) => {
+                                                if (
+                                                    event.key === 'Enter' &&
+                                                    (event.metaKey ||
+                                                        event.ctrlKey)
+                                                ) {
+                                                    event.preventDefault();
+                                                    const currentRow =
+                                                        draftRows.find(
+                                                            (draftRow) =>
+                                                                draftRow.id ===
+                                                                row.id,
+                                                        );
+
+                                                    if (!currentRow) {
+                                                        return;
+                                                    }
+
+                                                    commitDraftRow(
+                                                        row.id,
+                                                        currentRow.key,
+                                                        currentRow.value,
+                                                    );
+                                                    addEmptyRow();
+                                                }
+
+                                                if (
+                                                    event.key === 'Enter' &&
+                                                    !(
+                                                        event.metaKey ||
+                                                        event.ctrlKey
+                                                    )
+                                                ) {
+                                                    event.preventDefault();
+                                                    const currentRow =
+                                                        draftRows.find(
+                                                            (draftRow) =>
+                                                                draftRow.id ===
+                                                                row.id,
+                                                        );
+
+                                                    if (!currentRow) {
+                                                        return;
+                                                    }
+
+                                                    commitDraftRow(
+                                                        row.id,
+                                                        currentRow.key,
+                                                        currentRow.value,
+                                                    );
+                                                }
+                                            }}
+                                            placeholder={
+                                                valueFieldMode(row.key) ===
+                                                'context'
+                                                    ? '@mention'
+                                                    : '#tag1, #tag2'
+                                            }
+                                            className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus:border-muted-foreground/25 focus:bg-white focus-visible:ring-0"
+                                        />
+                                    )}
                                 </div>
 
                                 <Button

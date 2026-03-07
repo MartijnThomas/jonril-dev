@@ -5,23 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class NoteTask extends Model
+class NoteHeading extends Model
 {
     protected $fillable = [
         'workspace_id',
         'note_id',
         'block_id',
-        'note_title',
-        'parent_note_id',
-        'parent_note_title',
-        'position',
-        'checked',
-        'content_text',
-        'render_fragments',
-        'due_date',
-        'deadline_date',
-        'mentions',
-        'hashtags',
+        'level',
+        'text',
     ];
 
     /**
@@ -30,12 +21,7 @@ class NoteTask extends Model
     protected function casts(): array
     {
         return [
-            'checked' => 'boolean',
-            'due_date' => 'date',
-            'deadline_date' => 'date',
-            'render_fragments' => 'array',
-            'mentions' => 'array',
-            'hashtags' => 'array',
+            'level' => 'integer',
         ];
     }
 

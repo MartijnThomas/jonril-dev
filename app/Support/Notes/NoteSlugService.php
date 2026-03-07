@@ -88,7 +88,7 @@ class NoteSlugService
 
         while ($cursor !== null && ! isset($visited[$cursor->id])) {
             $visited[$cursor->id] = true;
-            $segments[] = $this->slugSegment($cursor->title ?: 'Untitled');
+            $segments[] = $this->slugSegment($this->baseTitle($cursor) ?: 'Untitled');
 
             if (! $cursor->parent_id) {
                 break;
@@ -104,6 +104,18 @@ class NoteSlugService
         }
 
         return implode('/', $segments);
+    }
+
+    private function baseTitle(Note $note): ?string
+    {
+        $raw = $note->getRawOriginal('title');
+        if (! is_string($raw)) {
+            return null;
+        }
+
+        $trimmed = trim($raw);
+
+        return $trimmed !== '' ? $trimmed : null;
     }
 
     private function slugSegment(string $value): string

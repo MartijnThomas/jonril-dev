@@ -141,6 +141,135 @@ test('tasks index can include completed tasks and filter by hashtag', function (
         );
 });
 
+test('tasks index exposes render fragments for mentions hashtags and wikilinks', function () {
+    $user = User::factory()->create();
+
+    $linkedNote = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Linked target',
+    ]);
+
+    $taskNote = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Rich task note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'taskList',
+                    'content' => [
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'checked' => false,
+                                'dueDate' => '2026-03-07',
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [
+                                    ['type' => 'text', 'text' => 'See '],
+                                    [
+                                        'type' => 'text',
+                                        'text' => 'Project 1',
+                                        'marks' => [[
+                                            'type' => 'wikiLink',
+                                            'attrs' => [
+                                                'noteId' => $linkedNote->id,
+                                                'href' => "/notes/{$linkedNote->id}",
+                                            ],
+                                        ]],
+                                    ],
+                                    ['type' => 'text', 'text' => ' with '],
+                                    [
+                                        'type' => 'mention',
+                                        'attrs' => [
+                                            'id' => 'Lea',
+                                            'label' => 'Lea',
+                                            'mentionSuggestionChar' => '@',
+                                        ],
+                                    ],
+                                    ['type' => 'text', 'text' => ' and '],
+                                    [
+                                        'type' => 'hashtag',
+                                        'attrs' => [
+                                            'id' => 'work',
+                                            'label' => 'work',
+                                            'mentionSuggestionChar' => '#',
+                                        ],
+                                    ],
+                                ],
+                            ]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/index')
+            ->has('tasks.data', 1)
+            ->where('tasks.data.0.note.id', $taskNote->id)
+            ->where('tasks.data.0.render_fragments.0.type', 'text')
+            ->where('tasks.data.0.render_fragments.1.type', 'wikilink')
+            ->where('tasks.data.0.render_fragments.1.text', 'Project 1')
+            ->where('tasks.data.0.render_fragments.1.note_id', $linkedNote->id)
+            ->where('tasks.data.0.render_fragments.1.href', "/notes/{$linkedNote->id}")
+            ->where('tasks.data.0.render_fragments.3.type', 'mention')
+            ->where('tasks.data.0.render_fragments.3.label', 'Lea')
+            ->where('tasks.data.0.render_fragments.5.type', 'hashtag')
+            ->where('tasks.data.0.render_fragments.5.label', 'work'),
+        );
+});
+
+test('tasks index exposes in-place due and deadline token fragments', function () {
+    $user = User::factory()->create();
+
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Date token note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'taskList',
+                    'content' => [
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'checked' => false,
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [
+                                    ['type' => 'text', 'text' => 'Task >2026-03-08 and >>2026-03-09'],
+                                ],
+                            ]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/index')
+            ->has('tasks.data', 1)
+            ->where('tasks.data.0.note.id', $note->id)
+            ->where('tasks.data.0.render_fragments.0.type', 'text')
+            ->where('tasks.data.0.render_fragments.1.type', 'due_date_token')
+            ->where('tasks.data.0.render_fragments.1.date', '2026-03-08')
+            ->where('tasks.data.0.render_fragments.3.type', 'deadline_date_token')
+            ->where('tasks.data.0.render_fragments.3.date', '2026-03-09'),
+        );
+});
+
 test('tasks index date range filter matches due or deadline dates', function () {
     $user = User::factory()->create();
 
@@ -584,7 +713,7 @@ test('task checkbox can be toggled and undone via stable task reference', functi
             'position' => 1,
             'checked' => true,
         ])
-        ->assertNoContent();
+        ->assertRedirect();
 
     $note->refresh();
     expect(data_get($note->content, 'content.0.content.0.attrs.checked'))->toBeTrue();
@@ -597,7 +726,7 @@ test('task checkbox can be toggled and undone via stable task reference', functi
             'position' => 1,
             'checked' => false,
         ])
-        ->assertNoContent();
+        ->assertRedirect();
 
     $note->refresh();
     $reindexedTask = NoteTask::query()

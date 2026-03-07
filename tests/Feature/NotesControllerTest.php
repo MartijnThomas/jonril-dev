@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Note;
+use App\Models\NoteTask;
 use App\Models\NoteRevision;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -33,8 +34,442 @@ test('show resolves notes by slug', function () {
         ->get('/notes/my-project-note')
         ->assertInertia(fn (Assert $page) => $page
             ->where('noteId', $note->id)
-            ->where('noteUpdateUrl', '/notes/my-project-note'),
+            ->where('noteUpdateUrl', '/notes/'.$note->id),
         );
+});
+
+test('notes list page shows only root notes initially for normal notes', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Acme',
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Project 1',
+        'parent_id' => $root->id,
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'title' => 'Daily note',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/list')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('notes/index')
+            ->has('roots', 1)
+            ->where('roots.0.id', $root->id)
+            ->where('roots.0.has_children', true)
+            ->where('filters.type', Note::TYPE_NOTE),
+        );
+});
+
+test('notes tree endpoint lazily returns children for parent', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Acme',
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Project 1',
+        'parent_id' => $root->id,
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get('/notes/tree?parent_id='.$root->id);
+
+    $response
+        ->assertOk()
+        ->assertJsonCount(1, 'nodes')
+        ->assertJsonPath('nodes.0.id', $child->id)
+        ->assertJsonPath('nodes.0.title', 'Project 1')
+        ->assertJsonPath('nodes.0.tasks_total', 0)
+        ->assertJsonPath('nodes.0.tasks_open', 0);
+});
+
+test('notes tree endpoint returns task totals and open counts per note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Acme',
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => 'b1',
+        'position' => 1,
+        'checked' => false,
+        'content_text' => 'Open task',
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => 'b2',
+        'position' => 2,
+        'checked' => true,
+        'content_text' => 'Closed task',
+    ]);
+    NoteRevision::query()->create([
+        'note_id' => $note->id,
+        'user_id' => $user->id,
+        'title' => 'Acme',
+        'content' => ['type' => 'doc', 'content' => []],
+        'properties' => [],
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get('/notes/tree')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', $note->id)
+        ->assertJsonPath('nodes.0.tasks_total', 2)
+        ->assertJsonPath('nodes.0.tasks_open', 1)
+        ->assertJsonPath('nodes.0.revision_count', 1);
+
+    $createdAt = data_get($response->json(), 'nodes.0.created_at');
+    $updatedAt = data_get($response->json(), 'nodes.0.updated_at');
+
+    expect($createdAt)->toBeString();
+    expect($updatedAt)->toBeString();
+});
+
+test('notes tree endpoint returns dash-ready null word count until first save', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Acme',
+        'word_count' => null,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', $note->id)
+        ->assertJsonPath('nodes.0.word_count', null);
+});
+
+test('note save updates persisted word count used by notes overview', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Acme',
+    ]);
+
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'paragraph',
+                'content' => [
+                    ['type' => 'text', 'text' => 'one two three four'],
+                ],
+            ],
+        ],
+    ];
+
+    $this
+        ->actingAs($user)
+        ->put('/notes/'.$note->id, [
+            'content' => $content,
+            'properties' => [],
+        ])
+        ->assertStatus(302);
+
+    $note->refresh();
+    expect($note->word_count)->toBe(4);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', $note->id)
+        ->assertJsonPath('nodes.0.word_count', 4);
+});
+
+test('notes tree exposes journal years at top level', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-07',
+        'title' => 'Zaterdag 7 maart 2026',
+        'slug' => 'journal/daily/2026-03-07',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree?type=all')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', 'journal:year:2026')
+        ->assertJsonPath('nodes.0.is_virtual', true)
+        ->assertJsonPath('nodes.0.has_children', true)
+        ->assertJsonPath('nodes.0.type', Note::TYPE_JOURNAL);
+});
+
+test('notes tree exposes journal week and daily children', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_WEEKLY,
+        'journal_date' => '2026-03-02',
+        'title' => 'Week 10 2026',
+        'slug' => 'journal/weekly/2026-W10',
+    ]);
+
+    $daily = $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-07',
+        'title' => 'Zaterdag 7 maart 2026',
+        'slug' => 'journal/daily/2026-03-07',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree?type=all&parent_id=journal:month:2026-03')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', 'journal:week:2026-W10')
+        ->assertJsonPath('nodes.0.has_children', true);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree?type=all&parent_id=journal:week:2026-W10')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', $daily->id)
+        ->assertJsonPath('nodes.0.is_virtual', false)
+        ->assertJsonPath('nodes.0.has_children', false);
+});
+
+test('journal virtual period node shows metrics when backing note exists', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $monthly = $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_MONTHLY,
+        'journal_date' => '2026-03-01',
+        'title' => 'Maart 2026',
+        'slug' => 'journal/monthly/2026-03',
+        'word_count' => 123,
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $monthly->id,
+        'block_id' => 'b1',
+        'position' => 1,
+        'checked' => false,
+        'content_text' => 'Open task',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get('/notes/tree?type=all&parent_id=journal:year:2026')
+        ->assertOk();
+
+    $response
+        ->assertJsonPath('nodes.0.id', 'journal:month:2026-03')
+        ->assertJsonPath('nodes.0.is_virtual', true)
+        ->assertJsonPath('nodes.0.has_note', true)
+        ->assertJsonPath('nodes.0.href', '/journal/monthly/2026-03')
+        ->assertJsonPath('nodes.0.tasks_total', 1)
+        ->assertJsonPath('nodes.0.tasks_open', 1)
+        ->assertJsonPath('nodes.0.word_count', 123);
+});
+
+test('journal virtual period node without backing note stays linkable for creation', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-07',
+        'title' => 'Zaterdag 7 maart 2026',
+        'slug' => 'journal/daily/2026-03-07',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree?type=all')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', 'journal:year:2026')
+        ->assertJsonPath('nodes.0.is_virtual', true)
+        ->assertJsonPath('nodes.0.has_note', false)
+        ->assertJsonPath('nodes.0.href', '/journal/yearly/2026');
+});
+
+test('notes list filters context and keeps ancestors visible', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Acme',
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Project 1',
+        'parent_id' => $root->id,
+        'properties' => [
+            'context' => 'client-a',
+        ],
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get('/notes/list?context=client-a');
+
+    $response->assertInertia(fn (Assert $page) => $page
+        ->has('roots', 1)
+        ->where('roots.0.id', $root->id)
+        ->where('roots.0.has_children', true),
+    );
+});
+
+test('notes tree token filter matches context or tags', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Acme',
+    ]);
+
+    $contextChild = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Context child',
+        'parent_id' => $root->id,
+        'properties' => ['context' => 'client-a'],
+    ]);
+
+    $tagChild = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Tag child',
+        'parent_id' => $root->id,
+        'properties' => ['tags' => ['ops']],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree?type=note&parent_id='.$root->id.'&tokens=@client-a,%23ops')
+        ->assertOk()
+        ->assertJsonCount(2, 'nodes')
+        ->assertJsonPath('nodes.0.id', $contextChild->id)
+        ->assertJsonPath('nodes.1.id', $tagChild->id);
+});
+
+test('update endpoint remains stable when note slug changes', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Original title',
+        'slug' => 'original-title',
+    ]);
+
+    $baseContent = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1],
+                'content' => [
+                    ['type' => 'text', 'text' => 'Heading title'],
+                ],
+            ],
+        ],
+    ];
+
+    $this
+        ->actingAs($user)
+        ->put('/notes/'.$note->id, [
+            'content' => $baseContent,
+            'properties' => [
+                'title' => 'Changed title',
+                'context' => 'team',
+            ],
+        ])
+        ->assertStatus(302);
+
+    $this
+        ->actingAs($user)
+        ->put('/notes/'.$note->id, [
+            'content' => $baseContent,
+            'properties' => [
+                'title' => 'Original title',
+                'context' => 'team',
+            ],
+        ])
+        ->assertStatus(302);
+
+    $note->refresh();
+
+    expect(Note::query()->where('workspace_id', $workspace?->id)->count())->toBe(1);
+    expect($note->title)->toBe('Original title');
+});
+
+test('property title override does not influence slug generation', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Base Title',
+        'slug' => 'base-title',
+    ]);
+
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1],
+                'content' => [
+                    ['type' => 'text', 'text' => 'Base Title'],
+                ],
+            ],
+        ],
+    ];
+
+    $this
+        ->actingAs($user)
+        ->put('/notes/'.$note->id, [
+            'content' => $content,
+            'properties' => [
+                'title' => 'Display Title Only',
+            ],
+        ])
+        ->assertStatus(302);
+
+    $note->refresh();
+
+    expect($note->getRawOriginal('title'))->toBe('Base Title');
+    expect($note->title)->toBe('Display Title Only');
+    expect($note->slug)->toBe('base-title');
 });
 
 test('journal route creates and reuses daily journal notes', function () {
@@ -373,6 +808,439 @@ test('daily journal note uses english title and breadcrumbs when user language i
             ->where('breadcrumbs.2.title', 'March')
             ->where('breadcrumbs.4.title', 'Saturday 7 March 2026')
             ->where('content.content.0.content.0.text', 'Saturday 7 March 2026'),
+        );
+});
+
+test('daily journal note includes due and deadline tasks for that day excluding current note tasks', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $currentDaily = $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-07',
+        'title' => 'Zaterdag 7 maart 2026',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'daily-self-task',
+                        'checked' => false,
+                        'dueDate' => '2026-03-07',
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Should be excluded']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $dueNote = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Due note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'due-task-1',
+                        'checked' => false,
+                        'dueDate' => '2026-03-07',
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Due today']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $deadlineNote = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Deadline note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'deadline-task-1',
+                        'checked' => false,
+                        'deadlineDate' => '2026-03-07',
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Deadline today']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Outside note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'outside-task-1',
+                        'checked' => false,
+                        'dueDate' => '2026-03-08',
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Outside day']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $wikiOnlyNote = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Wiki only note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'wiki-only-task',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [
+                            ['type' => 'text', 'text' => 'Linked to day '],
+                            [
+                                'type' => 'text',
+                                'text' => 'Daily note',
+                                'marks' => [[
+                                    'type' => 'wikiLink',
+                                    'attrs' => [
+                                        'noteId' => $currentDaily->id,
+                                        'href' => "/notes/{$currentDaily->id}",
+                                    ],
+                                ]],
+                            ],
+                        ],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/daily/2026-03-07')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteId', $currentDaily->id)
+            ->has('relatedTasks', 3)
+            ->where('relatedTasks.0.note_id', $dueNote->id)
+            ->where('relatedTasks.0.content', 'Due today')
+            ->where('relatedTasks.0.due_date', '2026-03-07')
+            ->where('relatedTasks.1.note_id', $deadlineNote->id)
+            ->where('relatedTasks.1.content', 'Deadline today')
+            ->where('relatedTasks.1.deadline_date', '2026-03-07')
+            ->where('relatedTasks.2.note_id', $wikiOnlyNote->id),
+        );
+});
+
+test('toggling a daily task updates persisted checked state reflected on daily note panel reload', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-07',
+        'title' => 'Zaterdag 7 maart 2026',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $taskNote = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Task source note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'daily-toggle-task',
+                        'checked' => false,
+                        'dueDate' => '2026-03-07',
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Toggle from daily panel']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $task = NoteTask::query()
+        ->where('note_id', $taskNote->id)
+        ->where('block_id', 'daily-toggle-task')
+        ->firstOrFail();
+
+    $this
+        ->actingAs($user)
+        ->patch('/tasks/checked', [
+            'note_id' => $task->note_id,
+            'block_id' => $task->block_id,
+            'position' => $task->position,
+            'checked' => true,
+        ])
+        ->assertRedirect();
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/daily/2026-03-07')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('relatedTasks', 1)
+            ->where('relatedTasks.0.note_id', $taskNote->id)
+            ->where('relatedTasks.0.checked', true),
+        );
+});
+
+test('regular note includes related tasks that link to it', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $target = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Target note',
+    ]);
+
+    $sourceWithLink = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Source with link',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'related-task-1',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'attrs' => ['id' => 'related-task-1-p'],
+                        'content' => [
+                            ['type' => 'text', 'text' => 'Task about '],
+                            [
+                                'type' => 'text',
+                                'text' => 'Target note',
+                                'marks' => [[
+                                    'type' => 'wikiLink',
+                                    'attrs' => [
+                                        'noteId' => $target->id,
+                                        'href' => "/notes/{$target->id}",
+                                    ],
+                                ]],
+                            ],
+                        ],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Source without link',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'related-task-2',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'attrs' => ['id' => 'related-task-2-p'],
+                        'content' => [
+                            ['type' => 'text', 'text' => 'Not related'],
+                        ],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get("/notes/{$target->id}")
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('relatedTasks', 1)
+            ->where('relatedTasks.0.note_id', $sourceWithLink->id)
+            ->where('relatedTasks.0.block_id', 'related-task-1')
+            ->where('relatedTasks.0.checked', false),
+        );
+});
+
+test('regular note includes backlinks with heading context and snippet', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $target = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Target note',
+    ]);
+
+    $source = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Source note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['id' => 'h-source', 'level' => 2],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Planning'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => ['id' => 'p-source'],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'See '],
+                        [
+                            'type' => 'text',
+                            'text' => 'Target note',
+                            'marks' => [[
+                                'type' => 'wikiLink',
+                                'attrs' => [
+                                    'noteId' => $target->id,
+                                    'href' => "/notes/{$target->id}",
+                                ],
+                            ]],
+                        ],
+                        ['type' => 'text', 'text' => ' for details'],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get("/notes/{$target->id}")
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('backlinks', 1)
+            ->where('backlinks.0.block_id', 'p-source')
+            ->where('backlinks.0.heading', 'Planning')
+            ->where('backlinks.0.heading_level', 2)
+            ->where('backlinks.0.render_fragments.1.type', 'wikilink')
+            ->where('backlinks.0.render_fragments.1.text', 'Target note')
+            ->where('backlinks.0.note.id', $source->id)
+            ->where('backlinks.0.note.title', 'Source note')
+            ->where('backlinks.0.href', "/notes/{$source->id}#p-source"),
+        );
+});
+
+test('backlinks omit task blocks that already appear in related tasks', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $target = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Target note',
+    ]);
+
+    $source = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Source mixed',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['id' => 'h-mixed', 'level' => 2],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Section'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => ['id' => 'p-mixed'],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Paragraph link to '],
+                        [
+                            'type' => 'text',
+                            'text' => 'Target note',
+                            'marks' => [[
+                                'type' => 'wikiLink',
+                                'attrs' => [
+                                    'noteId' => $target->id,
+                                    'href' => "/notes/{$target->id}",
+                                ],
+                            ]],
+                        ],
+                    ],
+                ],
+                [
+                    'type' => 'taskList',
+                    'content' => [[
+                        'type' => 'taskItem',
+                        'attrs' => ['id' => 'task-mixed', 'checked' => false],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'attrs' => ['id' => 'task-mixed-p'],
+                            'content' => [
+                                ['type' => 'text', 'text' => 'Task link to '],
+                                [
+                                    'type' => 'text',
+                                    'text' => 'Target note',
+                                    'marks' => [[
+                                        'type' => 'wikiLink',
+                                        'attrs' => [
+                                            'noteId' => $target->id,
+                                            'href' => "/notes/{$target->id}",
+                                        ],
+                                    ]],
+                                ],
+                            ],
+                        ]],
+                    ]],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get("/notes/{$target->id}")
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('relatedTasks', 1)
+            ->where('relatedTasks.0.note_id', $source->id)
+            ->where('relatedTasks.0.block_id', 'task-mixed')
+            ->has('backlinks', 1)
+            ->where('backlinks.0.block_id', 'p-mixed')
+            ->where('backlinks.0.note.id', $source->id),
         );
 });
 

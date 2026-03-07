@@ -145,6 +145,16 @@
     }
 }
 
+html {
+    scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+}
+
 /* Wiki link styling in TipTap */
 .simple-editor-content .ProseMirror .md-wikilink {
     @apply rounded-sm underline decoration-yellow-500 decoration-2 underline-offset-2 transition-colors;
@@ -175,4 +185,98 @@
 .simple-editor-content .ProseMirror .md-wikilink:hover::before,
 .simple-editor-content .ProseMirror .md-wikilink:hover::after {
     display: inline;
+}
+
+.task-inline .mention {
+    @apply inline-flex items-center rounded-sm bg-purple-400/10 px-1 py-0.5 text-purple-600;
+}
+
+.task-inline .hashtag {
+    @apply inline-flex items-center rounded-sm bg-blue-400/10 px-1 py-0.5 text-blue-600;
+}
+
+.task-inline .md-wikilink {
+    @apply rounded-sm underline decoration-yellow-500 decoration-2 underline-offset-2 transition-colors;
+}
+
+.task-inline .md-wikilink:hover {
+    @apply cursor-pointer bg-yellow-700/10;
+}
+
+.task-inline .md-task-due-token {
+    @apply text-sm font-normal text-orange-600/70;
+}
+
+.task-inline .md-task-deadline-token {
+    @apply text-sm font-normal text-red-700/70;
+}
+
+.md-task-due-token {
+    @apply text-sm font-normal text-orange-600/70;
+}
+
+.md-task-deadline-token {
+    @apply text-sm font-normal text-red-700/70;
+}
+
+.task-toggle-checkbox {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.task-toggle-checkbox input[type='checkbox'] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.task-toggle-checkbox span {
+    display: block;
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    border-radius: 0.25rem;
+    background-color: color-mix(in srgb, currentColor 4%, transparent);
+    transition:
+        background-color 80ms ease-out,
+        border-color 80ms ease-out,
+        opacity 80ms ease-out;
+    position: relative;
+    cursor: pointer;
+}
+
+.task-toggle-checkbox span::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 0.75rem;
+    height: 0.75rem;
+    background-color: var(--background);
+    opacity: 0;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22currentColor%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M21.4142%204.58579C22.1953%205.36683%2022.1953%206.63317%2021.4142%207.41421L10.4142%2018.4142C9.63317%2019.1953%208.36684%2019.1953%207.58579%2018.4142L2.58579%2013.4142C1.80474%2012.6332%201.80474%2011.3668%202.58579%2010.5858C3.36683%209.80474%204.63317%209.80474%205.41421%2010.5858L9%2014.1716L18.5858%204.58579C19.3668%203.80474%2020.6332%203.80474%2021.4142%204.58579Z%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E")
+        center/contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22currentColor%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M21.4142%204.58579C22.1953%205.36683%2022.1953%206.63317%2021.4142%207.41421L10.4142%2018.4142C9.63317%2019.1953%208.36684%2019.1953%207.58579%2018.4142L2.58579%2013.4142C1.80474%2012.6332%201.80474%2011.3668%202.58579%2010.5858C3.36683%209.80474%204.63317%209.80474%205.41421%2010.5858L9%2014.1716L18.5858%204.58579C19.3668%203.80474%2020.6332%203.80474%2021.4142%204.58579Z%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E")
+        center/contain no-repeat;
+}
+
+.task-toggle-checkbox input[type='checkbox']:checked + span {
+    background-color: currentColor;
+    border-color: currentColor;
+}
+
+.task-toggle-checkbox input[type='checkbox']:checked + span::before {
+    opacity: 1;
+}
+
+.task-toggle-checkbox input[type='checkbox']:disabled + span {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.simple-editor-content .ProseMirror :is([id], [data-id]) {
+    scroll-margin-top: 5.25rem;
 }

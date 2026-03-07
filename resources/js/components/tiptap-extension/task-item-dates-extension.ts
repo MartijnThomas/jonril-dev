@@ -450,6 +450,22 @@ export const TaskItemWithDates = TaskItem.extend({
     addAttributes() {
         return {
             ...(this.parent?.() ?? {}),
+            id: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-id') ?? element.id ?? null,
+                renderHTML: (attributes: { id?: string | null }) => {
+                    const value = attributes.id?.trim();
+                    if (!value) {
+                        return {};
+                    }
+
+                    return {
+                        id: value,
+                        'data-id': value,
+                    };
+                },
+            },
             dueDate: {
                 default: null,
                 parseHTML: (element: HTMLElement) =>

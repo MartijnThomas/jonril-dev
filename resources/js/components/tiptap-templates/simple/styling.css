@@ -253,11 +253,11 @@
 }
 
 .md-task-due-token {
-    @apply text-sm font-semibold text-orange-600/70;
+    @apply text-sm font-normal text-orange-600/70;
 }
 
 .md-task-deadline-token {
-    @apply text-sm font-semibold text-red-700/70;
+    @apply text-sm font-normal text-red-700/70;
 }
 
 .md-task-token-hidden {
@@ -273,5 +273,5 @@
 }
 
 .md-task-date-ghost {
-    @apply text-sm font-semibold;
+    @apply text-sm font-normal;
 }

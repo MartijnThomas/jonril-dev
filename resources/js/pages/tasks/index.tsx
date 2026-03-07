@@ -6,16 +6,36 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { toast } from 'sonner';
+import { TaskInlineContent } from '@/components/task-inline-content';
+import type { TaskRenderFragment } from '@/components/task-inline-content';
+import { TaskToggleCheckbox } from '@/components/task-toggle-checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 
 type TaskItem = {
     id: number;
@@ -23,6 +43,7 @@ type TaskItem = {
     position: number;
     checked: boolean;
     content: string;
+    render_fragments: TaskRenderFragment[];
     due_date: string | null;
     deadline_date: string | null;
     mentions: string[];
@@ -76,7 +97,12 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions }: Props) {
+export default function TasksIndex({
+    tasks,
+    filters,
+    workspaces,
+    noteTreeOptions,
+}: Props) {
     const pageProps = usePage().props as {
         auth?: {
             user?: {
@@ -86,7 +112,8 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
             };
         };
     };
-    const language = pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
+    const language =
+        pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
     const dateLocale = language === 'en' ? enUS : nl;
 
     const [localFilters, setLocalFilters] = useState<Filters>(filters);
@@ -221,7 +248,8 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                           : 'Taak heropend.',
                     {
                         action: {
-                            label: language === 'en' ? 'Undo' : 'Ongedaan maken',
+                            label:
+                                language === 'en' ? 'Undo' : 'Ongedaan maken',
                             onClick: () => {
                                 updateTaskChecked(task, task.checked, {
                                     onSuccess: () => {
@@ -294,14 +322,18 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                 <section className="rounded-xl border bg-card p-4">
                     <div className="flex items-center justify-between gap-2">
                         <h1 className="text-lg font-semibold">Tasks</h1>
-                        <span className="text-sm text-muted-foreground">{tasks.total} results</span>
+                        <span className="text-sm text-muted-foreground">
+                            {tasks.total} results
+                        </span>
                     </div>
 
                     <form onSubmit={onSubmit} className="mt-4 space-y-3">
                         <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
                             <Input
                                 value={localFilters.q}
-                                onChange={(event) => applyFilters({ q: event.target.value })}
+                                onChange={(event) =>
+                                    applyFilters({ q: event.target.value })
+                                }
                                 placeholder="Search tasks, notes, parents..."
                                 className="md:col-span-4"
                             />
@@ -311,7 +343,10 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                 onValueChange={(value) =>
                                     applyFilters(
                                         {
-                                            workspace_id: value === '__all__' ? '' : value,
+                                            workspace_id:
+                                                value === '__all__'
+                                                    ? ''
+                                                    : value,
                                             note_scope_id: '',
                                         },
                                         true,
@@ -322,9 +357,14 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                     <SelectValue placeholder="All workspaces" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="__all__">All workspaces</SelectItem>
+                                    <SelectItem value="__all__">
+                                        All workspaces
+                                    </SelectItem>
                                     {workspaces.map((workspace) => (
-                                        <SelectItem key={workspace.id} value={workspace.id}>
+                                        <SelectItem
+                                            key={workspace.id}
+                                            value={workspace.id}
+                                        >
                                             {workspace.name}
                                         </SelectItem>
                                     ))}
@@ -335,7 +375,12 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                 value={localFilters.note_scope_id || '__all__'}
                                 onValueChange={(value) =>
                                     applyFilters(
-                                        { note_scope_id: value === '__all__' ? '' : value },
+                                        {
+                                            note_scope_id:
+                                                value === '__all__'
+                                                    ? ''
+                                                    : value,
+                                        },
                                         true,
                                     )
                                 }
@@ -344,9 +389,14 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                     <SelectValue placeholder="All notes / parents" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="__all__">All notes / parents</SelectItem>
+                                    <SelectItem value="__all__">
+                                        All notes / parents
+                                    </SelectItem>
                                     {noteTreeOptions.map((note) => (
-                                        <SelectItem key={note.id} value={note.id}>
+                                        <SelectItem
+                                            key={note.id}
+                                            value={note.id}
+                                        >
                                             {note.title}
                                         </SelectItem>
                                     ))}
@@ -359,14 +409,22 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                         <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
                             <Input
                                 value={localFilters.mention}
-                                onChange={(event) => applyFilters({ mention: event.target.value })}
+                                onChange={(event) =>
+                                    applyFilters({
+                                        mention: event.target.value,
+                                    })
+                                }
                                 placeholder="Mention"
                                 className="md:col-span-2"
                             />
 
                             <Input
                                 value={localFilters.hashtag}
-                                onChange={(event) => applyFilters({ hashtag: event.target.value })}
+                                onChange={(event) =>
+                                    applyFilters({
+                                        hashtag: event.target.value,
+                                    })
+                                }
                                 placeholder="Hashtag"
                                 className="md:col-span-2"
                             />
@@ -379,16 +437,24 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                         className="justify-start gap-2 md:col-span-6"
                                     >
                                         <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                                        <span className="truncate">{formatDateRangeLabel()}</span>
+                                        <span className="truncate">
+                                            {formatDateRangeLabel()}
+                                        </span>
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
+                                <PopoverContent
+                                    className="w-auto p-0"
+                                    align="start"
+                                >
                                     <Calendar
                                         mode="range"
                                         selected={selectedDateRange}
                                         onSelect={(range) => {
                                             const from = range?.from
-                                                ? format(range.from, 'yyyy-MM-dd')
+                                                ? format(
+                                                      range.from,
+                                                      'yyyy-MM-dd',
+                                                  )
                                                 : '';
                                             const to = range?.to
                                                 ? format(range.to, 'yyyy-MM-dd')
@@ -427,18 +493,25 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                         </div>
 
                         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-                            <label className="text-muted-foreground flex items-center gap-2 text-sm">
+                            <label className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Switch
                                     checked={localFilters.show_completed}
                                     onCheckedChange={(checked) =>
-                                        applyFilters({ show_completed: checked }, true)
+                                        applyFilters(
+                                            { show_completed: checked },
+                                            true,
+                                        )
                                     }
                                 />
                                 Show completed
                             </label>
 
                             <div className="flex items-center gap-2">
-                                <Button type="button" variant="outline" onClick={resetFilters}>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={resetFilters}
+                                >
                                     Reset
                                 </Button>
                                 <Button type="submit">Apply</Button>
@@ -452,7 +525,9 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                         <TableHeader>
                             <TableRow>
                                 <TableHead className="w-10">Done</TableHead>
-                                <TableHead className="w-[55%]">Task</TableHead>
+                                <TableHead className="w-[55%] pl-5">
+                                    Task
+                                </TableHead>
                                 <TableHead>
                                     <button
                                         type="button"
@@ -475,7 +550,9 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                     <button
                                         type="button"
                                         className="inline-flex items-center gap-1 text-left"
-                                        onClick={() => toggleDateSort('deadline')}
+                                        onClick={() =>
+                                            toggleDateSort('deadline')
+                                        }
                                     >
                                         Deadline
                                         {localFilters.sort === 'deadline' ? (
@@ -489,13 +566,15 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                         )}
                                     </button>
                                 </TableHead>
-                                <TableHead>Tags</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {tasks.data.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                                    <TableCell
+                                        colSpan={5}
+                                        className="py-8 text-center text-muted-foreground"
+                                    >
                                         No tasks match these filters.
                                     </TableCell>
                                 </TableRow>
@@ -503,25 +582,56 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                 tasks.data.map((task) => (
                                     <TableRow key={task.id}>
                                         <TableCell>
-                                            <input
-                                                type="checkbox"
+                                            <TaskToggleCheckbox
                                                 checked={task.checked}
-                                                disabled={pendingTaskIds.includes(task.id)}
-                                                onChange={() => toggleTaskChecked(task)}
-                                                className="h-4 w-4 rounded border-border"
+                                                disabled={pendingTaskIds.includes(
+                                                    task.id,
+                                                )}
+                                                ariaLabel={`Toggle task ${task.content || task.id}`}
+                                                onCheckedChange={() =>
+                                                    toggleTaskChecked(task)
+                                                }
                                             />
                                         </TableCell>
-                                        <TableCell className="max-w-0 whitespace-normal">
+                                        <TableCell className="max-w-0 pl-5 whitespace-normal">
                                             <div
-                                                className={task.checked ? 'text-muted-foreground line-through' : ''}
+                                                className={
+                                                    task.checked
+                                                        ? 'text-muted-foreground line-through'
+                                                        : ''
+                                                }
                                             >
-                                                {task.content || 'Untitled task'}
+                                                <TaskInlineContent
+                                                    fragments={
+                                                        task.render_fragments
+                                                            .length > 0
+                                                            ? task.render_fragments
+                                                            : [
+                                                                  {
+                                                                      type: 'text',
+                                                                      text:
+                                                                          task.content ||
+                                                                          'Untitled task',
+                                                                  },
+                                                              ]
+                                                    }
+                                                    language={language}
+                                                />
                                             </div>
                                             <div className="mt-1 text-xs text-muted-foreground">
-                                                {!localFilters.workspace_id && task.note.workspace_name ? (
-                                                    <span>{task.note.workspace_name} / </span>
+                                                {!localFilters.workspace_id &&
+                                                task.note.workspace_name ? (
+                                                    <span>
+                                                        {
+                                                            task.note
+                                                                .workspace_name
+                                                        }{' '}
+                                                        /{' '}
+                                                    </span>
                                                 ) : null}
-                                                {task.note.parent_title ? `${task.note.parent_title} / ` : ''}
+                                                {task.note.parent_title
+                                                    ? `${task.note.parent_title} / `
+                                                    : ''}
                                                 <Link
                                                     href={task.note.href}
                                                     className="text-foreground underline-offset-2 hover:underline"
@@ -530,29 +640,23 @@ export default function TasksIndex({ tasks, filters, workspaces, noteTreeOptions
                                                 </Link>
                                             </div>
                                         </TableCell>
-                                        <TableCell>{task.due_date ?? '—'}</TableCell>
-                                        <TableCell>{task.deadline_date ?? '—'}</TableCell>
-                                        <TableCell className="whitespace-normal">
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {task.mentions.map((mention) => (
-                                                    <Badge
-                                                        key={`${task.id}-mention-${mention}`}
-                                                        variant="secondary"
-                                                        className="bg-purple-500/10 text-purple-700"
-                                                    >
-                                                        @{mention}
-                                                    </Badge>
-                                                ))}
-                                                {task.hashtags.map((hashtag) => (
-                                                    <Badge
-                                                        key={`${task.id}-hashtag-${hashtag}`}
-                                                        variant="secondary"
-                                                        className="bg-blue-500/10 text-blue-700"
-                                                    >
-                                                        #{hashtag}
-                                                    </Badge>
-                                                ))}
-                                            </div>
+                                        <TableCell>
+                                            {task.due_date ? (
+                                                <span className="md-task-due-token">
+                                                    {`>${task.due_date}`}
+                                                </span>
+                                            ) : (
+                                                '—'
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {task.deadline_date ? (
+                                                <span className="md-task-deadline-token">
+                                                    {`>>${task.deadline_date}`}
+                                                </span>
+                                            ) : (
+                                                '—'
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))

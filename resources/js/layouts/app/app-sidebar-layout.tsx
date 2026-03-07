@@ -103,13 +103,19 @@ export default function AppSidebarLayout({
     bottomPane,
 }: AppLayoutProps) {
     const { rightSidebarOpen: defaultRightSidebarOpen } = usePage().props;
-    const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(
-        defaultRightSidebarOpen,
-    );
+    const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(() => {
+        if (typeof document !== 'undefined') {
+            const value = document.cookie
+                .split('; ')
+                .find((part) => part.startsWith('right_sidebar_state='))
+                ?.split('=')[1];
 
-    useEffect(() => {
-        setIsRightSidebarOpen(defaultRightSidebarOpen);
-    }, [defaultRightSidebarOpen]);
+            if (value === 'true') return true;
+            if (value === 'false') return false;
+        }
+
+        return defaultRightSidebarOpen;
+    });
 
     useEffect(() => {
         document.cookie = `right_sidebar_state=${isRightSidebarOpen}; path=/; max-age=${60 * 60 * 24 * 7}`;
@@ -122,7 +128,7 @@ export default function AppSidebarLayout({
                 setRightSidebarOpen={setIsRightSidebarOpen}
             />
             <AppSidebar />
-            <AppContent variant="sidebar" className="overflow-x-hidden">
+            <AppContent variant="sidebar" className="overflow-x-clip">
                 <div className="flex min-h-0 flex-1 w-full">
                     <div className="flex min-w-0 flex-1 flex-col">
                         <AppSidebarHeader

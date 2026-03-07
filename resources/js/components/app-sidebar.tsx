@@ -1,10 +1,7 @@
-import { format } from 'date-fns';
 import {
     BookOpen,
-    CalendarDays,
-    FolderGit2,
+    Folder,
     ListChecks,
-    Settings,
 } from 'lucide-react';
 import { NavFooter } from '@/components/nav-footer';
 import { NavJournalLinks } from '@/components/nav-journal-links';
@@ -21,6 +18,12 @@ import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
+    {
+        title: 'Notes',
+        href: '/notes/list',
+        icon: Folder,
+        prefetch: false,
+    },
     {
         title: 'Tasks',
         href: '/tasks',
