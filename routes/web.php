@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\NotesController;
+use App\Http\Controllers\TasksController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -29,6 +30,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('notes/{note}', [NotesController::class, 'update'])
         ->where('note', '.*')
         ->name('notes.update');
+
+    Route::get('tasks', [TasksController::class, 'index'])
+        ->name('tasks.index');
 });
 
 require __DIR__.'/settings.php';

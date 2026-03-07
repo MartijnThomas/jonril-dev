@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\Note;
+use App\Observers\NoteObserver;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
@@ -25,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Model::unguard();
+        Note::observe(NoteObserver::class);
 
         $this->configureDefaults();
     }

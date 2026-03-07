@@ -52,6 +52,11 @@ class Note extends Model
         return $this->hasMany(NoteRevision::class);
     }
 
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(NoteTask::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *
