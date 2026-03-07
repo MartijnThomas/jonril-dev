@@ -15,6 +15,7 @@ export default function AppSidebarLayout({
     saveStatus = null,
     rightSidebar,
     statusBarContent,
+    bottomPane,
 }: AppLayoutProps) {
     const { rightSidebarOpen: defaultRightSidebarOpen } = usePage().props;
     const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(
@@ -44,6 +45,7 @@ export default function AppSidebarLayout({
                             }
                         />
                         <div className="min-h-0 flex-1">{children}</div>
+                        {bottomPane}
                         <AppStatusBar saveStatus={saveStatus}>
                             {statusBarContent}
                         </AppStatusBar>

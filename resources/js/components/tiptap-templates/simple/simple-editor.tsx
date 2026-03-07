@@ -220,6 +220,11 @@ export function SimpleEditor({
                         onBack={() => setMobileView('main')}
                         onHighlighterClick={() => setMobileView('highlighter')}
                         onLinkClick={() => setMobileView('link')}
+                        onCommandPaletteClick={() => {
+                            window.dispatchEvent(
+                                new Event('open-command-palette'),
+                            );
+                        }}
                         toolbarRef={toolbarRef}
                     />
                 )}

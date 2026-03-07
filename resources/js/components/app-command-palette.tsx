@@ -1,5 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
-import { FileText, Hash } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, Hash } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
     CommandDialog,
@@ -10,6 +10,7 @@ import {
     CommandList,
     CommandShortcut,
 } from '@/components/ui/command';
+import { Switch } from '@/components/ui/switch';
 
 type NoteSearchItem = {
     id: string;
@@ -25,6 +26,8 @@ export function AppCommandPalette() {
         noteSearchIndex?: NoteSearchItem[];
     };
     const [open, setOpen] = useState(false);
+    const [includeJournal, setIncludeJournal] = useState(false);
+    const [showOptions, setShowOptions] = useState(false);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -43,12 +46,26 @@ export function AppCommandPalette() {
         };
     }, []);
 
+    useEffect(() => {
+        const openHandler = () => {
+            setOpen(true);
+        };
+
+        window.addEventListener('open-command-palette', openHandler);
+
+        return () => {
+            window.removeEventListener('open-command-palette', openHandler);
+        };
+    }, []);
+
     const items = useMemo(() => {
-        return noteSearchIndex.map((item) => ({
-            ...item,
-            searchable: `${item.id} ${item.title} ${item.slug ?? ''} ${item.path ?? ''}`.trim(),
-        }));
-    }, [noteSearchIndex]);
+        return noteSearchIndex
+            .filter((item) => includeJournal || item.type !== 'journal')
+            .map((item) => ({
+                ...item,
+                searchable: `${item.id} ${item.title} ${item.slug ?? ''} ${item.path ?? ''}`.trim(),
+            }));
+    }, [includeJournal, noteSearchIndex]);
 
     return (
         <CommandDialog
@@ -58,7 +75,37 @@ export function AppCommandPalette() {
             description="Find notes by title, slug, or path."
             className="sm:max-w-xl"
         >
-            <CommandInput placeholder="Search notes (title, slug, path)..." />
+            <div className="relative">
+                <CommandInput
+                    placeholder="Search notes (title, slug, path)..."
+                    className="pr-32"
+                />
+                <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-10 inline-flex -translate-y-1/2 items-center gap-1 text-xs transition-colors"
+                    onClick={() => setShowOptions((value) => !value)}
+                    aria-expanded={showOptions}
+                    aria-label="Toggle search options"
+                >
+                    Options
+                    {showOptions ? (
+                        <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                </button>
+            </div>
+            {showOptions && (
+                <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-muted-foreground">
+                    <span>Include journal notes</span>
+                    <Switch
+                        size="sm"
+                        checked={includeJournal}
+                        onCheckedChange={setIncludeJournal}
+                        aria-label="Include journal notes"
+                    />
+                </div>
+            )}
             <CommandList>
                 <CommandEmpty>No notes found.</CommandEmpty>
                 <CommandGroup heading="Notes">

@@ -1,5 +1,6 @@
 import type { useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
+import { Search } from 'lucide-react';
 import type React from 'react';
 
 import { ArrowLeftIcon } from '@/components/tiptap-icons/arrow-left-icon';
@@ -36,6 +37,7 @@ import {
 type MainToolbarContentProps = {
     onHighlighterClick: () => void;
     onLinkClick: () => void;
+    onCommandPaletteClick?: () => void;
     isMobile: boolean;
     compact?: boolean;
 };
@@ -43,6 +45,7 @@ type MainToolbarContentProps = {
 export function MainToolbarContent({
     onHighlighterClick,
     onLinkClick,
+    onCommandPaletteClick,
     isMobile,
     compact,
 }: MainToolbarContentProps) {
@@ -123,6 +126,16 @@ export function MainToolbarContent({
             {showAdvanced && (
                 <ToolbarGroup>
                     <ThemeToggle />
+                    {isMobile && onCommandPaletteClick && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={onCommandPaletteClick}
+                            aria-label="Open command palette"
+                        >
+                            <Search className="tiptap-button-icon" />
+                        </Button>
+                    )}
                 </ToolbarGroup>
             )}
         </>
@@ -203,6 +216,7 @@ type MobileEditorToolbarProps = {
     onBack: () => void;
     onHighlighterClick: () => void;
     onLinkClick: () => void;
+    onCommandPaletteClick: () => void;
     toolbarRef: React.RefObject<HTMLDivElement | null>;
 };
 
@@ -213,6 +227,7 @@ export function MobileEditorToolbar({
     onBack,
     onHighlighterClick,
     onLinkClick,
+    onCommandPaletteClick,
     toolbarRef,
 }: MobileEditorToolbarProps) {
     return (
@@ -226,6 +241,7 @@ export function MobileEditorToolbar({
                 <MainToolbarContent
                     onHighlighterClick={onHighlighterClick}
                     onLinkClick={onLinkClick}
+                    onCommandPaletteClick={onCommandPaletteClick}
                     isMobile
                 />
             ) : (

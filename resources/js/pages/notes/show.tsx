@@ -1,12 +1,6 @@
 import { Head, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { SimpleEditor } from '@/components/tiptap-templates/simple/simple-editor';
-import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-} from '@/components/ui/sheet';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem, EditorSaveStatus } from '@/types';
 
@@ -43,10 +37,24 @@ export default function Dashboard({
                     <button
                         type="button"
                         className="hover:text-foreground transition-colors"
-                        onClick={() => setJsonOpen(true)}
+                        onClick={() => setJsonOpen((value) => !value)}
                     >
                         JSON
                     </button>
+                ) : null
+            }
+            bottomPane={
+                isAdmin && jsonOpen ? (
+                    <section className="border-t border-sidebar-border/50 bg-background/95">
+                        <div className="h-[33svh] overflow-auto px-4 py-3">
+                            <div className="mb-2 text-xs font-medium text-muted-foreground">
+                                Editor JSON
+                            </div>
+                            <pre className="text-xs leading-5 break-words whitespace-pre-wrap">
+                                <code>{editorJson}</code>
+                            </pre>
+                        </div>
+                    </section>
                 ) : null
             }
         >
@@ -60,23 +68,6 @@ export default function Dashboard({
                 onSaveStatusChange={setSaveStatus}
                 onDebugJsonChange={isAdmin ? setEditorJson : undefined}
             />
-            {isAdmin && (
-                <Sheet open={jsonOpen} onOpenChange={setJsonOpen}>
-                    <SheetContent
-                        side="bottom"
-                        className="h-[45vh] max-h-[45vh] overflow-hidden p-0"
-                    >
-                        <SheetHeader>
-                            <SheetTitle>Editor JSON</SheetTitle>
-                        </SheetHeader>
-                        <div className="h-full overflow-auto px-4 pb-4">
-                            <pre className="text-xs leading-5 break-words whitespace-pre-wrap">
-                                <code>{editorJson}</code>
-                            </pre>
-                        </div>
-                    </SheetContent>
-                </Sheet>
-            )}
         </AppLayout>
     );
 }

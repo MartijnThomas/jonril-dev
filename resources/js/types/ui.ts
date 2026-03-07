@@ -9,6 +9,7 @@ export type AppLayoutProps = {
     saveStatus?: EditorSaveStatus | null;
     rightSidebar?: ReactNode;
     statusBarContent?: ReactNode;
+    bottomPane?: ReactNode;
 };
 
 export type AuthLayoutProps = {
