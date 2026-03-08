@@ -74,7 +74,7 @@ type RecentNoteItem = NoteSearchItem & {
 };
 
 type CommandDefinition = {
-    id: 'rename' | 'clear' | 'delete';
+    id: 'create' | 'rename' | 'clear' | 'delete';
     aliases?: string[];
     label: string;
     syntax: string;
@@ -328,6 +328,20 @@ export function AppCommandPalette() {
     const commandDefinitions = useMemo<CommandDefinition[]>(
         () => [
             {
+                id: 'create',
+                aliases: ['new', 'n'],
+                label: t('command_palette.create_note', 'Create note'),
+                syntax: t(
+                    'command_palette.create_syntax',
+                    ':create path/to/note',
+                ),
+                description: t(
+                    'command_palette.create_description',
+                    'Create a regular note by path (missing parents are created).',
+                ),
+                available: true,
+            },
+            {
                 id: 'rename',
                 aliases: ['r'],
                 label: t('command_palette.rename_note', 'Rename note'),
@@ -387,6 +401,26 @@ export function AppCommandPalette() {
         };
     }, [commandText, isCommandMode]);
 
+    const normalizedCreatePath = useMemo(() => {
+        if (parsedCommand.args.trim() === '') {
+            return '';
+        }
+
+        return parsedCommand.args
+            .split('/')
+            .map((segment) =>
+                segment
+                    .trim()
+                    .toLowerCase()
+                    .replace(/[^a-z0-9\s-]/g, '')
+                    .replace(/\s+/g, '-')
+                    .replace(/-+/g, '-')
+                    .replace(/^-|-$/g, ''),
+            )
+            .filter((segment) => segment !== '')
+            .join('/');
+    }, [parsedCommand.args]);
+
     const commandItems = useMemo(() => {
         if (!isCommandMode) {
             return [];
@@ -410,17 +444,18 @@ export function AppCommandPalette() {
     }, [commandDefinitions, isCommandMode, parsedCommand.name]);
 
     const runCommand = (commandId: CommandDefinition['id']) => {
-        if (!noteActions) {
-            return;
-        }
-
-        const noteId = noteActions.id;
+        const noteId = noteActions?.id;
 
         const normalizedCommand: CommandDefinition['id'] =
-            commandId === 'clear' || commandId === 'delete' || commandId === 'rename'
+            commandId === 'create' ||
+            commandId === 'clear' ||
+            commandId === 'delete' ||
+            commandId === 'rename'
                 ? commandId
                 : parsedCommand.name === 'erase'
                   ? 'clear'
+                  : parsedCommand.name === 'new' || parsedCommand.name === 'n'
+                    ? 'create'
                   : parsedCommand.name === 'remove'
                     ? 'delete'
                     : parsedCommand.name === 'r'
@@ -430,6 +465,21 @@ export function AppCommandPalette() {
                         : parsedCommand.name === 'd'
                           ? 'delete'
                           : commandId;
+
+        if (normalizedCommand === 'create') {
+            const path = normalizedCreatePath;
+            if (path === '') {
+                return;
+            }
+
+            setOpen(false);
+            window.location.assign(`/notes/create?path=${encodeURIComponent(path)}`);
+            return;
+        }
+
+        if (!noteId) {
+            return;
+        }
 
         if (normalizedCommand === 'rename') {
             const title = parsedCommand.args;
@@ -527,6 +577,18 @@ export function AppCommandPalette() {
             )
                 .replace(':from', currentTitle)
                 .replace(':to', nextTitle);
+        }
+
+        if (command.id === 'create') {
+            const target =
+                normalizedCreatePath !== ''
+                    ? normalizedCreatePath
+                    : t('command_palette.create_target_placeholder', 'path/to/note');
+
+            return t(
+                'command_palette.create_preview',
+                `Create ${target}`,
+            ).replace(':path', target);
         }
 
         if (command.id === 'clear') {
@@ -705,7 +767,7 @@ export function AppCommandPalette() {
             <CommandList>
                 <CommandEmpty>
                     {isCommandMode
-                        ? noteActions
+                        ? commandDefinitions.some((command) => command.available)
                             ? t(
                                   'command_palette.no_commands',
                                   'No matching commands.',
@@ -720,7 +782,7 @@ export function AppCommandPalette() {
                           ? 'No headings found.'
                           : 'No notes found.'}
                 </CommandEmpty>
-                {isCommandMode && noteActions && (
+                {isCommandMode && commandDefinitions.some((command) => command.available) && (
                     <CommandGroup
                         heading={t('command_palette.commands_heading', 'Commands')}
                     >
@@ -729,8 +791,11 @@ export function AppCommandPalette() {
                                 key={command.id}
                                 value={`${command.id} ${(command.aliases ?? []).join(' ')} ${command.label} ${command.syntax}`}
                                 onSelect={() => {
-                                    if (command.id === 'rename' && parsedCommand.args === '') {
-                                        prefillCommandInput('rename');
+                                    if (
+                                        (command.id === 'rename' && parsedCommand.args === '') ||
+                                        (command.id === 'create' && parsedCommand.args === '')
+                                    ) {
+                                        prefillCommandInput(command.id);
                                         return;
                                     }
 

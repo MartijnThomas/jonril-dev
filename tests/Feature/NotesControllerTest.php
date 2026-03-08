@@ -996,6 +996,65 @@ test('start can create a child note when parent_id is provided', function () {
     $response->assertRedirect("/notes/{$child->slug}");
 });
 
+test('start can create nested notes from path and normalizes spaces to kebab-case', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $response = $this->actingAs($user)->get(route('notes.start', [
+        'path' => 'Project One/Some Child Note',
+    ], absolute: false));
+
+    $parent = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->where('slug', 'project-one')
+        ->first();
+
+    $child = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->where('slug', 'project-one/some-child-note')
+        ->first();
+
+    expect($parent)->not()->toBeNull();
+    expect($child)->not()->toBeNull();
+    expect($child?->parent_id)->toBe($parent?->id);
+    expect($response->headers->get('Location'))->toBeString()->toContain('/notes/');
+    expect($response->headers->get('Location'))->toContain((string) $child?->id);
+});
+
+test('start with path reuses existing parents and creates only missing note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $existingParent = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'project-one',
+        'slug' => 'project-one',
+    ]);
+
+    $countBefore = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->count();
+
+    $response = $this->actingAs($user)->get(route('notes.start', [
+        'path' => 'project one/new item',
+    ], absolute: false));
+
+    $countAfter = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->count();
+
+    $child = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->where('slug', 'project-one/new-item')
+        ->first();
+
+    expect($countAfter)->toBe($countBefore + 1);
+    expect($child)->not()->toBeNull();
+    expect($child?->parent_id)->toBe($existingParent->id);
+    expect($response->headers->get('Location'))->toBeString()->toContain('/notes/');
+    expect($response->headers->get('Location'))->toContain((string) $child?->id);
+});
+
 test('update can move a note under another note of the same user', function () {
     $user = User::factory()->create();
     $parent = $user->notes()->create();

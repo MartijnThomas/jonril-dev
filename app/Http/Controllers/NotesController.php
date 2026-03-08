@@ -42,9 +42,83 @@ class NotesController extends Controller
                     fn ($query) => $query->where('workspace_id', $this->currentWorkspace()->id),
                 ),
             ],
+            'path' => ['nullable', 'string', 'max:500'],
         ]);
 
         $workspace = $this->currentWorkspace();
+        $path = trim((string) ($data['path'] ?? ''));
+
+        if ($path !== '') {
+            $segments = collect(explode('/', $path))
+                ->map(fn (string $segment): string => trim($segment))
+                ->filter(fn (string $segment): bool => $segment !== '')
+                ->values();
+
+            if ($segments->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'path' => 'The path is invalid.',
+                ]);
+            }
+
+            $parentId = $data['parent_id'] ?? null;
+            $parentSlugPath = null;
+            if ($parentId) {
+                $parent = $workspace->notes()
+                    ->where('id', $parentId)
+                    ->first();
+                $parentSlugPath = $parent?->slug;
+            }
+
+            $current = null;
+
+            foreach ($segments as $segment) {
+                $normalizedSegment = Str::slug($segment);
+                if ($normalizedSegment === '') {
+                    $normalizedSegment = 'untitled';
+                }
+
+                $expectedSlug = $parentSlugPath
+                    ? "{$parentSlugPath}/{$normalizedSegment}"
+                    : $normalizedSegment;
+
+                /** @var Note|null $existing */
+                $existing = $workspace->notes()
+                    ->where('type', Note::TYPE_NOTE)
+                    ->where('parent_id', $parentId)
+                    ->where('slug', $expectedSlug)
+                    ->first();
+
+                if ($existing) {
+                    $current = $existing;
+                    $parentId = $existing->id;
+                    $parentSlugPath = $existing->slug;
+
+                    continue;
+                }
+
+                /** @var Note $created */
+                $created = $workspace->notes()->create([
+                    'type' => Note::TYPE_NOTE,
+                    'title' => $normalizedSegment,
+                    'parent_id' => $parentId,
+                ]);
+
+                $this->noteSlugService->syncSingleNote($created);
+                $created->refresh();
+
+                $current = $created;
+                $parentId = $created->id;
+                $parentSlugPath = $created->slug;
+            }
+
+            if (! $current instanceof Note) {
+                throw ValidationException::withMessages([
+                    'path' => 'The path is invalid.',
+                ]);
+            }
+
+            return redirect("/notes/{$current->id}");
+        }
 
         /** @var Note $note */
         $note = $workspace->notes()->create([
