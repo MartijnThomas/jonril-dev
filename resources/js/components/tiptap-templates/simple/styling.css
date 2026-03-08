@@ -204,6 +204,41 @@
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
+    li
+    > label
+    > input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li
+    > label
+    > span {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    background-color: white;
+    border-color: rgb(139 92 246);
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li
+    > label
+    > input[type='checkbox']:checked
+    + span {
+    background-color: rgb(139 92 246);
+    border-color: rgb(139 92 246);
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
     li[data-task-status='deferred']
     > label::before,
 .simple-editor-content
@@ -239,6 +274,15 @@
     align-items: center;
     justify-content: center;
     line-height: 1;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-checked='true']
+    > label::before {
+    filter: blur(10.8px);
+    opacity: 0.7;
 }
 
 .simple-editor-content
@@ -587,30 +631,32 @@
     @apply bg-blue-400/10;
 }
 
-.md-priority-range {
+.md-priority-range:not(.mention):not(.hashtag) {
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
-    @apply rounded-xs;
+    line-height: inherit;
+    border-radius: 0;
+    background: transparent !important;
 }
 
-.md-priority-range--high {
-    @apply bg-red-400/18;
+.md-priority-range--high:not(.mention):not(.hashtag) {
+    background: transparent !important;
 }
 
-.md-priority-range--medium {
-    @apply bg-orange-400/16;
+.md-priority-range--medium:not(.mention):not(.hashtag) {
+    background: transparent !important;
 }
 
-.md-priority-range--normal {
-    @apply bg-yellow-400/14;
+.md-priority-range--normal:not(.mention):not(.hashtag) {
+    background: transparent !important;
 }
 
 .mention {
-    @apply bg-purple-400/10 text-purple-600;
+    @apply bg-purple-400/10 text-[0.92em] text-purple-600 [font-variant-caps:small-caps];
 }
 
 .hashtag {
-    @apply bg-blue-400/10 text-blue-600;
+    @apply bg-blue-400/10 text-[0.92em] text-blue-600 [font-variant-caps:small-caps];
 }
 
 .md-task-due-token {
