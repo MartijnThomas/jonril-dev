@@ -13,7 +13,9 @@ import {
     WholeWord,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { getWorkspaceIconComponent } from '@/components/icon-picker';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import {
     Select,
@@ -45,6 +47,7 @@ type NoteListNode = {
     id: string;
     title: string;
     href: string | null;
+    icon: string | null;
     type: string | null;
     context: string | null;
     tags: string[];
@@ -289,6 +292,9 @@ export default function NotesIndex({ roots, filters }: Props) {
             const isExpanded = expanded.has(node.id);
             const children = childrenByParent[node.id] ?? [];
             const isLoadingChildren = loadingKeys.has(node.id);
+            const noteIconNode = node.icon
+                ? getWorkspaceIconComponent(node.icon)
+                : FileText;
 
             return (
                 <div key={node.id} className="space-y-1">
@@ -327,7 +333,7 @@ export default function NotesIndex({ roots, filters }: Props) {
                                         {node.type === 'journal' ? (
                                             <Hash className="h-4 w-4 shrink-0 text-muted-foreground" />
                                         ) : (
-                                            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            <Icon iconNode={noteIconNode} className="h-4 w-4 shrink-0 text-muted-foreground" />
                                         )}
                                         <span className="truncate">{node.title}</span>
                                     </Link>
@@ -336,7 +342,7 @@ export default function NotesIndex({ roots, filters }: Props) {
                                         {node.type === 'journal' ? (
                                             <Hash className="h-4 w-4 shrink-0 text-muted-foreground" />
                                         ) : (
-                                            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            <Icon iconNode={noteIconNode} className="h-4 w-4 shrink-0 text-muted-foreground" />
                                         )}
                                         <span className="truncate">{node.title}</span>
                                     </span>

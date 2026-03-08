@@ -9,11 +9,15 @@ declare module '@inertiajs/core' {
             workspaces: Array<{
                 id: string;
                 name: string;
+                color: string;
+                icon: string;
                 role: string;
             }>;
             currentWorkspace: {
                 id: string;
                 name: string;
+                color: string;
+                icon: string;
                 role: string;
             } | null;
             notesTree: SidebarNoteTreeItem[];

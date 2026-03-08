@@ -1,11 +1,13 @@
 import { Link, usePage } from '@inertiajs/react';
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { getWorkspaceIconComponent } from '@/components/icon-picker';
 import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { Icon } from '@/components/ui/icon';
 import {
     SidebarGroup,
     SidebarGroupLabel,
@@ -45,13 +47,16 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
         [hasChildren, isCurrentUrl, item.children],
     );
     const [open, setOpen] = useState(defaultOpen);
+    const NoteIcon = item.icon
+        ? getWorkspaceIconComponent(item.icon)
+        : FileText;
 
     if (!hasChildren) {
         return (
             <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive}>
                     <Link href={item.href} prefetch>
-                        <FileText />
+                        <Icon iconNode={NoteIcon} />
                         <span>{item.title}</span>
                     </Link>
                 </SidebarMenuButton>
@@ -79,7 +84,7 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
 
                     <SidebarMenuButton asChild isActive={isActive}>
                         <Link href={item.href} prefetch>
-                            <FileText />
+                            <Icon iconNode={NoteIcon} />
                             <span>{item.title}</span>
                         </Link>
                     </SidebarMenuButton>
@@ -125,12 +130,16 @@ function SubTreeNode({
         [hasChildren, isCurrentUrl, item.children],
     );
     const [open, setOpen] = useState(defaultOpen);
+    const NoteIcon = item.icon
+        ? getWorkspaceIconComponent(item.icon)
+        : FileText;
 
     if (!hasChildren) {
         return (
             <SidebarMenuSubItem>
                 <SidebarMenuSubButton asChild isActive={isActive}>
                     <Link href={item.href} prefetch>
+                        <Icon iconNode={NoteIcon} className="h-4 w-4" />
                         <span>{item.title}</span>
                     </Link>
                 </SidebarMenuSubButton>
@@ -158,6 +167,7 @@ function SubTreeNode({
 
                     <SidebarMenuSubButton asChild isActive={isActive}>
                         <Link href={item.href} prefetch>
+                            <Icon iconNode={NoteIcon} className="h-4 w-4" />
                             <span>{item.title}</span>
                         </Link>
                     </SidebarMenuSubButton>

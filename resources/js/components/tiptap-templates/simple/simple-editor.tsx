@@ -4,6 +4,7 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { NoteRelatedPanel } from '@/components/note-related-panel';
+import { NOTE_TITLE_ICON_PLUGIN_KEY } from '@/components/tiptap-extension/note-title-icon-extension';
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
 import type { DocumentPropertiesValue } from '@/components/tiptap-properties/document-properties';
 import {
@@ -15,6 +16,7 @@ import { useEditorSave } from '@/components/tiptap-templates/simple/use-editor-s
 import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
 import { useWindowSize } from '@/hooks/use-window-size';
+import { sanitizeIconStyleToken } from '@/lib/icon-style';
 import type { EditorSaveStatus } from '@/types';
 
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss';
@@ -36,7 +38,12 @@ type SimpleEditorProps = {
     noteUpdateUrl: string;
     content?: SimpleEditorContent;
     properties?: DocumentPropertiesValue;
-    linkableNotes?: { id: string; title: string; path?: string; href?: string }[];
+    linkableNotes?: {
+        id: string;
+        title: string;
+        path?: string;
+        href?: string;
+    }[];
     workspaceSuggestions?: {
         mentions: string[];
         hashtags: string[];
@@ -73,8 +80,6 @@ type SimpleEditorProps = {
     backlinks?: {
         id: string;
         block_id: string;
-        heading: string | null;
-        heading_level: number | null;
         excerpt: string;
         render_fragments: {
             type:
@@ -133,6 +138,9 @@ export function SimpleEditor({
 
     const [documentProperties, setDocumentProperties] =
         useState<DocumentPropertiesValue>(properties);
+    const noteIconProp = documentProperties.icon;
+    const noteIconColorProp = documentProperties['icon-color'];
+    const noteIconBgProp = documentProperties['icon-bg'];
     const mentionSuggestions =
         workspaceSuggestions?.mentions ?? EMPTY_SUGGESTIONS;
     const hashtagSuggestions =
@@ -150,8 +158,22 @@ export function SimpleEditor({
                     hashtags: hashtagSuggestions,
                 },
                 language,
+                noteIcon:
+                    typeof noteIconProp === 'string'
+                        ? noteIconProp
+                        : null,
+                noteIconColor: sanitizeIconStyleToken(noteIconColorProp),
+                noteIconBg: sanitizeIconStyleToken(noteIconBgProp),
             }),
-        [language, linkableNotes, mentionSuggestions, hashtagSuggestions],
+        [
+            noteIconBgProp,
+            noteIconColorProp,
+            noteIconProp,
+            language,
+            linkableNotes,
+            mentionSuggestions,
+            hashtagSuggestions,
+        ],
     );
 
     const initialContent = useMemo(() => {
@@ -330,28 +352,64 @@ export function SimpleEditor({
         };
     }, [editor, onContentStatsChange]);
 
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+        const iconName =
+            typeof noteIconProp === 'string' &&
+            noteIconProp.trim() !== ''
+                ? noteIconProp.trim()
+                : null;
+        const iconColor = sanitizeIconStyleToken(noteIconColorProp);
+        const iconBg = sanitizeIconStyleToken(noteIconBgProp);
+
+        const transaction = editor.state.tr.setMeta(
+            NOTE_TITLE_ICON_PLUGIN_KEY,
+            {
+                iconName,
+                iconColor: iconColor.startsWith('text-') ? iconColor : null,
+                iconBg: iconBg.startsWith('bg-') ? iconBg : null,
+            },
+        );
+        editor.view.dispatch(transaction);
+
+    }, [
+        noteIconBgProp,
+        noteIconColorProp,
+        noteIconProp,
+        editor,
+    ]);
+
     return (
         <div className="mx-auto mb-12 max-w-3xl px-8">
             <EditorContext.Provider value={{ editor }}>
-                <div className="pt-4">
+                {showRelatedPanel ? (
+                    <div className="mt-4">
+                        <NoteRelatedPanel
+                            key={id}
+                            relatedTasks={relatedTasks}
+                            backlinks={backlinks}
+                            language={language}
+                        />
+                    </div>
+                ) : null}
+
+                <div className="pt-1">
                     <DocumentProperties
                         value={documentProperties}
                         onChange={setDocumentProperties}
-                        onPersistRequested={() => saveEditor(false)}
+                        onPersistRequested={() => {
+                            requestAnimationFrame(() => {
+                                saveEditor(false);
+                            });
+                        }}
                         workspaceSuggestions={{
                             mentions: mentionSuggestions,
                             hashtags: hashtagSuggestions,
                         }}
                     />
                 </div>
-                {showRelatedPanel ? (
-                    <NoteRelatedPanel
-                        key={id}
-                        relatedTasks={relatedTasks}
-                        backlinks={backlinks}
-                        language={language}
-                    />
-                ) : null}
 
                 {editor && !isMobile && <EditorBubbleToolbar editor={editor} />}
 
@@ -375,10 +433,9 @@ export function SimpleEditor({
                 <EditorContent
                     editor={editor}
                     role="presentation"
-                    className="simple-editor-content pb-12"
+                    className="simple-editor-content mt-8 pb-12"
                 />
             </EditorContext.Provider>
-
         </div>
     );
 }

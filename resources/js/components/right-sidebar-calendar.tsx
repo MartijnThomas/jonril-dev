@@ -16,6 +16,57 @@ type JournalPageProps = {
             };
         };
     };
+    currentWorkspace?: {
+        color?: string | null;
+    };
+};
+
+const CALENDAR_SELECTED_DAY_CLASS: Record<string, string> = {
+    black: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-black data-[selected-single=true]:text-white',
+    slate: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-slate-600 data-[selected-single=true]:text-white',
+    zinc: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-zinc-600 data-[selected-single=true]:text-white',
+    stone: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-stone-600 data-[selected-single=true]:text-white',
+    red: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-red-600 data-[selected-single=true]:text-white',
+    orange: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-orange-600 data-[selected-single=true]:text-white',
+    amber: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-amber-600 data-[selected-single=true]:text-white',
+    yellow: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-yellow-500 data-[selected-single=true]:text-black',
+    lime: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-lime-600 data-[selected-single=true]:text-white',
+    green: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-green-600 data-[selected-single=true]:text-white',
+    emerald: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-emerald-600 data-[selected-single=true]:text-white',
+    teal: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-teal-600 data-[selected-single=true]:text-white',
+    cyan: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-cyan-600 data-[selected-single=true]:text-white',
+    sky: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-sky-600 data-[selected-single=true]:text-white',
+    blue: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-blue-600 data-[selected-single=true]:text-white',
+    indigo: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-indigo-600 data-[selected-single=true]:text-white',
+    violet: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-violet-600 data-[selected-single=true]:text-white',
+    purple: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-purple-600 data-[selected-single=true]:text-white',
+    fuchsia: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-fuchsia-600 data-[selected-single=true]:text-white',
+    pink: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-pink-600 data-[selected-single=true]:text-white',
+    rose: 'rounded-full hover:bg-muted data-[selected-single=true]:bg-rose-600 data-[selected-single=true]:text-white',
+};
+
+const CALENDAR_SELECTED_WEEK_CLASS: Record<string, string> = {
+    black: 'rounded-full bg-black text-white',
+    slate: 'rounded-full bg-slate-600 text-white',
+    zinc: 'rounded-full bg-zinc-600 text-white',
+    stone: 'rounded-full bg-stone-600 text-white',
+    red: 'rounded-full bg-red-600 text-white',
+    orange: 'rounded-full bg-orange-600 text-white',
+    amber: 'rounded-full bg-amber-600 text-white',
+    yellow: 'rounded-full bg-yellow-500 text-black',
+    lime: 'rounded-full bg-lime-600 text-white',
+    green: 'rounded-full bg-green-600 text-white',
+    emerald: 'rounded-full bg-emerald-600 text-white',
+    teal: 'rounded-full bg-teal-600 text-white',
+    cyan: 'rounded-full bg-cyan-600 text-white',
+    sky: 'rounded-full bg-sky-600 text-white',
+    blue: 'rounded-full bg-blue-600 text-white',
+    indigo: 'rounded-full bg-indigo-600 text-white',
+    violet: 'rounded-full bg-violet-600 text-white',
+    purple: 'rounded-full bg-purple-600 text-white',
+    fuchsia: 'rounded-full bg-fuchsia-600 text-white',
+    pink: 'rounded-full bg-pink-600 text-white',
+    rose: 'rounded-full bg-rose-600 text-white',
 };
 
 function parseJournalPeriod(
@@ -79,6 +130,13 @@ function parseJournalPeriod(
 export function RightSidebarCalendar() {
     const pageProps = usePage().props as JournalPageProps;
     const language = pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
+    const workspaceColor = pageProps.currentWorkspace?.color ?? 'slate';
+    const selectedDayClass =
+        CALENDAR_SELECTED_DAY_CLASS[workspaceColor] ??
+        CALENDAR_SELECTED_DAY_CLASS.slate;
+    const selectedWeekClass =
+        CALENDAR_SELECTED_WEEK_CLASS[workspaceColor] ??
+        CALENDAR_SELECTED_WEEK_CLASS.slate;
     const activeDailyDate =
         pageProps.noteType === 'journal' &&
         pageProps.journalGranularity === 'daily' &&
@@ -110,6 +168,10 @@ export function RightSidebarCalendar() {
                 showWeekNumber
                 mode="single"
                 className="w-full bg-transparent !p-1 [--cell-size:2.1rem]"
+                classNames={{
+                    day: 'group/day relative h-(--cell-size) w-(--cell-size) p-0 text-center text-sm align-middle select-none',
+                    day_button: selectedDayClass,
+                }}
                 selected={activeDailyDate}
                 onDayClick={(day) =>
                     visitJournal(`/journal/daily/${format(day, 'yyyy-MM-dd')}`)
@@ -139,9 +201,8 @@ export function RightSidebarCalendar() {
                                 <button
                                     type="button"
                                     className={cn(
-                                        'inline-flex h-(--cell-size) w-(--cell-size) cursor-pointer items-center justify-center rounded-md text-center text-sm font-light hover:bg-accent hover:text-accent-foreground',
-                                        isActive &&
-                                            'bg-accent text-accent-foreground',
+                                        'inline-flex h-(--cell-size) w-(--cell-size) cursor-pointer items-center justify-center rounded-full text-center text-sm font-light hover:bg-muted',
+                                        isActive && selectedWeekClass,
                                     )}
                                     onClick={() => {
                                         if (!anchor) {

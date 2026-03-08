@@ -11,6 +11,9 @@ import { CharacterCount, Selection } from '@tiptap/extensions';
 import { StarterKit } from '@tiptap/starter-kit';
 
 import { HeadingAnchorIdExtension } from '@/components/tiptap-extension/heading-anchor-id-extension';
+import {
+    NoteTitleIconExtension,
+} from '@/components/tiptap-extension/note-title-icon-extension';
 import { TaskItemWithDates } from '@/components/tiptap-extension/task-item-dates-extension';
 import { WikiLinkMark } from '@/components/tiptap-extension/wiki-link-mark-extension';
 import { WikiLinkSuggestion } from '@/components/tiptap-extension/wiki-link-suggestion-extension';
@@ -34,12 +37,18 @@ type CreateSimpleEditorExtensionsOptions = {
         hashtags: string[];
     };
     language?: string;
+    noteIcon?: string | null;
+    noteIconColor?: string | null;
+    noteIconBg?: string | null;
 };
 
 export function createSimpleEditorExtensions({
     wikiLinkNotes = [],
     workspaceSuggestions = { mentions: [], hashtags: [] },
     language = 'nl',
+    noteIcon = null,
+    noteIconColor = null,
+    noteIconBg = null,
 }: CreateSimpleEditorExtensionsOptions = {}) {
     const displayLocale = language === 'en' ? 'en-US' : 'nl-NL';
     const mentionItemsRef = { current: [...workspaceSuggestions.mentions] };
@@ -143,6 +152,21 @@ export function createSimpleEditorExtensions({
             ],
         }),
         HeadingAnchorIdExtension,
+        NoteTitleIconExtension.configure({
+            iconName:
+                typeof noteIcon === 'string' && noteIcon.trim() !== ''
+                    ? noteIcon.trim()
+                    : null,
+            iconColor:
+                typeof noteIconColor === 'string' &&
+                noteIconColor.trim() !== ''
+                    ? noteIconColor.trim()
+                    : null,
+            iconBg:
+                typeof noteIconBg === 'string' && noteIconBg.trim() !== ''
+                    ? noteIconBg.trim()
+                    : null,
+        }),
         StarterKit.configure({
             horizontalRule: false,
             link: {

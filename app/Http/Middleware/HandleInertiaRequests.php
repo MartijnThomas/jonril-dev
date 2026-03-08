@@ -95,10 +95,16 @@ class HandleInertiaRequests extends Middleware
 
         $nodes = [];
         foreach ($notes as $note) {
+            $properties = is_array($note->properties) ? $note->properties : [];
+            $icon = isset($properties['icon']) && is_string($properties['icon'])
+                ? trim((string) $properties['icon'])
+                : null;
+
             $nodes[$note->id] = [
                 'id' => $note->id,
                 'title' => $note->title ?? 'Untitled',
                 'href' => '/notes/'.($note->slug ?: $note->id),
+                'icon' => $icon !== '' ? $icon : null,
                 'parent_id' => $note->parent_id,
                 'children' => [],
             ];
@@ -114,6 +120,27 @@ class HandleInertiaRequests extends Middleware
                 $tree[] = &$nodes[$id];
             }
         }
+
+        $sortTree = function (array &$items) use (&$sortTree): void {
+            usort($items, function (array $a, array $b): int {
+                $aHasChildren = count($a['children']) > 0;
+                $bHasChildren = count($b['children']) > 0;
+
+                if ($aHasChildren !== $bHasChildren) {
+                    return $aHasChildren ? -1 : 1;
+                }
+
+                return strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
+            });
+
+            foreach ($items as &$item) {
+                if (! empty($item['children'])) {
+                    $sortTree($item['children']);
+                }
+            }
+        };
+
+        $sortTree($tree);
 
         $stripParent = function (array &$items) use (&$stripParent): void {
             foreach ($items as &$item) {
@@ -138,13 +165,15 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $user->workspaces()
-            ->select('workspaces.id', 'workspaces.name', 'workspace_user.role')
+            ->select('workspaces.id', 'workspaces.name', 'workspaces.color', 'workspaces.icon', 'workspace_user.role')
             ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
             ->orderBy('workspaces.name')
             ->get()
             ->map(fn ($workspace) => [
                 'id' => $workspace->id,
                 'name' => $workspace->name,
+                'color' => (string) ($workspace->color ?: 'slate'),
+                'icon' => (string) ($workspace->icon ?: 'briefcase'),
                 'role' => (string) ($workspace->pivot->role ?? 'member'),
             ])
             ->values()
@@ -152,7 +181,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array{id: string, name: string, role: string}|null
+     * @return array{id: string, name: string, color: string, icon: string, role: string}|null
      */
     private function currentWorkspaceSummary(Request $request): ?array
     {
@@ -174,6 +203,8 @@ class HandleInertiaRequests extends Middleware
         return [
             'id' => $workspace->id,
             'name' => $workspace->name,
+            'color' => (string) ($workspace->color ?: 'slate'),
+            'icon' => (string) ($workspace->icon ?: 'briefcase'),
             'role' => (string) ($membership?->pivot->role ?? 'member'),
         ];
     }

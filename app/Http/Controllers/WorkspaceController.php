@@ -8,22 +8,51 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class WorkspaceController extends Controller
 {
+    private const WORKSPACE_COLORS = [
+        'slate',
+        'zinc',
+        'stone',
+        'red',
+        'orange',
+        'amber',
+        'yellow',
+        'lime',
+        'green',
+        'emerald',
+        'teal',
+        'cyan',
+        'sky',
+        'blue',
+        'indigo',
+        'violet',
+        'purple',
+        'fuchsia',
+        'pink',
+        'rose',
+        'black',
+    ];
+
     public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
 
         $data = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
+            'color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
+            'icon' => ['nullable', 'regex:/^[a-z][a-z0-9_]*$/'],
         ]);
 
         $workspace = Workspace::query()->create([
             'owner_id' => $user->id,
             'name' => trim($data['name']),
+            'color' => (string) ($data['color'] ?? 'slate'),
+            'icon' => (string) ($data['icon'] ?? 'briefcase'),
         ]);
 
         $workspace->users()->attach($user->id, [
@@ -45,28 +74,20 @@ class WorkspaceController extends Controller
         $workspace = $this->currentWorkspace($request);
         $this->assertOwner($request, $workspace);
 
-        $members = $workspace->users()
-            ->select('users.id', 'users.name', 'users.email', 'workspace_user.role')
-            ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
-            ->orderBy('users.name')
-            ->get()
-            ->map(fn ($user) => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => (string) ($user->pivot->role ?? 'member'),
-            ])
-            ->values();
+        $payload = $this->workspaceSettingsPayload($workspace);
 
         return Inertia::render('workspaces/settings', [
-            'workspace' => [
-                'id' => $workspace->id,
-                'name' => $workspace->name,
-                'owner_id' => $workspace->owner_id,
-            ],
-            'members' => $members,
+            ...$payload,
             'status' => $request->session()->get('status'),
         ]);
+    }
+
+    public function data(Request $request): JsonResponse
+    {
+        $workspace = $this->currentWorkspace($request);
+        $this->assertOwner($request, $workspace);
+
+        return response()->json($this->workspaceSettingsPayload($workspace));
     }
 
     public function update(Request $request): RedirectResponse
@@ -76,9 +97,17 @@ class WorkspaceController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
+            'color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
+            'icon' => ['nullable', 'regex:/^[a-z][a-z0-9_]*$/'],
         ]);
 
         $workspace->name = trim($data['name']);
+        if (array_key_exists('color', $data)) {
+            $workspace->color = (string) ($data['color'] ?: 'slate');
+        }
+        if (array_key_exists('icon', $data)) {
+            $workspace->icon = (string) ($data['icon'] ?: 'briefcase');
+        }
         $workspace->save();
 
         return back()->with('status', 'workspace-updated');
@@ -211,5 +240,39 @@ class WorkspaceController extends Controller
             ->exists();
 
         abort_unless($isOwner, 403);
+    }
+
+    /**
+     * @return array{
+     *     workspace: array{id: string, name: string, color: string, icon: string, owner_id: int},
+     *     members: array<int, array{id: int, name: string, email: string, role: string}>
+     * }
+     */
+    private function workspaceSettingsPayload(Workspace $workspace): array
+    {
+        $members = $workspace->users()
+            ->select('users.id', 'users.name', 'users.email', 'workspace_user.role')
+            ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
+            ->orderBy('users.name')
+            ->get()
+            ->map(fn ($user) => [
+                'id' => (int) $user->id,
+                'name' => (string) $user->name,
+                'email' => (string) $user->email,
+                'role' => (string) ($user->pivot->role ?? 'member'),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'workspace' => [
+                'id' => $workspace->id,
+                'name' => $workspace->name,
+                'color' => (string) ($workspace->color ?: 'slate'),
+                'icon' => (string) ($workspace->icon ?: 'briefcase'),
+                'owner_id' => (int) $workspace->owner_id,
+            ],
+            'members' => $members,
+        ];
     }
 }

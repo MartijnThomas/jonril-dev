@@ -194,16 +194,12 @@ class NoteRelatedPanelBuilder
 
         $results = [];
         $seenBlockIds = [];
-        $currentHeading = null;
-        $currentHeadingLevel = null;
         $sourceHref = $this->noteSlugService->urlFor($sourceNote);
 
         $walk = function (array $nodes, bool $insideTaskItem = false) use (
             &$walk,
             &$results,
             &$seenBlockIds,
-            &$currentHeading,
-            &$currentHeadingLevel,
             $sourceNote,
             $sourceHref,
             $targetNoteId,
@@ -215,17 +211,6 @@ class NoteRelatedPanelBuilder
                 }
 
                 $type = (string) ($node['type'] ?? '');
-                if ($type === 'heading') {
-                    $headingText = trim($this->collectNodeReadableText($node));
-                    if ($headingText !== '') {
-                        $currentHeading = $headingText;
-                        $headingLevel = Arr::get($node, 'attrs.level');
-                        $currentHeadingLevel = is_numeric($headingLevel)
-                            ? max(1, min(6, (int) $headingLevel))
-                            : null;
-                    }
-                }
-
                 $blockId = trim((string) Arr::get($node, 'attrs.id', ''));
                 $isCandidateType = in_array($type, ['heading', 'paragraph', 'blockquote'], true);
                 $shouldSkipAsDuplicateTaskParagraph = $insideTaskItem && $type === 'paragraph';
@@ -245,8 +230,6 @@ class NoteRelatedPanelBuilder
                         $results[] = [
                             'id' => "{$sourceNote->id}:{$blockId}",
                             'block_id' => $blockId,
-                            'heading' => $currentHeading,
-                            'heading_level' => $currentHeadingLevel,
                             'excerpt' => Str::limit($excerpt, 180),
                             'render_fragments' => $truncatedFragments,
                             'note' => [

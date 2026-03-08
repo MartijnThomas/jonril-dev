@@ -64,6 +64,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('workspaces.suggestions.store');
     Route::get('workspaces/settings', [WorkspaceController::class, 'edit'])
         ->name('workspaces.settings.edit');
+    Route::get('workspaces/settings/data', [WorkspaceController::class, 'data'])
+        ->name('workspaces.settings.data');
     Route::patch('workspaces/settings', [WorkspaceController::class, 'update'])
         ->name('workspaces.settings.update');
     Route::post('workspaces/settings/members', [WorkspaceController::class, 'addMember'])

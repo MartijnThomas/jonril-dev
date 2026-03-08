@@ -10,6 +10,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
+import { IconPicker } from '@/components/icon-picker';
 import { Button } from '@/components/ui/button';
 import {
     Command,
@@ -46,6 +47,9 @@ type DocumentPropertiesProps = {
 const DEFAULT_PROPERTY_OPTIONS = [
     'type',
     'title',
+    'icon',
+    'icon-color',
+    'icon-bg',
     'context',
     'tags',
     'project',
@@ -605,13 +609,16 @@ export function DocumentProperties({
 
     const valueFieldMode = (
         key: string,
-    ): 'default' | 'context' | 'tags' => {
+    ): 'default' | 'context' | 'tags' | 'icon' => {
         const normalized = key.trim().toLowerCase();
         if (normalized === 'context') {
             return 'context';
         }
         if (normalized === 'tags') {
             return 'tags';
+        }
+        if (normalized === 'icon') {
+            return 'icon';
         }
 
         return 'default';
@@ -849,6 +856,7 @@ export function DocumentProperties({
                             {entries.map(([key, propertyValue]) => {
                             const rowId = `existing:${key}`;
                             const keyDraft = existingKeyDrafts[key] ?? key;
+                            const fieldMode = valueFieldMode(key);
 
                             return (
                                 <div
@@ -936,7 +944,7 @@ export function DocumentProperties({
                                         )}
                                     </Popover>
 
-                                    {valueFieldMode(key) === 'default' ? (
+                                    {fieldMode === 'default' ? (
                                         <Input
                                             ref={(element) => {
                                                 existingValueInputRefs.current[
@@ -966,9 +974,21 @@ export function DocumentProperties({
                                             placeholder="Value"
                                             className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus:border-muted-foreground/25 focus:bg-white focus-visible:ring-0"
                                         />
+                                    ) : fieldMode === 'icon' ? (
+                                        <IconPicker
+                                            value={propertyValue}
+                                            onValueChange={(nextValue) => {
+                                                updatePropertyValue(
+                                                    key,
+                                                    nextValue,
+                                                );
+                                                onPersistRequested?.();
+                                            }}
+                                            className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus-within:border-muted-foreground/25 focus-within:bg-white focus-visible:ring-0"
+                                        />
                                     ) : (
                                         <TokenPropertyInput
-                                            mode={valueFieldMode(key)}
+                                            mode={fieldMode}
                                             inputRef={(element) => {
                                                 existingValueInputRefs.current[
                                                     key
@@ -983,13 +1003,13 @@ export function DocumentProperties({
                                             }
                                             onPersist={persistWorkspaceToken}
                                             options={
-                                                valueFieldMode(key) ===
+                                                fieldMode ===
                                                 'context'
                                                     ? mentionOptions
                                                     : hashtagOptions
                                             }
                                             placeholder={
-                                                valueFieldMode(key) ===
+                                                fieldMode ===
                                                 'context'
                                                     ? '@mention'
                                                     : '#tag1, #tag2'
@@ -1024,7 +1044,10 @@ export function DocumentProperties({
                             );
                         })}
 
-                        {draftRows.map((row) => (
+                        {draftRows.map((row) => {
+                            const fieldMode = valueFieldMode(row.key);
+
+                            return (
                             <div
                                 key={row.id}
                                 className="group grid grid-cols-[18px_minmax(120px,180px)_minmax(0,1fr)_20px] items-center gap-3 rounded-sm px-1 py-px"
@@ -1135,7 +1158,7 @@ export function DocumentProperties({
                                 </Popover>
 
                                 <div>
-                                    {valueFieldMode(row.key) === 'default' ? (
+                                    {fieldMode === 'default' ? (
                                         <Input
                                             data-value-input="true"
                                             ref={(element) => {
@@ -1234,9 +1257,46 @@ export function DocumentProperties({
                                             placeholder="Value"
                                             className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus:border-muted-foreground/25 focus:bg-white focus-visible:ring-0"
                                         />
+                                    ) : fieldMode === 'icon' ? (
+                                        <IconPicker
+                                            value={row.value}
+                                            onValueChange={(nextValue) => {
+                                                const currentRow =
+                                                    draftRows.find(
+                                                        (draftRow) =>
+                                                            draftRow.id ===
+                                                            row.id,
+                                                    );
+
+                                                if (!currentRow) {
+                                                    return;
+                                                }
+
+                                                if (currentRow.key.trim()) {
+                                                    commitDraftRow(
+                                                        row.id,
+                                                        currentRow.key,
+                                                        nextValue,
+                                                    );
+                                                    return;
+                                                }
+
+                                                setDraftRows((current) =>
+                                                    current.map((draftRow) =>
+                                                        draftRow.id === row.id
+                                                            ? {
+                                                                  ...draftRow,
+                                                                  value: nextValue,
+                                                              }
+                                                            : draftRow,
+                                                    ),
+                                                );
+                                            }}
+                                            className="h-8 border border-transparent bg-white px-2 text-left text-sm shadow-none focus-within:border-muted-foreground/25 focus-within:bg-white focus-visible:ring-0"
+                                        />
                                     ) : (
                                         <TokenPropertyInput
-                                            mode={valueFieldMode(row.key)}
+                                            mode={fieldMode}
                                             inputRef={(element) => {
                                                 valueInputRefs.current[row.id] =
                                                     element;
@@ -1256,7 +1316,7 @@ export function DocumentProperties({
                                             }
                                             onPersist={persistWorkspaceToken}
                                             options={
-                                                valueFieldMode(row.key) ===
+                                                fieldMode ===
                                                 'context'
                                                     ? mentionOptions
                                                     : hashtagOptions
@@ -1336,7 +1396,7 @@ export function DocumentProperties({
                                                 }
                                             }}
                                             placeholder={
-                                                valueFieldMode(row.key) ===
+                                                fieldMode ===
                                                 'context'
                                                     ? '@mention'
                                                     : '#tag1, #tag2'
@@ -1363,7 +1423,8 @@ export function DocumentProperties({
                                     <Trash2 className="h-3 w-3" />
                                 </Button>
                             </div>
-                        ))}
+                            );
+                        })}
 
                         <button
                             type="button"

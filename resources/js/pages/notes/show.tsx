@@ -50,8 +50,6 @@ type Props = {
     backlinks: {
         id: string;
         block_id: string;
-        heading: string | null;
-        heading_level: number | null;
         excerpt: string;
         render_fragments: {
             type:

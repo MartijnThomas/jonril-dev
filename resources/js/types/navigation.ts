@@ -19,5 +19,6 @@ export type SidebarNoteTreeItem = {
     id: string;
     title: string;
     href: NonNullable<InertiaLinkProps['href']>;
+    icon?: string | null;
     children: SidebarNoteTreeItem[];
 };

@@ -132,8 +132,10 @@ class NotesController extends Controller
             $resolved->parent_id = $data['parent_id'];
         }
 
+        $properties = $this->sanitizeProperties($data['properties'] ?? null);
+
         $resolved->content = $data['content'];
-        $resolved->properties = $data['properties'];
+        $resolved->properties = $properties;
         $resolved->title = $this->noteTitleExtractor->extract($data['content']);
         $resolved->word_count = $this->noteWordCountExtractor->count($data['content']);
         $resolved->save();
@@ -413,6 +415,7 @@ class NotesController extends Controller
      *   id:string,
      *   title:string,
      *   href:string|null,
+     *   icon:string|null,
      *   type:string|null,
      *   context:string|null,
      *   tags:array<int,string>,
@@ -616,6 +619,9 @@ class NotesController extends Controller
 
         $buildNotePayload = function (Note $note, bool $hasChildren) use ($taskCounts, $revisionCounts): array {
             $properties = is_array($note->properties) ? $note->properties : [];
+            $icon = isset($properties['icon']) && is_string($properties['icon'])
+                ? trim((string) $properties['icon'])
+                : null;
             $taskCountRow = $taskCounts->get($note->id);
             $revisionCountRow = $revisionCounts->get($note->id);
 
@@ -623,6 +629,7 @@ class NotesController extends Controller
                 'id' => $note->id,
                 'title' => $note->title ?? 'Untitled',
                 'href' => $this->noteSlugService->urlFor($note),
+                'icon' => $icon !== '' ? $icon : null,
                 'type' => $note->type,
                 'context' => is_string($properties['context'] ?? null)
                     ? trim((string) $properties['context'])
@@ -661,6 +668,7 @@ class NotesController extends Controller
                 'id' => $id,
                 'title' => $title,
                 'href' => $fallbackHref,
+                'icon' => null,
                 'type' => Note::TYPE_JOURNAL,
                 'context' => null,
                 'tags' => [],
@@ -907,6 +915,49 @@ class NotesController extends Controller
         }
 
         return $content;
+    }
+
+    /**
+     * @return array<string, string>|null
+     */
+    private function sanitizeProperties(mixed $value): ?array
+    {
+        if (! is_array($value)) {
+            return null;
+        }
+
+        $properties = collect($value)
+            ->filter(fn ($entry, $key) => is_string($key))
+            ->mapWithKeys(function ($entry, $key) {
+                if (is_string($entry)) {
+                    return [$key => $entry];
+                }
+
+                if (is_scalar($entry)) {
+                    return [$key => (string) $entry];
+                }
+
+                return [];
+            })
+            ->all();
+
+        foreach (['icon-color' => 'text', 'icon-bg' => 'bg'] as $key => $prefix) {
+            if (! array_key_exists($key, $properties)) {
+                continue;
+            }
+
+            $token = trim(strtolower((string) $properties[$key]));
+            $isValid = preg_match('/^(?:'.$prefix.')-(?:black|white|[a-z]+-(?:50|[1-9]00))$/', $token) === 1;
+
+            if (! $isValid) {
+                unset($properties[$key]);
+                continue;
+            }
+
+            $properties[$key] = $token;
+        }
+
+        return $properties;
     }
 
     private function assertParentAssignmentIsValid(Note $note, ?string $parentId): void

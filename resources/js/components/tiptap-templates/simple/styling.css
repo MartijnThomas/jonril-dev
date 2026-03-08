@@ -53,6 +53,29 @@
     margin-top: 0.7em;
 }
 
+.simple-editor-content .tiptap.ProseMirror.simple-editor .md-note-title-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15em;
+    height: 1.15em;
+    margin-right: 0.42em;
+    border-radius: 0.28em;
+    background: color-mix(in srgb, currentColor 6%, transparent);
+    vertical-align: -0.08em;
+    opacity: 1;
+    user-select: none;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    .md-note-title-icon
+    .md-note-title-icon-svg {
+    width: 0.72em;
+    height: 0.72em;
+    stroke-width: 2.1;
+}
+
 .simple-editor-content .tiptap.ProseMirror.simple-editor h2 {
     font-size: 1.6rem;
     line-height: 1.18;
@@ -210,9 +233,7 @@
     > div
     > p
     span {
-    color: color-mix(in srgb, currentColor 45%, transparent);
-    text-decoration: line-through;
-    text-decoration-thickness: 2px;
+    opacity: 0.72;
 }
 
 .inline-command-ghost {

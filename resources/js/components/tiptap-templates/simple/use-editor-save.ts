@@ -1,6 +1,11 @@
 import { router } from '@inertiajs/react';
 import type { Editor } from '@tiptap/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ICON_BG_PROPERTY_KEY,
+    ICON_COLOR_PROPERTY_KEY,
+    sanitizeIconStyleToken,
+} from '@/lib/icon-style';
 import type { EditorSaveStatus } from '@/types';
 
 export type DocumentPropertiesValue = Record<string, string>;
@@ -13,6 +18,29 @@ type UseEditorSaveProps = {
     idleMs?: number;
 };
 
+function sanitizeProperties(
+    properties: DocumentPropertiesValue,
+): DocumentPropertiesValue {
+    const next = { ...properties };
+
+    const iconColor = sanitizeIconStyleToken(next[ICON_COLOR_PROPERTY_KEY]);
+    const iconBg = sanitizeIconStyleToken(next[ICON_BG_PROPERTY_KEY]);
+
+    if (iconColor.startsWith('text-')) {
+        next[ICON_COLOR_PROPERTY_KEY] = iconColor;
+    } else {
+        delete next[ICON_COLOR_PROPERTY_KEY];
+    }
+
+    if (iconBg.startsWith('bg-')) {
+        next[ICON_BG_PROPERTY_KEY] = iconBg;
+    } else {
+        delete next[ICON_BG_PROPERTY_KEY];
+    }
+
+    return next;
+}
+
 export function useEditorSave({
     editor,
     noteId,
@@ -23,8 +51,16 @@ export function useEditorSave({
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSavedContentRef = useRef<string>('');
     const lastSavedPropertiesRef = useRef<string>(JSON.stringify(properties));
+    const propertiesRef = useRef<DocumentPropertiesValue>(properties);
+    const saveEditorRef = useRef<(force?: boolean) => void>(() => {});
+    const pendingSaveRef = useRef(false);
+    const pendingForceRef = useRef(false);
     const isSavingRef = useRef(false);
     const [status, setStatus] = useState<EditorSaveStatus>('ready');
+
+    useEffect(() => {
+        propertiesRef.current = properties;
+    }, [properties]);
 
     const saveEditor = useCallback(
         (force = false) => {
@@ -34,7 +70,8 @@ export function useEditorSave({
 
             const json = editor.getJSON();
             const serialized = JSON.stringify(json);
-            const serializedProperties = JSON.stringify(properties);
+            const sanitizedProperties = sanitizeProperties(propertiesRef.current);
+            const serializedProperties = JSON.stringify(sanitizedProperties);
 
             if (
                 !force &&
@@ -46,6 +83,8 @@ export function useEditorSave({
             }
 
             if (isSavingRef.current) {
+                pendingSaveRef.current = true;
+                pendingForceRef.current = pendingForceRef.current || force;
                 return;
             }
 
@@ -56,7 +95,7 @@ export function useEditorSave({
                 noteUpdateUrl,
                 {
                     content: json,
-                    properties,
+                    properties: sanitizedProperties,
                     save_mode: force ? 'manual' : 'auto',
                 },
                 {
@@ -73,12 +112,23 @@ export function useEditorSave({
                     },
                     onFinish: () => {
                         isSavingRef.current = false;
+
+                        if (pendingSaveRef.current) {
+                            const shouldForce = pendingForceRef.current;
+                            pendingSaveRef.current = false;
+                            pendingForceRef.current = false;
+                            saveEditorRef.current(shouldForce);
+                        }
                     },
                 },
             );
         },
-        [editor, noteUpdateUrl, properties],
+        [editor, noteUpdateUrl],
     );
+
+    useEffect(() => {
+        saveEditorRef.current = saveEditor;
+    }, [saveEditor]);
 
     const queueSave = useCallback(() => {
         if (saveTimeoutRef.current) {
@@ -96,14 +146,18 @@ export function useEditorSave({
         }
 
         lastSavedContentRef.current = JSON.stringify(editor.getJSON());
-        lastSavedPropertiesRef.current = JSON.stringify(properties);
+        lastSavedPropertiesRef.current = JSON.stringify(propertiesRef.current);
         isSavingRef.current = false;
-        setStatus('ready');
+        pendingSaveRef.current = false;
+        pendingForceRef.current = false;
+        queueMicrotask(() => setStatus('ready'));
 
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
+        // Only reset baseline when loading/switching note editor.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editor, noteId]);
 
     useEffect(() => {
@@ -128,7 +182,7 @@ export function useEditorSave({
             return;
         }
 
-        setStatus('dirty');
+        queueMicrotask(() => setStatus('dirty'));
         queueSave();
     }, [properties, queueSave]);
 

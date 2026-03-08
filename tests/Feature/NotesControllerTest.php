@@ -1101,7 +1101,7 @@ test('regular note includes related tasks that link to it', function () {
         );
 });
 
-test('regular note includes backlinks with heading context and snippet', function () {
+test('regular note includes backlinks with snippet', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
 
@@ -1152,8 +1152,6 @@ test('regular note includes backlinks with heading context and snippet', functio
         ->assertInertia(fn (Assert $page) => $page
             ->has('backlinks', 1)
             ->where('backlinks.0.block_id', 'p-source')
-            ->where('backlinks.0.heading', 'Planning')
-            ->where('backlinks.0.heading_level', 2)
             ->where('backlinks.0.render_fragments.1.type', 'wikilink')
             ->where('backlinks.0.render_fragments.1.text', 'Target note')
             ->where('backlinks.0.note.id', $source->id)
