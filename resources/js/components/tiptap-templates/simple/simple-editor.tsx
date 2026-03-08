@@ -84,9 +84,19 @@ type SimpleEditorProps = {
             href?: string | null;
             date?: string;
             value?: string;
-            status?: 'canceled' | 'deferred' | null;
+            status?:
+                | 'canceled'
+                | 'deferred'
+                | 'starred'
+                | 'question'
+                | null;
         }[];
-        task_status?: 'canceled' | 'deferred' | null;
+        task_status?:
+            | 'canceled'
+            | 'deferred'
+            | 'starred'
+            | 'question'
+            | null;
         due_date: string | null;
         deadline_date: string | null;
         note: {
@@ -114,7 +124,12 @@ type SimpleEditorProps = {
             href?: string | null;
             date?: string;
             value?: string;
-            status?: 'canceled' | 'deferred' | null;
+            status?:
+                | 'canceled'
+                | 'deferred'
+                | 'starred'
+                | 'question'
+                | null;
         }[];
         note: {
             id: string;

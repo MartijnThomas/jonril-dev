@@ -320,7 +320,7 @@ class NoteTaskIndexer
     private function splitTaskDateTokens(string $text): array
     {
         $leadingFragments = [];
-        if (preg_match('/^(\s*)(—|>)(?=\s|$)/u', $text, $statusMatch)) {
+        if (preg_match('/^(\s*)(—|>|\*|\?)(?=\s|$)/u', $text, $statusMatch)) {
             $leading = (string) ($statusMatch[1] ?? '');
             $token = (string) ($statusMatch[2] ?? '');
             $taskStatus = $this->taskStatusFromToken($token);
@@ -453,7 +453,7 @@ class NoteTaskIndexer
 
     private function extractPriorityFromText(string $text): ?string
     {
-        if (! preg_match('/^\s*(?:—|>)?\s*(!{1,3})(?=\s|$)/u', $text, $match)) {
+        if (! preg_match('/^\s*(?:—|>|\*|\?)?\s*(!{1,3})(?=\s|$)/u', $text, $match)) {
             return null;
         }
 
@@ -462,7 +462,7 @@ class NoteTaskIndexer
 
     private function extractTaskStatusFromText(string $text): ?string
     {
-        if (! preg_match('/^\s*(—|>)(?=\s|$)/u', $text, $match)) {
+        if (! preg_match('/^\s*(—|>|\*|\?)(?=\s|$)/u', $text, $match)) {
             return null;
         }
 
@@ -497,6 +497,8 @@ class NoteTaskIndexer
         return match ($token) {
             '—' => 'canceled',
             '>' => 'deferred',
+            '*' => 'starred',
+            '?' => 'question',
             default => null,
         };
     }
@@ -510,6 +512,8 @@ class NoteTaskIndexer
         return match (strtolower(trim($value))) {
             'canceled' => 'canceled',
             'deferred' => 'deferred',
+            'starred' => 'starred',
+            'question' => 'question',
             default => null,
         };
     }

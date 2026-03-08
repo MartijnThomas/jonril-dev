@@ -2,9 +2,14 @@ import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-export type TaskStatus = 'canceled' | 'deferred' | null;
+export type TaskStatus =
+    | 'canceled'
+    | 'deferred'
+    | 'starred'
+    | 'question'
+    | null;
 
-const TASK_STATUS_TOKEN_REGEX = /^(\s*)(—|>)(?=\s|$)/u;
+const TASK_STATUS_TOKEN_REGEX = /^(\s*)(—|>|\*|\?)(?=\s|$)/u;
 
 function statusFromToken(token: string): TaskStatus {
     if (token === '—') {
@@ -13,6 +18,14 @@ function statusFromToken(token: string): TaskStatus {
 
     if (token === '>') {
         return 'deferred';
+    }
+
+    if (token === '*') {
+        return 'starred';
+    }
+
+    if (token === '?') {
+        return 'question';
     }
 
     return null;
@@ -76,7 +89,7 @@ function buildStatusDecorations(doc: any): DecorationSet {
     const decorations: Decoration[] = [];
 
     doc.descendants((node: any, pos: number) => {
-        if (node.type.name !== 'taskItem') {
+        if (node.type.name !== 'taskItem' && node.type.name !== 'listItem') {
             return;
         }
 
@@ -106,15 +119,21 @@ function buildStatusDecorations(doc: any): DecorationSet {
             }
 
             const absoluteStart = pos + 1 + childPos + match.tokenStart;
-            const absoluteEnd = pos + 1 + childPos + match.tokenEnd;
-
-            if (match.status === 'deferred') {
-                decorations.push(
-                    Decoration.inline(absoluteStart, absoluteEnd, {
-                        class: 'md-task-status-token md-task-status-token--deferred',
-                    }),
-                );
+            let absoluteEnd = pos + 1 + childPos + match.tokenEnd;
+            const text = child.text as string;
+            let separatorOffset = match.tokenEnd;
+            while (text.charAt(separatorOffset) === ' ') {
+                absoluteEnd += 1;
+                separatorOffset += 1;
             }
+
+            const statusClass = `md-task-status-token md-task-status-token--${match.status}`;
+
+            decorations.push(
+                Decoration.inline(absoluteStart, absoluteEnd, {
+                    class: statusClass,
+                }),
+            );
 
             applied = true;
             return false;
@@ -143,7 +162,10 @@ export const TaskItemStatusExtension = Extension.create({
                     let changed = false;
 
                     newState.doc.descendants((node, pos) => {
-                        if (node.type.name !== 'taskItem') {
+                        if (
+                            node.type.name !== 'taskItem' &&
+                            node.type.name !== 'listItem'
+                        ) {
                             return;
                         }
 
@@ -184,4 +206,3 @@ export const TaskItemStatusExtension = Extension.create({
         ];
     },
 });
-

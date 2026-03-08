@@ -20,7 +20,7 @@ export type TaskRenderFragment = {
     date?: string;
     value?: string;
     priority?: 'high' | 'medium' | 'normal' | null;
-    status?: 'canceled' | 'deferred' | null;
+    status?: 'canceled' | 'deferred' | 'starred' | 'question' | null;
 };
 
 type TaskInlineContentProps = {
@@ -263,10 +263,10 @@ export function TaskInlineContent({
 
                     const className =
                         fragment.priority === 'high'
-                            ? 'md-priority md-priority--critical'
+                            ? 'md-priority md-priority--critical md-priority-token md-priority-token--high'
                             : fragment.priority === 'medium'
-                              ? 'md-priority md-priority--medium'
-                              : 'md-priority md-priority--low';
+                              ? 'md-priority md-priority--medium md-priority-token md-priority-token--medium'
+                              : 'md-priority md-priority--low md-priority-token md-priority-token--normal';
 
                     return (
                         <span key={`priority-${index}`} className={className}>
@@ -281,10 +281,9 @@ export function TaskInlineContent({
                         return null;
                     }
 
-                    const statusClass =
-                        fragment.status === 'deferred'
-                            ? 'md-task-status-token md-task-status-token--deferred'
-                            : '';
+                    const statusClass = fragment.status
+                        ? `md-task-status-token md-task-status-token--${fragment.status}`
+                        : 'md-task-status-token';
 
                     const content = (
                         <span key={`status-${index}`} className={statusClass}>

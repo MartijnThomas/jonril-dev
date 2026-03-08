@@ -18,7 +18,7 @@ type DailyTaskItem = {
     block_id: string | null;
     position: number;
     checked: boolean;
-    task_status: 'canceled' | 'deferred' | null;
+    task_status: 'canceled' | 'deferred' | 'starred' | 'question' | null;
     content: string;
     render_fragments: TaskRenderFragment[];
     due_date: string | null;

@@ -59,6 +59,18 @@ function priorityRangeClass(priority: Exclude<TaskPriority, null>): string {
     return 'md-priority-range md-priority-range--normal';
 }
 
+function priorityTokenClass(priority: Exclude<TaskPriority, null>): string {
+    if (priority === 'high') {
+        return 'md-priority-token md-priority-token--high';
+    }
+
+    if (priority === 'medium') {
+        return 'md-priority-token md-priority-token--medium';
+    }
+
+    return 'md-priority-token md-priority-token--normal';
+}
+
 function extractPriorityFromListItem(node: any): TaskPriority {
     let result: TaskPriority = null;
     let done = false;
@@ -128,6 +140,10 @@ function buildPriorityDecorations(doc: any): DecorationSet {
         }
 
         let tokenStartAbsolute = -1;
+        let tokenEndAbsolute = -1;
+        let tokenPriority: Exclude<TaskPriority, null> | null = null;
+        let separatorStartAbsolute = -1;
+        let separatorEndAbsolute = -1;
 
         paragraphNode.descendants((child: any, childPos: number) => {
             if (tokenStartAbsolute >= 0 || !child.isText || !child.text) {
@@ -141,12 +157,39 @@ function buildPriorityDecorations(doc: any): DecorationSet {
 
             tokenStartAbsolute =
                 pos + 1 + paragraphPos + 1 + childPos + match.tokenStart;
+            tokenEndAbsolute =
+                pos + 1 + paragraphPos + 1 + childPos + match.tokenEnd;
+            tokenPriority = match.priority;
+            const separatorChar = (child.text as string).charAt(match.tokenEnd);
+            if (separatorChar === ' ') {
+                separatorStartAbsolute = tokenEndAbsolute;
+                separatorEndAbsolute = tokenEndAbsolute + 1;
+            }
 
             return false;
         });
 
         if (tokenStartAbsolute < 0) {
             return;
+        }
+
+        if (tokenEndAbsolute > tokenStartAbsolute && tokenPriority) {
+            decorations.push(
+                Decoration.inline(tokenStartAbsolute, tokenEndAbsolute, {
+                    class: priorityTokenClass(tokenPriority),
+                }),
+            );
+        }
+
+        if (
+            separatorStartAbsolute >= 0 &&
+            separatorEndAbsolute > separatorStartAbsolute
+        ) {
+            decorations.push(
+                Decoration.inline(separatorStartAbsolute, separatorEndAbsolute, {
+                    class: 'md-task-marker-separator md-priority-separator',
+                }),
+            );
         }
 
         const paragraphContentEnd = pos + 1 + paragraphPos + paragraphNode.nodeSize - 1;
@@ -160,6 +203,31 @@ function buildPriorityDecorations(doc: any): DecorationSet {
             }),
         );
     });
+
+    return DecorationSet.create(doc, decorations);
+}
+
+function buildActiveMarkerNodeDecorations(
+    doc: any,
+    selectionFrom: number,
+): DecorationSet {
+    const decorations: Decoration[] = [];
+    const resolved = doc.resolve(selectionFrom);
+
+    for (let depth = resolved.depth; depth >= 0; depth -= 1) {
+        const node = resolved.node(depth);
+        if (node.type.name !== 'listItem' && node.type.name !== 'taskItem') {
+            continue;
+        }
+
+        const pos = resolved.before(depth);
+        decorations.push(
+            Decoration.node(pos, pos + node.nodeSize, {
+                class: 'md-marker-active',
+            }),
+        );
+        break;
+    }
 
     return DecorationSet.create(doc, decorations);
 }
@@ -178,6 +246,30 @@ export const ListItemPriorityExtension = Extension.create({
                         }
 
                         return buildPriorityDecorations(tr.doc);
+                    },
+                },
+                props: {
+                    decorations(state) {
+                        return this.getState(state);
+                    },
+                },
+            }),
+            new Plugin({
+                state: {
+                    init: (_, state) =>
+                        buildActiveMarkerNodeDecorations(
+                            state.doc,
+                            state.selection.from,
+                        ),
+                    apply: (tr, decorationSet, _oldState, newState) => {
+                        if (!tr.docChanged && !tr.selectionSet) {
+                            return decorationSet.map(tr.mapping, tr.doc);
+                        }
+
+                        return buildActiveMarkerNodeDecorations(
+                            newState.doc,
+                            newState.selection.from,
+                        );
                     },
                 },
                 props: {

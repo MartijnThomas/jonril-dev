@@ -41,7 +41,7 @@ type TaskItem = {
     block_id: string | null;
     position: number;
     checked: boolean;
-    task_status: 'canceled' | 'deferred' | null;
+    task_status: 'canceled' | 'deferred' | 'starred' | 'question' | null;
     priority: 'high' | 'medium' | 'normal' | null;
     content: string;
     render_fragments: TaskRenderFragment[];
