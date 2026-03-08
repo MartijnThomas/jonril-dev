@@ -9,10 +9,14 @@ import { toast } from 'sonner';
 import { TaskInlineContent } from '@/components/task-inline-content';
 import type { TaskRenderFragment } from '@/components/task-inline-content';
 import { TaskToggleCheckbox } from '@/components/task-toggle-checkbox';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import {
     Select,
     SelectContent,
@@ -31,11 +35,6 @@ import {
 } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
 
 type TaskItem = {
     id: number;

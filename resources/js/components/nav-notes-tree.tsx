@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { getColorBgClass, getColorTextClass } from '@/components/color-swatch-picker';
 import { getWorkspaceIconComponent } from '@/components/icon-picker';
 import {
     Collapsible,
@@ -19,6 +20,7 @@ import {
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { cn } from '@/lib/utils';
 import type { SidebarNoteTreeItem } from '@/types';
 
 type NotesTreeProps = {
@@ -50,16 +52,30 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
     const NoteIcon = item.icon
         ? getWorkspaceIconComponent(item.icon)
         : FileText;
+    const iconColorClass = getColorTextClass(item.icon_color ?? null);
+    const iconBgClass = getColorBgClass(item.icon_bg ?? null);
 
     if (!hasChildren) {
         return (
             <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive}>
-                    <Link href={item.href} prefetch>
-                        <Icon iconNode={NoteIcon} />
-                        <span>{item.title}</span>
-                    </Link>
-                </SidebarMenuButton>
+                <div className="flex items-center gap-1">
+                    <button
+                        type="button"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        className="pointer-events-none flex h-7 w-6 shrink-0 items-center justify-center rounded-md opacity-0"
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                        <Link href={item.href} prefetch>
+                            <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
+                                <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
+                            </span>
+                            <span>{item.title}</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </div>
             </SidebarMenuItem>
         );
     }
@@ -84,7 +100,9 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
 
                     <SidebarMenuButton asChild isActive={isActive}>
                         <Link href={item.href} prefetch>
-                            <Icon iconNode={NoteIcon} />
+                            <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
+                                <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
+                            </span>
                             <span>{item.title}</span>
                         </Link>
                     </SidebarMenuButton>
@@ -133,16 +151,30 @@ function SubTreeNode({
     const NoteIcon = item.icon
         ? getWorkspaceIconComponent(item.icon)
         : FileText;
+    const iconColorClass = getColorTextClass(item.icon_color ?? null);
+    const iconBgClass = getColorBgClass(item.icon_bg ?? null);
 
     if (!hasChildren) {
         return (
             <SidebarMenuSubItem>
-                <SidebarMenuSubButton asChild isActive={isActive}>
-                    <Link href={item.href} prefetch>
-                        <Icon iconNode={NoteIcon} className="h-4 w-4" />
-                        <span>{item.title}</span>
-                    </Link>
-                </SidebarMenuSubButton>
+                <div className="flex items-center gap-1">
+                    <button
+                        type="button"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        className="pointer-events-none flex h-7 w-6 shrink-0 items-center justify-center rounded-md opacity-0"
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                    <SidebarMenuSubButton asChild isActive={isActive}>
+                        <Link href={item.href} prefetch>
+                            <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
+                                <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
+                            </span>
+                            <span>{item.title}</span>
+                        </Link>
+                    </SidebarMenuSubButton>
+                </div>
             </SidebarMenuSubItem>
         );
     }
@@ -167,7 +199,9 @@ function SubTreeNode({
 
                     <SidebarMenuSubButton asChild isActive={isActive}>
                         <Link href={item.href} prefetch>
-                            <Icon iconNode={NoteIcon} className="h-4 w-4" />
+                            <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
+                                <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
+                            </span>
                             <span>{item.title}</span>
                         </Link>
                     </SidebarMenuSubButton>

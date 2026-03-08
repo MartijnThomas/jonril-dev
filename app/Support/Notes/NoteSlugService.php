@@ -134,6 +134,7 @@ class NoteSlugService
             $current = $suffix === 0 ? $base : "{$base}-{$suffix}";
 
             $exists = Note::query()
+                ->withTrashed()
                 ->where('workspace_id', $note->workspace_id)
                 ->where('slug', $current)
                 ->where('id', '!=', $note->id)

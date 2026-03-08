@@ -181,14 +181,14 @@ export function useMenuNavigation<T>({
     orientation,
   ])
 
-  useEffect(() => {
-    if (query) {
-      setSelectedIndex(autoSelectFirstItem ? 0 : -1)
-    }
-  }, [query, autoSelectFirstItem])
+  const effectiveSelectedIndex = query
+    ? autoSelectFirstItem
+      ? 0
+      : -1
+    : selectedIndex
 
   return {
-    selectedIndex: items.length ? selectedIndex : undefined,
+    selectedIndex: items.length ? effectiveSelectedIndex : undefined,
     setSelectedIndex,
   }
 }

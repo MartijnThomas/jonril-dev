@@ -7,6 +7,7 @@ import {
     PanelRightOpen,
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { NoteHeaderActions } from '@/components/note-header-actions';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
@@ -15,6 +16,13 @@ type JournalPageProps = {
     noteType?: string;
     journalGranularity?: string | null;
     journalPeriod?: string | null;
+    noteActions?: {
+        id: string;
+        title: string;
+        canRename?: boolean;
+        canDelete?: boolean;
+        canClear?: boolean;
+    } | null;
 };
 
 function parseWeekly(period: string): Date | null {
@@ -169,6 +177,15 @@ export function AppSidebarHeader({
             <div className="flex min-w-0 flex-1 items-center gap-2">
                 <SidebarTrigger className="-ml-1" />
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
+                {pageProps.noteActions ? (
+                    <NoteHeaderActions
+                        noteId={pageProps.noteActions.id}
+                        title={pageProps.noteActions.title}
+                        canRename={Boolean(pageProps.noteActions.canRename)}
+                        canDelete={Boolean(pageProps.noteActions.canDelete)}
+                        canClear={Boolean(pageProps.noteActions.canClear)}
+                    />
+                ) : null}
             </div>
             <div className="flex items-center gap-2">
                 {isJournal && (

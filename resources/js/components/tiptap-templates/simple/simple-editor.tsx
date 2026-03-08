@@ -13,9 +13,7 @@ import {
 } from '@/components/tiptap-templates/simple/editor-toolbar';
 import { createSimpleEditorExtensions } from '@/components/tiptap-templates/simple/simple-editor-extensions';
 import { useEditorSave } from '@/components/tiptap-templates/simple/use-editor-save';
-import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
-import { useWindowSize } from '@/hooks/use-window-size';
 import { sanitizeIconStyleToken } from '@/lib/icon-style';
 import type { EditorSaveStatus } from '@/types';
 
@@ -129,8 +127,10 @@ export function SimpleEditor({
     onDebugJsonChange,
     onContentStatsChange,
 }: SimpleEditorProps) {
-    const isMobile = useIsBreakpoint();
-    const { height } = useWindowSize();
+    const isMobileBreakpoint = useIsBreakpoint();
+    const isMobile =
+        isMobileBreakpoint &&
+        (typeof window === 'undefined' ? true : window.innerWidth < 768);
 
     const [mobileView, setMobileView] = useState<
         'main' | 'highlighter' | 'link'
@@ -148,6 +148,7 @@ export function SimpleEditor({
 
     const toolbarRef = useRef<HTMLDivElement>(null);
     const previousNoteIdRef = useRef<string | null>(null);
+    const previousLoadedContentRef = useRef<SimpleEditorContent | null>(null);
 
     const extensions = useMemo(
         () =>
@@ -221,16 +222,50 @@ export function SimpleEditor({
 
         if (previousNoteIdRef.current === null) {
             previousNoteIdRef.current = id;
+            previousLoadedContentRef.current = initialContent;
             return;
         }
 
-        if (previousNoteIdRef.current === id) {
-            return;
-        }
+        const noteChanged = previousNoteIdRef.current !== id;
+        const contentChanged = previousLoadedContentRef.current !== initialContent;
 
-        previousNoteIdRef.current = id;
-        editor.commands.setContent(initialContent);
+        if (noteChanged || contentChanged) {
+            previousNoteIdRef.current = id;
+            previousLoadedContentRef.current = initialContent;
+            editor.commands.setContent(initialContent);
+        }
     }, [editor, id, initialContent]);
+
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+
+        const handleFocusShortcut = (event: KeyboardEvent) => {
+            const isFocusShortcut =
+                (event.metaKey || event.ctrlKey) &&
+                event.shiftKey &&
+                event.key.toLowerCase() === 'e';
+
+            if (!isFocusShortcut || event.defaultPrevented || event.isComposing) {
+                return;
+            }
+
+            event.preventDefault();
+
+            requestAnimationFrame(() => {
+                if (!editor.isDestroyed) {
+                    editor.commands.focus();
+                }
+            });
+        };
+
+        window.addEventListener('keydown', handleFocusShortcut);
+
+        return () => {
+            window.removeEventListener('keydown', handleFocusShortcut);
+        };
+    }, [editor]);
 
     useEffect(() => {
         if (!editor) {
@@ -284,11 +319,6 @@ export function SimpleEditor({
     useEffect(() => {
         onSaveStatusChange?.(status);
     }, [onSaveStatusChange, status]);
-
-    const rect = useCursorVisibility({
-        editor,
-        overlayHeight: toolbarRef.current?.getBoundingClientRect().height ?? 0,
-    });
 
     useEffect(() => {
         if (!editor || !onDebugJsonChange) {
@@ -382,7 +412,7 @@ export function SimpleEditor({
     ]);
 
     return (
-        <div className="mx-auto mb-12 max-w-3xl px-8">
+        <div className="mx-auto max-w-3xl px-8">
             <EditorContext.Provider value={{ editor }}>
                 {showRelatedPanel ? (
                     <div className="mt-4">
@@ -415,8 +445,6 @@ export function SimpleEditor({
 
                 {isMobile && (
                     <MobileEditorToolbar
-                        height={height}
-                        rectY={rect.y}
                         mobileView={mobileView}
                         onBack={() => setMobileView('main')}
                         onHighlighterClick={() => setMobileView('highlighter')}
@@ -433,7 +461,7 @@ export function SimpleEditor({
                 <EditorContent
                     editor={editor}
                     role="presentation"
-                    className="simple-editor-content mt-8 pb-12"
+                    className="simple-editor-content mt-8"
                 />
             </EditorContext.Provider>
         </div>

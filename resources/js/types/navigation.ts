@@ -20,5 +20,7 @@ export type SidebarNoteTreeItem = {
     title: string;
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: string | null;
+    icon_color?: string | null;
+    icon_bg?: string | null;
     children: SidebarNoteTreeItem[];
 };

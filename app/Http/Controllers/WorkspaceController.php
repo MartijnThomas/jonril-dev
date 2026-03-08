@@ -51,8 +51,8 @@ class WorkspaceController extends Controller
         $workspace = Workspace::query()->create([
             'owner_id' => $user->id,
             'name' => trim($data['name']),
-            'color' => (string) ($data['color'] ?? 'slate'),
-            'icon' => (string) ($data['icon'] ?? 'briefcase'),
+            'color' => array_key_exists('color', $data) ? $data['color'] : null,
+            'icon' => array_key_exists('icon', $data) ? $data['icon'] : null,
         ]);
 
         $workspace->users()->attach($user->id, [
@@ -103,10 +103,10 @@ class WorkspaceController extends Controller
 
         $workspace->name = trim($data['name']);
         if (array_key_exists('color', $data)) {
-            $workspace->color = (string) ($data['color'] ?: 'slate');
+            $workspace->color = $data['color'] ?: null;
         }
         if (array_key_exists('icon', $data)) {
-            $workspace->icon = (string) ($data['icon'] ?: 'briefcase');
+            $workspace->icon = $data['icon'] ?: null;
         }
         $workspace->save();
 
@@ -268,8 +268,8 @@ class WorkspaceController extends Controller
             'workspace' => [
                 'id' => $workspace->id,
                 'name' => $workspace->name,
-                'color' => (string) ($workspace->color ?: 'slate'),
-                'icon' => (string) ($workspace->icon ?: 'briefcase'),
+                'color' => $workspace->color,
+                'icon' => $workspace->icon,
                 'owner_id' => (int) $workspace->owner_id,
             ],
             'members' => $members,

@@ -4,7 +4,6 @@ import { forwardRef, useCallback, useState } from "react"
 import { ChevronDownIcon } from "@/components/tiptap-icons/chevron-down-icon"
 
 // --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Tiptap UI ---
 import { HeadingButton } from "@/components/tiptap-ui/heading-button"
@@ -14,13 +13,14 @@ import { useHeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-
 // --- UI Primitives ---
 import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
 import { Button, ButtonGroup } from "@/components/tiptap-ui-primitive/button"
+import { Card, CardBody } from "@/components/tiptap-ui-primitive/card"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/tiptap-ui-primitive/dropdown-menu"
-import { Card, CardBody } from "@/components/tiptap-ui-primitive/card"
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 export interface HeadingDropdownMenuProps
   extends Omit<ButtonProps, "type">, UseHeadingDropdownMenuConfig {

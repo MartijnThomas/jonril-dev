@@ -8,10 +8,11 @@ import {
 } from "@tiptap/pm/state"
 import { cellAround, CellSelection } from "@tiptap/pm/tables"
 import {
-  findParentNodeClosestToPos,
-  type Editor,
-  type NodeWithPos,
+  findParentNodeClosestToPos
+  
+  
 } from "@tiptap/react"
+import type {Editor, NodeWithPos} from "@tiptap/react";
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 

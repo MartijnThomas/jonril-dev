@@ -3,10 +3,8 @@
 import { forwardRef, useCallback } from "react"
 
 // --- Lib ---
-import { parseShortcutKeys } from "@/lib/tiptap-utils"
 
 // --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Tiptap UI ---
 import type {
@@ -19,9 +17,11 @@ import {
 } from "@/components/tiptap-ui/text-align-button"
 
 // --- UI Primitives ---
+import { Badge } from "@/components/tiptap-ui-primitive/badge"
 import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
 import { Button } from "@/components/tiptap-ui-primitive/button"
-import { Badge } from "@/components/tiptap-ui-primitive/badge"
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
+import { parseShortcutKeys } from "@/lib/tiptap-utils"
 
 type IconProps = React.SVGProps<SVGSVGElement>
 type IconComponent = ({ className, ...props }: IconProps) => React.ReactElement

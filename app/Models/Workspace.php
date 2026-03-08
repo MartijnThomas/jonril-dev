@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,6 +14,10 @@ class Workspace extends Model
 {
     use HasFactory, HasUuids;
 
+    public const DEFAULT_COLOR = 'slate';
+
+    public const DEFAULT_ICON = 'briefcase';
+
     protected $fillable = [
         'owner_id',
         'name',
@@ -21,6 +26,24 @@ class Workspace extends Model
         'mention_suggestions',
         'hashtag_suggestions',
     ];
+
+    protected function color(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value): string => ($value !== null && trim($value) !== '')
+                ? trim($value)
+                : self::DEFAULT_COLOR,
+        );
+    }
+
+    protected function icon(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value): string => ($value !== null && trim($value) !== '')
+                ? trim($value)
+                : self::DEFAULT_ICON,
+        );
+    }
 
     /**
      * @return array<string, string>

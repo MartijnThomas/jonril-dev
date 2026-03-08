@@ -105,7 +105,6 @@ export function useElementRect({
 
   useEffect(() => {
     if (!enabled || !isClientSide()) {
-      setRect(initialRect)
       return
     }
 
@@ -136,7 +135,6 @@ export function useElementRect({
 
     return () => {
       cleanup.forEach((fn) => fn())
-      setRect(initialRect)
     }
   }, [enabled, getTargetElement, updateRect, useResizeObserver])
 

@@ -1,8 +1,17 @@
 import { router, usePage } from '@inertiajs/react';
-import { format, getISOWeek, getISOWeekYear, parseISO } from 'date-fns';
+import { addMonths, format, getISOWeek, getISOWeekYear, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
-import { useMemo } from 'react';
+import {
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
 type JournalPageProps = {
@@ -137,6 +146,7 @@ export function RightSidebarCalendar() {
     const selectedWeekClass =
         CALENDAR_SELECTED_WEEK_CLASS[workspaceColor] ??
         CALENDAR_SELECTED_WEEK_CLASS.slate;
+    const dateLocale = language === 'en' ? enUS : nl;
     const activeDailyDate =
         pageProps.noteType === 'journal' &&
         pageProps.journalGranularity === 'daily' &&
@@ -154,21 +164,169 @@ export function RightSidebarCalendar() {
     const calendarKey = anchorDate
         ? format(anchorDate, 'yyyy-MM-dd')
         : 'default-month';
+    const [viewMonth, setViewMonth] = useState<Date>(anchorDate ?? new Date());
+    const [monthPickerOpen, setMonthPickerOpen] = useState(false);
+    const [pickerYear, setPickerYear] = useState(viewMonth.getFullYear());
+
+    const monthLabel = format(viewMonth, 'LLLL yyyy', { locale: dateLocale });
+    const monthNames = useMemo(
+        () =>
+            Array.from({ length: 12 }, (_, monthIndex) =>
+                format(new Date(pickerYear, monthIndex, 1), 'LLLL', {
+                    locale: dateLocale,
+                }),
+            ),
+        [dateLocale, pickerYear],
+    );
 
     const visitJournal = (path: string) => {
         router.get(path, {}, { preserveScroll: true, preserveState: false });
     };
 
     return (
-        <section className="mx-1 mb-2 mt-0 space-y-1 overflow-hidden rounded-xl border border-sidebar-border bg-background shadow-sm">
+        <section className="space-y-1 overflow-hidden">
+            <div className="flex h-16 items-center justify-between px-2">
+                <div className="flex items-center gap-0.5">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-(--cell-size) p-0"
+                        aria-label="Go to the Previous Year"
+                        onClick={() =>
+                            setViewMonth((current) => addMonths(current, -12))
+                        }
+                    >
+                        <ChevronsLeft className="size-4" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-(--cell-size) p-0"
+                        aria-label="Go to the Previous Month"
+                        onClick={() =>
+                            setViewMonth((current) => addMonths(current, -1))
+                        }
+                    >
+                        <ChevronLeft className="size-4" />
+                    </Button>
+                </div>
+
+                <Popover
+                    open={monthPickerOpen}
+                    onOpenChange={(nextOpen) => {
+                        setMonthPickerOpen(nextOpen);
+                        if (nextOpen) {
+                            setPickerYear(viewMonth.getFullYear());
+                        }
+                    }}
+                >
+                    <PopoverTrigger asChild>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-8 gap-1.5 px-2 text-sm font-medium capitalize"
+                        >
+                            {monthLabel}
+                            <ChevronDown className="size-3.5 opacity-70" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="center" className="w-64 p-2">
+                        <div className="mb-2 flex items-center justify-between">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label="Previous Year"
+                                onClick={() => setPickerYear((year) => year - 1)}
+                            >
+                                <ChevronLeft className="size-4" />
+                            </Button>
+                            <div className="text-sm font-medium">{pickerYear}</div>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label="Next Year"
+                                onClick={() => setPickerYear((year) => year + 1)}
+                            >
+                                <ChevronRight className="size-4" />
+                            </Button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-1">
+                            {monthNames.map((name, index) => {
+                                const isSelected =
+                                    viewMonth.getFullYear() === pickerYear &&
+                                    viewMonth.getMonth() === index;
+
+                                return (
+                                    <Button
+                                        key={`${name}-${index}`}
+                                        type="button"
+                                        variant={isSelected ? 'secondary' : 'ghost'}
+                                        className="h-8 justify-center px-2 text-xs capitalize"
+                                        onClick={() => {
+                                            setViewMonth(new Date(pickerYear, index, 1));
+                                            setMonthPickerOpen(false);
+                                        }}
+                                    >
+                                        {name}
+                                    </Button>
+                                );
+                            })}
+                        </div>
+                    </PopoverContent>
+                </Popover>
+
+                <div className="flex items-center gap-0.5">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-(--cell-size) p-0"
+                        aria-label="Go to the Next Month"
+                        onClick={() =>
+                            setViewMonth((current) => addMonths(current, 1))
+                        }
+                    >
+                        <ChevronRight className="size-4" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-(--cell-size) p-0"
+                        aria-label="Go to the Next Year"
+                        onClick={() =>
+                            setViewMonth((current) => addMonths(current, 12))
+                        }
+                    >
+                        <ChevronsRight className="size-4" />
+                    </Button>
+                </div>
+            </div>
+
             <Calendar
                 key={calendarKey}
-                locale={language === 'en' ? enUS : nl}
+                locale={dateLocale}
+                month={viewMonth}
+                onMonthChange={setViewMonth}
                 defaultMonth={anchorDate ?? new Date()}
                 showWeekNumber
                 mode="single"
-                className="w-full bg-transparent !p-1 [--cell-size:2.1rem]"
+                className="w-full bg-transparent !p-0 [--cell-size:2.1rem]"
                 classNames={{
+                    months: 'relative flex w-full',
+                    month: 'flex w-full flex-col gap-1',
+                    nav: 'hidden',
+                    month_caption: 'hidden',
+                    table: 'w-full table-fixed border-collapse',
+                    weekdays: 'w-full',
+                    week: 'mt-1 w-full',
                     day: 'group/day relative h-(--cell-size) w-(--cell-size) p-0 text-center text-sm align-middle select-none',
                     day_button: selectedDayClass,
                 }}

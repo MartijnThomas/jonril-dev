@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from "react"
 import type { Editor } from "@tiptap/react"
+import { useCallback, useEffect, useState } from "react"
 
 // --- Hooks ---
+import { LinkIcon } from "@/components/tiptap-icons/link-icon"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Icons ---
-import { LinkIcon } from "@/components/tiptap-icons/link-icon"
 
 // --- Lib ---
 import {
@@ -107,18 +107,14 @@ export function shouldShowLinkButton(props: {
  */
 export function useLinkHandler(props: LinkHandlerProps) {
   const { editor, onSetLink } = props
-  const [url, setUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!editor) return
-
-    // Get URL immediately on mount
-    const { href } = editor.getAttributes("link")
-
-    if (isLinkActive(editor) && url === null) {
-      setUrl(href || "")
+  const [url, setUrl] = useState<string | null>(() => {
+    if (!editor || !isLinkActive(editor)) {
+      return null
     }
-  }, [editor, url])
+
+    const { href } = editor.getAttributes("link")
+    return href || ""
+  })
 
   useEffect(() => {
     if (!editor) return

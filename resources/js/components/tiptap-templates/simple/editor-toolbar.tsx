@@ -53,7 +53,24 @@ export function MainToolbarContent({
 
     return (
         <>
-            {!compact && <Spacer />}
+            {showAdvanced && isMobile && onCommandPaletteClick && (
+                <>
+                    <ToolbarGroup>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={onCommandPaletteClick}
+                            aria-label="Open command palette"
+                        >
+                            <Search className="tiptap-button-icon" />
+                        </Button>
+                    </ToolbarGroup>
+
+                    <ToolbarSeparator />
+                </>
+            )}
+
+            {!compact && !isMobile && <Spacer />}
 
             {showAdvanced && (
                 <>
@@ -120,22 +137,12 @@ export function MainToolbarContent({
                 </ToolbarGroup>
             )}
 
-            {!compact && <Spacer />}
+            {!compact && !isMobile && <Spacer />}
             {!compact && isMobile && <ToolbarSeparator />}
 
             {showAdvanced && (
                 <ToolbarGroup>
                     <ThemeToggle />
-                    {isMobile && onCommandPaletteClick && (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={onCommandPaletteClick}
-                            aria-label="Open command palette"
-                        >
-                            <Search className="tiptap-button-icon" />
-                        </Button>
-                    )}
                 </ToolbarGroup>
             )}
         </>
@@ -210,8 +217,6 @@ export function EditorBubbleToolbar({ editor }: EditorBubbleToolbarProps) {
 }
 
 type MobileEditorToolbarProps = {
-    height: number;
-    rectY: number;
     mobileView: 'main' | 'highlighter' | 'link';
     onBack: () => void;
     onHighlighterClick: () => void;
@@ -221,8 +226,6 @@ type MobileEditorToolbarProps = {
 };
 
 export function MobileEditorToolbar({
-    height,
-    rectY,
     mobileView,
     onBack,
     onHighlighterClick,
@@ -234,7 +237,7 @@ export function MobileEditorToolbar({
         <Toolbar
             ref={toolbarRef}
             style={{
-                bottom: `calc(100% - ${height - rectY}px)`,
+                bottom: 0,
             }}
         >
             {mobileView === 'main' ? (

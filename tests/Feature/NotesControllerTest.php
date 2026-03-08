@@ -38,6 +38,325 @@ test('show resolves notes by slug', function () {
         );
 });
 
+test('rename updates db title and rebuilds parent and child slugs', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $parent = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Project',
+        'slug' => 'project',
+        'properties' => [
+            'title' => 'Display title should not change slug',
+        ],
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Child note',
+        'slug' => 'project/child-note',
+        'parent_id' => $parent->id,
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->patch("/notes/{$parent->id}/rename", [
+            'title' => 'Project X',
+        ]);
+
+    $response->assertRedirect('/notes/project-x');
+
+    $parent->refresh();
+    $child->refresh();
+
+    expect($parent->getRawOriginal('title'))->toBe('Project X');
+    expect($parent->slug)->toBe('project-x');
+    expect($child->slug)->toBe('project-x/child-note');
+    expect(data_get($parent->properties, 'title'))->toBe('Display title should not change slug');
+});
+
+test('rename also updates first heading level one when present', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Original',
+        'slug' => 'original',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 1],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Original'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Body'],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch("/notes/{$note->id}/rename", [
+            'title' => 'Renamed',
+        ])
+        ->assertRedirect('/notes/renamed');
+
+    $note->refresh();
+    expect(data_get($note->content, 'content.0.content.0.text'))->toBe('Renamed');
+});
+
+test('rename does not modify content when no heading level one exists', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $originalContent = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'paragraph',
+                'content' => [
+                    ['type' => 'text', 'text' => 'No heading'],
+                ],
+            ],
+        ],
+    ];
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Original',
+        'slug' => 'original-2',
+        'content' => $originalContent,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch("/notes/{$note->id}/rename", [
+            'title' => 'Renamed no h1',
+        ])
+        ->assertRedirect('/notes/renamed-no-h1');
+
+    $note->refresh();
+    expect($note->content)->toBe($originalContent);
+});
+
+test('destroy soft deletes note and redirects to notes list', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Delete me',
+        'slug' => 'delete-me',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->delete("/notes/{$note->id}")
+        ->assertRedirect('/notes/list');
+
+    $this->assertSoftDeleted('notes', [
+        'id' => $note->id,
+    ]);
+});
+
+test('clear removes content and properties for regular note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Clear me',
+        'slug' => 'clear-me',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                ['type' => 'heading', 'attrs' => ['level' => 1], 'content' => [['type' => 'text', 'text' => 'Clear me']]],
+                ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Some body']]],
+            ],
+        ],
+        'properties' => [
+            'context' => 'acme',
+            'tags' => ['one', 'two'],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch("/notes/{$note->id}/clear")
+        ->assertStatus(302);
+
+    $note->refresh();
+
+    expect($note->content)->toBe([
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1],
+                'content' => [
+                    ['type' => 'text', 'text' => 'Clear me'],
+                ],
+            ],
+        ],
+    ]);
+    expect($note->properties)->toBe([]);
+    expect($note->getRawOriginal('title'))->toBe('Clear me');
+});
+
+test('clear removes content and properties for journal note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-08',
+        'title' => 'Custom journal title',
+        'slug' => 'journal/daily/2026-03-08',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Daily text']]],
+            ],
+        ],
+        'properties' => [
+            'tags' => ['daily'],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch("/notes/{$note->id}/clear")
+        ->assertStatus(302);
+
+    $note->refresh();
+
+    expect($note->content)->toBe([
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1],
+                'content' => [
+                    ['type' => 'text', 'text' => 'Custom journal title'],
+                ],
+            ],
+        ],
+    ]);
+    expect($note->properties)->toBe([]);
+    expect($note->getRawOriginal('title'))->toBe('Custom journal title');
+});
+
+test('soft deleted notes are not resolved by slug and can be restored', function () {
+    $user = User::factory()->create();
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Soft delete test',
+        'slug' => 'soft-delete-test',
+    ]);
+
+    $note->delete();
+
+    $this->assertSoftDeleted('notes', [
+        'id' => $note->id,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/soft-delete-test')
+        ->assertNotFound();
+
+    $note->restore();
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/soft-delete-test')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteId', $note->id),
+        );
+});
+
+test('deleting a note soft deletes all descendants recursively', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Root',
+        'slug' => 'root',
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Child',
+        'slug' => 'child',
+        'parent_id' => $root->id,
+    ]);
+    $grandchild = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Grandchild',
+        'slug' => 'grandchild',
+        'parent_id' => $child->id,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->delete("/notes/{$root->id}")
+        ->assertRedirect(route('notes.index'));
+
+    $this->assertSoftDeleted('notes', ['id' => $root->id]);
+    $this->assertSoftDeleted('notes', ['id' => $child->id]);
+    $this->assertSoftDeleted('notes', ['id' => $grandchild->id]);
+});
+
+test('restoring a soft deleted note restores descendants recursively', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Root',
+        'slug' => 'root',
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Child',
+        'slug' => 'child',
+        'parent_id' => $root->id,
+    ]);
+    $grandchild = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Grandchild',
+        'slug' => 'grandchild',
+        'parent_id' => $child->id,
+    ]);
+
+    $root->delete();
+
+    $root->restore();
+
+    $this->assertDatabaseHas('notes', [
+        'id' => $root->id,
+        'deleted_at' => null,
+    ]);
+    $this->assertDatabaseHas('notes', [
+        'id' => $child->id,
+        'deleted_at' => null,
+    ]);
+    $this->assertDatabaseHas('notes', [
+        'id' => $grandchild->id,
+        'deleted_at' => null,
+    ]);
+});
+
 test('notes list page shows only root notes initially for normal notes', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
@@ -145,6 +464,36 @@ test('notes tree endpoint returns task totals and open counts per note', functio
 
     expect($createdAt)->toBeString();
     expect($updatedAt)->toBeString();
+});
+
+test('notes tree endpoint uses model accessor values for icon metadata and taxonomy', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Acme',
+        'properties' => [
+            'icon' => 'alarm-clock',
+            'icon-color' => 'blue',
+            'icon-bg' => 'stone',
+            'context' => 'client-a',
+            'tags' => ['#ops', ' platform '],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', $note->id)
+        ->assertJsonPath('nodes.0.icon', 'alarm-clock')
+        ->assertJsonPath('nodes.0.icon_color', 'blue')
+        ->assertJsonPath('nodes.0.icon_bg', 'stone')
+        ->assertJsonPath('nodes.0.context', 'client-a')
+        ->assertJsonPath('nodes.0.tags.0', 'ops')
+        ->assertJsonPath('nodes.0.tags.1', 'platform')
+        ->assertJsonPath('nodes.0.path', 'Acme');
 });
 
 test('notes tree endpoint returns dash-ready null word count until first save', function () {
@@ -703,6 +1052,11 @@ test('sidebar notes tree excludes journal notes and keeps hierarchy', function (
     $root = $user->notes()->create([
         'title' => 'Acme',
         'type' => 'note',
+        'properties' => [
+            'icon' => 'alarm-clock',
+            'icon-color' => 'blue',
+            'icon-bg' => 'stone',
+        ],
     ]);
 
     $project = $user->notes()->create([
@@ -730,6 +1084,9 @@ test('sidebar notes tree excludes journal notes and keeps hierarchy', function (
         ->has('notesTree', 1)
         ->where('notesTree.0.id', $root->id)
         ->where('notesTree.0.title', 'Acme')
+        ->where('notesTree.0.icon', 'alarm-clock')
+        ->where('notesTree.0.icon_color', 'blue')
+        ->where('notesTree.0.icon_bg', 'stone')
         ->has('notesTree.0.children', 1)
         ->where('notesTree.0.children.0.id', $project->id)
         ->where('notesTree.0.children.0.title', 'Project 1')
@@ -737,6 +1094,30 @@ test('sidebar notes tree excludes journal notes and keeps hierarchy', function (
         ->where('notesTree.0.children.0.children.0.id', $leaf->id)
         ->where('notesTree.0.children.0.children.0.title', 'Some note'),
     );
+});
+
+test('notes trees show Untitled when note title is empty', function () {
+    $user = User::factory()->create();
+
+    $note = $user->notes()->create([
+        'title' => '   ',
+        'type' => Note::TYPE_NOTE,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/tree')
+        ->assertOk()
+        ->assertJsonPath('nodes.0.id', $note->id)
+        ->assertJsonPath('nodes.0.title', 'Untitled');
+
+    $this
+        ->actingAs($user)
+        ->get(route('notes.show', ['note' => $note->id], absolute: false))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('notesTree.0.id', $note->id)
+            ->where('notesTree.0.title', 'Untitled'),
+        );
 });
 
 test('show returns breadcrumb path for the current note', function () {

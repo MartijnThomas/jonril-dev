@@ -32,4 +32,36 @@ class NoteObserver
         NoteTask::query()->where('note_id', $note->id)->delete();
         NoteHeading::query()->where('note_id', $note->id)->delete();
     }
+
+    public function deleting(Note $note): void
+    {
+        if ($note->isForceDeleting()) {
+            $note->children()
+                ->withTrashed()
+                ->get()
+                ->each(function (Note $child): void {
+                    $child->forceDelete();
+                });
+
+            return;
+        }
+
+        $note->children()->get()->each(function (Note $child): void {
+            $child->delete();
+        });
+    }
+
+    public function restored(Note $note): void
+    {
+        $note->children()
+            ->withTrashed()
+            ->whereNotNull('deleted_at')
+            ->get()
+            ->each(function (Note $child): void {
+                $child->restore();
+            });
+
+        $this->noteTaskIndexer->reindexNote($note);
+        $this->noteHeadingIndexer->reindexNote($note);
+    }
 }

@@ -10,6 +10,10 @@ test('command search returns note results and excludes journal by default', func
         'type' => Note::TYPE_NOTE,
         'title' => 'Project Atlas',
         'slug' => 'project-atlas',
+        'properties' => [
+            'icon' => 'rocket',
+            'icon-color' => 'orange',
+        ],
     ]);
 
     $journal = $user->notes()->create([
@@ -24,7 +28,11 @@ test('command search returns note results and excludes journal by default', func
         ->getJson('/search/command?mode=notes&q=project')
         ->assertOk()
         ->assertJsonPath('mode', 'notes')
-        ->assertJsonPath('items.0.id', $note->id);
+        ->assertJsonPath('items.0.id', $note->id)
+        ->assertJsonPath('items.0.icon', 'rocket')
+        ->assertJsonPath('items.0.icon_color', 'orange')
+        ->assertJsonPath('items.0.icon_bg', null)
+        ->assertJsonPath('items.0.path', 'Project Atlas');
 
     $this
         ->actingAs($user)
@@ -38,7 +46,9 @@ test('command search returns note results and excludes journal by default', func
         ->getJson('/search/command?mode=notes&q=journal&include_journal=1')
         ->assertOk()
         ->assertJsonPath('mode', 'notes')
-        ->assertJsonPath('items.0.id', $journal->id);
+        ->assertJsonPath('items.0.id', $journal->id)
+        ->assertJsonPath('items.0.icon', 'calendar_days')
+        ->assertJsonPath('items.0.icon_color', 'black');
 });
 
 test('command search returns heading results with anchor links', function () {
@@ -74,5 +84,6 @@ test('command search returns heading results with anchor links', function () {
         ->assertJsonPath('mode', 'headings')
         ->assertJsonPath('items.0.note_id', $note->id)
         ->assertJsonPath('items.0.heading_id', 'heading-123')
-        ->assertJsonPath('items.0.href', '/notes/specs#heading-123');
+        ->assertJsonPath('items.0.href', '/notes/specs#heading-123')
+        ->assertJsonPath('items.0.path', 'Specs');
 });

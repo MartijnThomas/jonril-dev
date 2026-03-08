@@ -147,7 +147,10 @@ export default function AppSidebarLayout({
                     </div>
                 </div>
             </AppContent>
-            <AppRightSidebar open={isRightSidebarOpen}>
+            <AppRightSidebar
+                open={isRightSidebarOpen}
+                onClose={() => setIsRightSidebarOpen(false)}
+            >
                 {rightSidebar}
             </AppRightSidebar>
             <AppCommandPalette />

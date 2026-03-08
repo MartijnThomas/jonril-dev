@@ -5,6 +5,8 @@ namespace App\Http\Middleware;
 use App\Models\Note;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Facades\App;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -37,6 +39,9 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $locale = $this->resolveLocale($request);
+        App::setLocale($locale);
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
@@ -48,7 +53,18 @@ class HandleInertiaRequests extends Middleware
             'notesTree' => fn () => $this->buildNotesTree($request),
             'sidebarOpen' => $this->sidebarDefaultOpenState($request, 'left'),
             'rightSidebarOpen' => $this->sidebarDefaultOpenState($request, 'right'),
+            'locale' => $locale,
+            'translations' => fn () => [
+                'ui' => Lang::get('ui', [], $locale),
+            ],
         ];
+    }
+
+    private function resolveLocale(Request $request): string
+    {
+        $language = strtolower((string) data_get($request->user()?->settings, 'language', app()->getLocale()));
+
+        return in_array($language, ['nl', 'en'], true) ? $language : 'en';
     }
 
     private function sidebarDefaultOpenState(Request $request, string $side): bool
@@ -70,7 +86,16 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array<int, array{id: string, title: string, href: string, parent_id: string|null, children: array}>
+     * @return array<int, array{
+     *   id: string,
+     *   title: string,
+     *   href: string,
+     *   icon: string|null,
+     *   icon_color: string|null,
+     *   icon_bg: string|null,
+     *   parent_id: string|null,
+     *   children: array
+     * }>
      */
     private function buildNotesTree(Request $request): array
     {
@@ -95,16 +120,13 @@ class HandleInertiaRequests extends Middleware
 
         $nodes = [];
         foreach ($notes as $note) {
-            $properties = is_array($note->properties) ? $note->properties : [];
-            $icon = isset($properties['icon']) && is_string($properties['icon'])
-                ? trim((string) $properties['icon'])
-                : null;
-
             $nodes[$note->id] = [
                 'id' => $note->id,
-                'title' => $note->title ?? 'Untitled',
+                'title' => $note->display_title,
                 'href' => '/notes/'.($note->slug ?: $note->id),
-                'icon' => $icon !== '' ? $icon : null,
+                'icon' => $note->icon,
+                'icon_color' => $note->icon_color,
+                'icon_bg' => $note->icon_bg,
                 'parent_id' => $note->parent_id,
                 'children' => [],
             ];
@@ -172,8 +194,8 @@ class HandleInertiaRequests extends Middleware
             ->map(fn ($workspace) => [
                 'id' => $workspace->id,
                 'name' => $workspace->name,
-                'color' => (string) ($workspace->color ?: 'slate'),
-                'icon' => (string) ($workspace->icon ?: 'briefcase'),
+                'color' => $workspace->color,
+                'icon' => $workspace->icon,
                 'role' => (string) ($workspace->pivot->role ?? 'member'),
             ])
             ->values()
@@ -203,8 +225,8 @@ class HandleInertiaRequests extends Middleware
         return [
             'id' => $workspace->id,
             'name' => $workspace->name,
-            'color' => (string) ($workspace->color ?: 'slate'),
-            'icon' => (string) ($workspace->icon ?: 'briefcase'),
+            'color' => $workspace->color,
+            'icon' => $workspace->icon,
             'role' => (string) ($membership?->pivot->role ?? 'member'),
         ];
     }

@@ -6,6 +6,7 @@ use App\Models\Note;
 use App\Models\NoteHeading;
 use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\NoteHeadingIndexer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -100,14 +101,9 @@ class CommandSearchController extends Controller
     ): array {
         $notes = Note::query()
             ->whereIn('workspace_id', $workspaceIds)
-            ->when(! $includeJournal, function ($q) {
-                $q->where(function ($inner) {
-                    $inner->whereNull('type')
-                        ->orWhere('type', '!=', Note::TYPE_JOURNAL);
-                });
-            })
-            ->when($query !== '', function ($q) use ($query) {
-                $q->where(function ($inner) use ($query) {
+            ->when(! $includeJournal, fn (Builder $queryBuilder) => $this->applyNoteTypeConstraint($queryBuilder, false))
+            ->when($query !== '', function (Builder $queryBuilder) use ($query): void {
+                $queryBuilder->where(function (Builder $inner) use ($query): void {
                     $inner->where('title', 'like', "%{$query}%")
                         ->orWhere('slug', 'like', "%{$query}%");
                 });
@@ -120,13 +116,18 @@ class CommandSearchController extends Controller
                 'title',
                 'slug',
                 'type',
+                'properties',
                 'journal_granularity',
                 'journal_date',
+                'parent_id',
             ]);
 
+        $journalIconSettings = $this->journalIconSettingsForUser();
+
         return $notes
-            ->map(function (Note $note): array {
+            ->map(function (Note $note) use ($journalIconSettings): array {
                 $href = '/notes/'.($note->slug ?: $note->id);
+                [$icon, $iconColor] = $this->resolveNoteIconPayload($note, $journalIconSettings);
 
                 if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date) {
                     $period = app(JournalNoteService::class)->periodFor(
@@ -138,11 +139,15 @@ class CommandSearchController extends Controller
 
                 return [
                     'id' => $note->id,
-                    'title' => $note->title ?? 'Untitled',
+                    'title' => $note->display_title,
                     'href' => $href,
                     'slug' => $note->slug,
-                    'path' => $note->slug,
+                    'path' => $note->path,
                     'type' => $note->type,
+                    'journal_granularity' => $note->journal_granularity,
+                    'icon' => $icon,
+                    'icon_color' => $iconColor,
+                    'icon_bg' => $note->icon_bg,
                 ];
             })
             ->values()
@@ -160,68 +165,122 @@ class CommandSearchController extends Controller
         int $limit,
     ): array {
         $headings = NoteHeading::query()
-            ->whereIn('note_headings.workspace_id', $workspaceIds)
-            ->join('notes', 'notes.id', '=', 'note_headings.note_id')
-            ->when(! $includeJournal, function ($q) {
-                $q->where(function ($inner) {
-                    $inner->whereNull('notes.type')
-                        ->orWhere('notes.type', '!=', Note::TYPE_JOURNAL);
+            ->whereIn('workspace_id', $workspaceIds)
+            ->whereHas('note', fn (Builder $noteQuery) => $this->applyNoteTypeConstraint($noteQuery, $includeJournal))
+            ->when($query !== '', function (Builder $builder) use ($query): void {
+                $builder->where(function (Builder $inner) use ($query): void {
+                    $inner->where('text', 'like', "%{$query}%")
+                        ->orWhereHas('note', function (Builder $noteQuery) use ($query): void {
+                            $noteQuery->where('title', 'like', "%{$query}%")
+                                ->orWhere('slug', 'like', "%{$query}%");
+                        });
                 });
             })
-            ->when($query !== '', function ($q) use ($query) {
-                $q->where(function ($inner) use ($query) {
-                    $inner->where('note_headings.text', 'like', "%{$query}%")
-                        ->orWhere('notes.title', 'like', "%{$query}%")
-                        ->orWhere('notes.slug', 'like', "%{$query}%");
-                });
-            })
-            ->orderByDesc('note_headings.updated_at')
+            ->with([
+                'note:id,title,slug,type,properties,journal_granularity,journal_date,parent_id',
+            ])
+            ->orderByDesc('updated_at')
             ->limit($limit)
-            ->get([
-                'note_headings.id as row_id',
-                'note_headings.note_id',
-                'note_headings.block_id',
-                'note_headings.level',
-                'note_headings.text',
-                'notes.title as note_title',
-                'notes.slug as note_slug',
-                'notes.type as note_type',
-                'notes.journal_granularity',
-                'notes.journal_date',
-            ]);
+            ->get();
+
+        $journalIconSettings = $this->journalIconSettingsForUser();
 
         return $headings
-            ->map(function ($row): array {
-                $href = '/notes/'.($row->note_slug ?: $row->note_id);
-
-                if (
-                    $row->note_type === Note::TYPE_JOURNAL
-                    && $row->journal_granularity
-                    && $row->journal_date
-                ) {
-                    $period = app(JournalNoteService::class)->periodFor(
-                        $row->journal_granularity,
-                        $row->journal_date,
-                    );
-                    $href = "/journal/{$row->journal_granularity}/{$period}";
+            ->map(function (NoteHeading $heading) use ($journalIconSettings): ?array {
+                $note = $heading->note;
+                if (! $note) {
+                    return null;
                 }
 
-                $blockId = (string) $row->block_id;
+                $href = '/notes/'.($note->slug ?: $note->id);
+                [$icon, $iconColor] = $this->resolveNoteIconPayload($note, $journalIconSettings);
+
+                if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date) {
+                    $period = app(JournalNoteService::class)->periodFor(
+                        $note->journal_granularity,
+                        $note->journal_date,
+                    );
+                    $href = "/journal/{$note->journal_granularity}/{$period}";
+                }
+
+                $blockId = (string) $heading->block_id;
 
                 return [
-                    'id' => (string) $row->row_id,
-                    'note_id' => (string) $row->note_id,
+                    'id' => (string) $heading->id,
+                    'note_id' => (string) $note->id,
                     'heading_id' => $blockId,
-                    'heading' => (string) $row->text,
-                    'level' => is_numeric($row->level) ? (int) $row->level : null,
-                    'note_title' => (string) ($row->note_title ?: 'Untitled'),
+                    'heading' => (string) $heading->text,
+                    'level' => $heading->level,
+                    'note_title' => $note->display_title,
                     'href' => "{$href}#{$blockId}",
-                    'slug' => $row->note_slug,
-                    'path' => $row->note_slug,
-                    'type' => $row->note_type,
+                    'slug' => $note->slug,
+                    'path' => $note->path,
+                    'type' => $note->type,
+                    'journal_granularity' => $note->journal_granularity,
+                    'icon' => $icon,
+                    'icon_color' => $iconColor,
+                    'icon_bg' => $note->icon_bg,
                 ];
             })
+            ->filter()
             ->values()
             ->all();
+    }
+
+    private function applyNoteTypeConstraint(Builder $noteQuery, bool $includeJournal): void
+    {
+        if ($includeJournal) {
+            return;
+        }
+
+        $noteQuery->where(function (Builder $inner): void {
+            $inner->whereNull('type')
+                ->orWhere('type', '!=', Note::TYPE_JOURNAL);
+        });
+    }
+
+    /**
+     * @return array{
+     *   icons: array<string, string>,
+     *   colors: array<string, string>
+     * }
+     */
+    private function journalIconSettingsForUser(): array
+    {
+        $settings = request()->user()?->settings;
+        $icons = is_array(data_get($settings, 'editor.journal_icons'))
+            ? data_get($settings, 'editor.journal_icons')
+            : [];
+        $colors = is_array(data_get($settings, 'editor.journal_icon_colors'))
+            ? data_get($settings, 'editor.journal_icon_colors')
+            : [];
+
+        return [
+            'icons' => $icons,
+            'colors' => $colors,
+        ];
+    }
+
+    /**
+     * @param  array{
+     *   icons: array<string, string>,
+     *   colors: array<string, string>
+     * }  $journalIconSettings
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function resolveNoteIconPayload(Note $note, array $journalIconSettings): array
+    {
+        if ($note->type === Note::TYPE_JOURNAL) {
+            $granularity = is_string($note->journal_granularity) ? $note->journal_granularity : Note::JOURNAL_DAILY;
+            $icon = $journalIconSettings['icons'][$granularity] ?? $note->icon;
+            $iconColor = $journalIconSettings['colors'][$granularity] ?? $note->icon_color;
+
+            return [
+                is_string($icon) ? $icon : $note->icon,
+                is_string($iconColor) ? $iconColor : $note->icon_color,
+            ];
+        }
+
+        return [$note->icon, $note->icon_color];
     }
 }

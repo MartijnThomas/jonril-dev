@@ -8,10 +8,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Note extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, SoftDeletes;
 
     public const TYPE_NOTE = 'note';
 
@@ -25,10 +26,75 @@ class Note extends Model
 
     public const JOURNAL_YEARLY = 'yearly';
 
+    public const JOURNAL_ICON_DEFAULTS = [
+        self::JOURNAL_DAILY => 'calendar_days',
+        self::JOURNAL_WEEKLY => 'calendar_range',
+        self::JOURNAL_MONTHLY => 'calendar_sync',
+        self::JOURNAL_YEARLY => 'calendar_1',
+    ];
+
+    public const JOURNAL_ICON_COLOR_DEFAULT = 'black';
+
     protected function title(): Attribute
     {
         return Attribute::make(
             get: fn (?string $value) => $this->propertyTitleOverride() ?? $value,
+        );
+    }
+
+    protected function displayTitle(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): string => $this->normalizedDisplayTitle(),
+        );
+    }
+
+    protected function icon(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => $this->propertyStringValue('icon')
+                ?? ($this->type === self::TYPE_JOURNAL
+                    ? (self::JOURNAL_ICON_DEFAULTS[$this->journal_granularity ?: self::JOURNAL_DAILY]
+                        ?? self::JOURNAL_ICON_DEFAULTS[self::JOURNAL_DAILY])
+                    : null),
+        );
+    }
+
+    protected function iconColor(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => $this->propertyStringValue('icon-color')
+                ?? ($this->type === self::TYPE_JOURNAL
+                    ? self::JOURNAL_ICON_COLOR_DEFAULT
+                    : null),
+        );
+    }
+
+    protected function iconBg(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => $this->propertyStringValue('icon-bg'),
+        );
+    }
+
+    protected function path(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): string => $this->buildPath(),
+        );
+    }
+
+    protected function context(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => $this->propertyStringValue('context'),
+        );
+    }
+
+    protected function tags(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): array => $this->normalizedTags(),
         );
     }
 
@@ -74,17 +140,94 @@ class Note extends Model
 
     private function propertyTitleOverride(): ?string
     {
+        return $this->propertyStringValue('title');
+    }
+
+    private function propertyStringValue(string $key): ?string
+    {
         if (! is_array($this->properties)) {
             return null;
         }
 
-        $title = $this->properties['title'] ?? null;
-        if (! is_string($title)) {
+        $value = $this->properties[$key] ?? null;
+        if (! is_string($value)) {
             return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed !== '' ? $trimmed : null;
+    }
+
+    private function buildPath(): string
+    {
+        $segments = [];
+        $visited = [];
+        $cursor = $this;
+
+        while ($cursor instanceof self) {
+            if ($cursor->id !== null && isset($visited[$cursor->id])) {
+                break;
+            }
+            if ($cursor->id !== null) {
+                $visited[$cursor->id] = true;
+            }
+
+            $segments[] = $cursor->normalizedDisplayTitle();
+
+            if (! $cursor->parent_id) {
+                break;
+            }
+
+            if ($cursor->relationLoaded('parent')) {
+                $cursor = $cursor->parent;
+                continue;
+            }
+
+            $cursor = self::query()
+                ->select(['id', 'parent_id', 'title', 'properties'])
+                ->where('id', $cursor->parent_id)
+                ->first();
+        }
+
+        return implode(' / ', array_reverse($segments));
+    }
+
+    private function normalizedDisplayTitle(): string
+    {
+        $title = $this->title;
+        if (! is_string($title)) {
+            return 'Untitled';
         }
 
         $trimmed = trim($title);
 
-        return $trimmed !== '' ? $trimmed : null;
+        return $trimmed !== '' ? $trimmed : 'Untitled';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function normalizedTags(): array
+    {
+        if (! is_array($this->properties)) {
+            return [];
+        }
+
+        $value = $this->properties['tags'] ?? null;
+        if (is_string($value)) {
+            $value = explode(',', $value);
+        }
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return collect($value)
+            ->map(fn ($item) => is_string($item) ? trim($item) : '')
+            ->filter(fn (string $item) => $item !== '')
+            ->map(fn (string $item) => ltrim($item, '#'))
+            ->filter(fn (string $item) => $item !== '')
+            ->values()
+            ->all();
     }
 }

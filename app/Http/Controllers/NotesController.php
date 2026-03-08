@@ -136,7 +136,9 @@ class NotesController extends Controller
 
         $resolved->content = $data['content'];
         $resolved->properties = $properties;
-        $resolved->title = $this->noteTitleExtractor->extract($data['content']);
+        if ($resolved->type !== Note::TYPE_JOURNAL) {
+            $resolved->title = $this->noteTitleExtractor->extract($data['content']);
+        }
         $resolved->word_count = $this->noteWordCountExtractor->count($data['content']);
         $resolved->save();
 
@@ -151,6 +153,80 @@ class NotesController extends Controller
         );
 
         return Inertia::back();
+    }
+
+    public function rename(Request $request, string $noteId)
+    {
+        $note = $this->currentWorkspace()
+            ->notes()
+            ->where('id', $noteId)
+            ->firstOrFail();
+
+        if ($note->type !== Note::TYPE_NOTE) {
+            abort(404);
+        }
+
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+        ]);
+
+        $title = trim($data['title']);
+        if ($title === '') {
+            throw ValidationException::withMessages([
+                'title' => 'The title field is required.',
+            ]);
+        }
+
+        $note->title = $title;
+        $note->content = $this->replaceFirstHeadingLevelOneText($note->content, $title);
+        $note->save();
+
+        $this->noteSlugService->syncNoteAndDescendants($note);
+
+        return redirect($this->noteSlugService->urlFor($note));
+    }
+
+    public function destroy(string $noteId)
+    {
+        $note = $this->currentWorkspace()
+            ->notes()
+            ->where('id', $noteId)
+            ->firstOrFail();
+
+        if ($note->type !== Note::TYPE_NOTE) {
+            abort(404);
+        }
+
+        $note->delete();
+
+        return redirect()->route('notes.index');
+    }
+
+    public function clear(string $noteId)
+    {
+        $note = $this->currentWorkspace()
+            ->notes()
+            ->where('id', $noteId)
+            ->firstOrFail();
+
+        $title = (string) ($note->getRawOriginal('title') ?: $note->title ?: 'Untitled');
+
+        $note->content = [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 1],
+                    'content' => [
+                        ['type' => 'text', 'text' => $title],
+                    ],
+                ],
+            ],
+        ];
+        $note->properties = [];
+        $note->save();
+
+        return back();
     }
 
     private function renderNotePage(Note $note)
@@ -245,6 +321,8 @@ class NotesController extends Controller
         $breadcrumbs = $this->buildBreadcrumbs($note, $noteTrail, $noteById);
         $relatedPanel = $this->noteRelatedPanelBuilder->build($note);
 
+        [$noteActionIcon, $noteActionIconColor] = $this->resolveNoteActionIconPayload($note);
+
         return Inertia::render('notes/show', [
             'content' => $this->normalizeContentForEditor($note->content),
             'noteId' => $note->id,
@@ -255,6 +333,17 @@ class NotesController extends Controller
             'journalPeriod' => ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date)
                 ? $this->journalNoteService->periodFor($note->journal_granularity, $note->journal_date)
                 : null,
+            'noteActions' => [
+                'id' => $note->id,
+                'title' => (string) ($note->getRawOriginal('title') ?: $note->title ?: 'Untitled'),
+                'type' => $note->type,
+                'journal_granularity' => $note->journal_granularity,
+                'icon' => $noteActionIcon,
+                'icon_color' => $noteActionIconColor,
+                'canRename' => $note->type === Note::TYPE_NOTE,
+                'canDelete' => $note->type === Note::TYPE_NOTE,
+                'canClear' => true,
+            ],
             'properties' => $note->properties ?? [],
             'linkableNotes' => $linkableNotes,
             'breadcrumbs' => $breadcrumbs,
@@ -266,6 +355,31 @@ class NotesController extends Controller
                 'hashtags' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->hashtag_suggestions),
             ],
         ]);
+    }
+
+    /**
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function resolveNoteActionIconPayload(Note $note): array
+    {
+        if ($note->type === Note::TYPE_JOURNAL) {
+            $granularity = $note->journal_granularity ?: Note::JOURNAL_DAILY;
+            $settings = Auth::user()?->settings;
+            $icon = data_get($settings, "editor.journal_icons.{$granularity}")
+                ?: (Note::JOURNAL_ICON_DEFAULTS[$granularity] ?? Note::JOURNAL_ICON_DEFAULTS[Note::JOURNAL_DAILY]);
+            $iconColor = data_get($settings, "editor.journal_icon_colors.{$granularity}")
+                ?: Note::JOURNAL_ICON_COLOR_DEFAULT;
+
+            return [
+                is_string($icon) ? $icon : null,
+                is_string($iconColor) ? $iconColor : Note::JOURNAL_ICON_COLOR_DEFAULT,
+            ];
+        }
+
+        return [
+            $note->icon,
+            $note->icon_color,
+        ];
     }
 
     /**
@@ -375,6 +489,59 @@ class NotesController extends Controller
             ->all();
     }
 
+    private function replaceFirstHeadingLevelOneText(mixed $content, string $title): mixed
+    {
+        if (! is_array($content)) {
+            return $content;
+        }
+
+        $replaced = false;
+        $updated = $this->replaceHeadingNodeInTree($content, $title, $replaced);
+
+        return $updated;
+    }
+
+    private function replaceHeadingNodeInTree(array $node, string $title, bool &$replaced): array
+    {
+        if ($replaced) {
+            return $node;
+        }
+
+        $isHeadingOne =
+            ($node['type'] ?? null) === 'heading'
+            && (int) (($node['attrs']['level'] ?? 0)) === 1;
+
+        if ($isHeadingOne) {
+            $node['content'] = [[
+                'type' => 'text',
+                'text' => $title,
+            ]];
+            $replaced = true;
+
+            return $node;
+        }
+
+        $children = $node['content'] ?? null;
+        if (! is_array($children)) {
+            return $node;
+        }
+
+        foreach ($children as $index => $child) {
+            if (! is_array($child)) {
+                continue;
+            }
+
+            $updatedChild = $this->replaceHeadingNodeInTree($child, $title, $replaced);
+            $node['content'][$index] = $updatedChild;
+
+            if ($replaced) {
+                break;
+            }
+        }
+
+        return $node;
+    }
+
     private function resolveNoteOrFail(string $reference): Note
     {
         $workspace = $this->currentWorkspace();
@@ -416,9 +583,12 @@ class NotesController extends Controller
      *   title:string,
      *   href:string|null,
      *   icon:string|null,
+     *   icon_color:string|null,
+     *   icon_bg:string|null,
      *   type:string|null,
      *   context:string|null,
      *   tags:array<int,string>,
+     *   path:string|null,
      *   has_children:bool,
      *   tasks_total:int,
      *   tasks_open:int,
@@ -494,10 +664,9 @@ class NotesController extends Controller
             $matchedIds = [];
 
             foreach ($notes as $note) {
-                $properties = is_array($note->properties) ? $note->properties : [];
-                $context = trim((string) ($properties['context'] ?? ''));
+                $context = $note->context ?? '';
                 $normalizedContext = mb_strtolower($context);
-                $tags = $this->normalizePropertyTags($properties['tags'] ?? null);
+                $tags = $note->tags;
                 $normalizedTags = array_map(
                     static fn (string $tag) => mb_strtolower($tag),
                     $tags,
@@ -618,23 +787,20 @@ class NotesController extends Controller
             ->keyBy('note_id');
 
         $buildNotePayload = function (Note $note, bool $hasChildren) use ($taskCounts, $revisionCounts): array {
-            $properties = is_array($note->properties) ? $note->properties : [];
-            $icon = isset($properties['icon']) && is_string($properties['icon'])
-                ? trim((string) $properties['icon'])
-                : null;
             $taskCountRow = $taskCounts->get($note->id);
             $revisionCountRow = $revisionCounts->get($note->id);
 
             return [
                 'id' => $note->id,
-                'title' => $note->title ?? 'Untitled',
+                'title' => $note->display_title,
                 'href' => $this->noteSlugService->urlFor($note),
-                'icon' => $icon !== '' ? $icon : null,
+                'icon' => $note->icon,
+                'icon_color' => $note->icon_color,
+                'icon_bg' => $note->icon_bg,
                 'type' => $note->type,
-                'context' => is_string($properties['context'] ?? null)
-                    ? trim((string) $properties['context'])
-                    : null,
-                'tags' => $this->normalizePropertyTags($properties['tags'] ?? null),
+                'context' => $note->context,
+                'tags' => $note->tags,
+                'path' => $note->path,
                 'has_children' => $hasChildren,
                 'tasks_total' => (int) ($taskCountRow?->total_count ?? 0),
                 'tasks_open' => (int) ($taskCountRow?->open_count ?? 0),
@@ -669,9 +835,12 @@ class NotesController extends Controller
                 'title' => $title,
                 'href' => $fallbackHref,
                 'icon' => null,
+                'icon_color' => null,
+                'icon_bg' => null,
                 'type' => Note::TYPE_JOURNAL,
                 'context' => null,
                 'tags' => [],
+                'path' => null,
                 'has_children' => $hasChildren,
                 'tasks_total' => 0,
                 'tasks_open' => 0,

@@ -39,6 +39,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('journal/{granularity}/{period}', [NotesController::class, 'showJournal'])
         ->name('journal.show');
 
+    Route::patch('notes/{noteId}/rename', [NotesController::class, 'rename'])
+        ->whereUuid('noteId')
+        ->name('notes.rename');
+    Route::patch('notes/{noteId}/clear', [NotesController::class, 'clear'])
+        ->whereUuid('noteId')
+        ->name('notes.clear');
+    Route::delete('notes/{noteId}', [NotesController::class, 'destroy'])
+        ->whereUuid('noteId')
+        ->name('notes.destroy');
+
     Route::get('notes/{note}', [NotesController::class, 'show'])
         ->where('note', '.*')
         ->name('notes.show');

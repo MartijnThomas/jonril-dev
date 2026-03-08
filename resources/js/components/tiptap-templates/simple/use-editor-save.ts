@@ -157,7 +157,7 @@ export function useEditorSave({
             saveTimeoutRef.current = null;
         }
         // Only reset baseline when loading/switching note editor.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [editor, noteId]);
 
     useEffect(() => {

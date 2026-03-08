@@ -13,6 +13,7 @@ import {
     WholeWord,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { getColorBgClass, getColorTextClass } from '@/components/color-swatch-picker';
 import { getWorkspaceIconComponent } from '@/components/icon-picker';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -48,9 +49,12 @@ type NoteListNode = {
     title: string;
     href: string | null;
     icon: string | null;
+    icon_color: string | null;
+    icon_bg: string | null;
     type: string | null;
     context: string | null;
     tags: string[];
+    path: string | null;
     has_children: boolean;
     tasks_total: number;
     tasks_open: number;
@@ -295,6 +299,8 @@ export default function NotesIndex({ roots, filters }: Props) {
             const noteIconNode = node.icon
                 ? getWorkspaceIconComponent(node.icon)
                 : FileText;
+            const iconColorClass = getColorTextClass(node.icon_color ?? null);
+            const iconBgClass = getColorBgClass(node.icon_bg ?? null);
 
             return (
                 <div key={node.id} className="space-y-1">
@@ -331,18 +337,34 @@ export default function NotesIndex({ roots, filters }: Props) {
                                         className="inline-flex min-w-0 items-center gap-2 text-sm font-medium text-foreground hover:underline"
                                     >
                                         {node.type === 'journal' ? (
-                                            <Hash className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            node.icon ? (
+                                                <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
+                                                    <Icon iconNode={noteIconNode} className={cn('h-4 w-4', iconColorClass)} />
+                                                </span>
+                                            ) : (
+                                                <Hash className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            )
                                         ) : (
-                                            <Icon iconNode={noteIconNode} className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
+                                                <Icon iconNode={noteIconNode} className={cn('h-4 w-4', iconColorClass)} />
+                                            </span>
                                         )}
                                         <span className="truncate">{node.title}</span>
                                     </Link>
                                 ) : (
                                     <span className="inline-flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
                                         {node.type === 'journal' ? (
-                                            <Hash className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            node.icon ? (
+                                                <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
+                                                    <Icon iconNode={noteIconNode} className={cn('h-4 w-4', iconColorClass)} />
+                                                </span>
+                                            ) : (
+                                                <Hash className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            )
                                         ) : (
-                                            <Icon iconNode={noteIconNode} className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
+                                                <Icon iconNode={noteIconNode} className={cn('h-4 w-4', iconColorClass)} />
+                                            </span>
                                         )}
                                         <span className="truncate">{node.title}</span>
                                     </span>

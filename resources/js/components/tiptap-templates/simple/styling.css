@@ -3,6 +3,10 @@
 /* ===============================================================
    Simple Editor Typography (Milkdown-inspired)
    =============================================================== */
+.simple-editor-content {
+    min-height: calc(100svh - 14rem);
+}
+
 .simple-editor-content .tiptap.ProseMirror.simple-editor {
     font-family:
         'Nunito',
@@ -17,6 +21,8 @@
     font-weight: 400;
     letter-spacing: -0.01em;
     max-width: 760px;
+    min-height: calc(100svh - 16rem);
+    padding-bottom: 2rem;
     margin: 0 auto;
 }
 

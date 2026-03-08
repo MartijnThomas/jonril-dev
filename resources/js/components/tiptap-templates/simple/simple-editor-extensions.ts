@@ -139,6 +139,20 @@ export function createSimpleEditorExtensions({
         },
     });
 
+    const TextAlignExtension = TextAlign.extend({
+        addKeyboardShortcuts() {
+            const parentShortcuts = this.parent?.() ?? {};
+            const {
+                'Mod-Shift-e': removedShortcut,
+                ...shortcuts
+            } = parentShortcuts;
+
+            void removedShortcut;
+
+            return shortcuts;
+        },
+    });
+
     return [
         UniqueID.configure({
             types: [
@@ -176,7 +190,7 @@ export function createSimpleEditorExtensions({
         }),
         WikiLinkMark,
         HorizontalRule,
-        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        TextAlignExtension.configure({ types: ['heading', 'paragraph'] }),
         TaskList,
         TaskItemWithDates.configure({ nested: true, displayLocale }),
         Highlight.configure({ multicolor: true }),

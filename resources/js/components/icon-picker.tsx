@@ -5,6 +5,10 @@ import {
     BookOpen,
     Briefcase,
     Building2,
+    Calendar1,
+    CalendarDays,
+    CalendarRange,
+    CalendarSync,
     FileText,
     Folder,
     KanbanSquare,
@@ -27,6 +31,10 @@ import {
 import { cn } from '@/lib/utils';
 
 export const WORKSPACE_ICON_OPTIONS = [
+    { value: 'calendar_days', label: 'Calendar Days', icon: CalendarDays },
+    { value: 'calendar_range', label: 'Calendar Range', icon: CalendarRange },
+    { value: 'calendar_sync', label: 'Calendar Sync', icon: CalendarSync },
+    { value: 'calendar_1', label: 'Calendar 1', icon: Calendar1 },
     { value: 'briefcase', label: 'Briefcase', icon: Briefcase },
     { value: 'building', label: 'Building', icon: Building2 },
     { value: 'folder', label: 'Folder', icon: Folder },
@@ -92,29 +100,53 @@ function resolveLucideIconByRawName(iconName: string): LucideIcon | null {
     return candidate as LucideIcon;
 }
 
+export function getLucideIconComponent(
+    iconName: string | null | undefined,
+    fallbackIcon: LucideIcon,
+): LucideIcon {
+    if (!iconName) {
+        return fallbackIcon;
+    }
+
+    const predefined = ICON_BY_NAME[iconName as WorkspaceIconName];
+    if (predefined) {
+        return predefined;
+    }
+
+    return resolveLucideIconByRawName(iconName) ?? fallbackIcon;
+}
+
 type IconPickerProps = {
     value: string | null | undefined;
     onValueChange: (value: string) => void;
     disabled?: boolean;
     className?: string;
+    fallbackValue?: string;
 };
 
-export function IconPicker({ value, onValueChange, disabled, className }: IconPickerProps) {
+export function IconPicker({
+    value,
+    onValueChange,
+    disabled,
+    className,
+    fallbackValue,
+}: IconPickerProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const hasExplicitValue = typeof value === 'string' && value.trim() !== '';
+    const effectiveValue = hasExplicitValue
+        ? value
+        : (fallbackValue ?? DEFAULT_WORKSPACE_ICON);
 
     const selected = useMemo(() => {
-        if (!hasExplicitValue) {
-            return null;
-        }
-
-        const predefined = WORKSPACE_ICON_OPTIONS.find((option) => option.value === value);
+        const predefined = WORKSPACE_ICON_OPTIONS.find(
+            (option) => option.value === effectiveValue,
+        );
         if (predefined) {
             return predefined;
         }
 
-        const customValue = normalizeIconInput(value ?? '');
+        const customValue = normalizeIconInput(effectiveValue ?? '');
         const customIcon = customValue ? resolveLucideIconByRawName(customValue) : null;
         if (customIcon) {
             return {
@@ -124,8 +156,10 @@ export function IconPicker({ value, onValueChange, disabled, className }: IconPi
             };
         }
 
-        return WORKSPACE_ICON_OPTIONS.find((option) => option.value === DEFAULT_WORKSPACE_ICON)!;
-    }, [hasExplicitValue, value]);
+        return WORKSPACE_ICON_OPTIONS.find(
+            (option) => option.value === DEFAULT_WORKSPACE_ICON,
+        )!;
+    }, [effectiveValue]);
 
     const SelectedIcon = selected?.icon ?? getWorkspaceIconComponent(DEFAULT_WORKSPACE_ICON);
     const normalizedQuery = normalizeIconInput(query);

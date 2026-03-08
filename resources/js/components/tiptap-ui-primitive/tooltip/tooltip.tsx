@@ -1,16 +1,6 @@
 "use client"
 
 import {
-  cloneElement,
-  createContext,
-  forwardRef,
-  isValidElement,
-  useContext,
-  useMemo,
-  useState,
-  version,
-} from "react"
-import {
   useFloating,
   autoUpdate,
   offset,
@@ -23,11 +13,22 @@ import {
   useInteractions,
   useMergeRefs,
   FloatingPortal,
-  type Placement,
-  type UseFloatingReturn,
-  type ReferenceType,
-  FloatingDelayGroup,
+  
+  
+  
+  FloatingDelayGroup
 } from "@floating-ui/react"
+import type {Placement, UseFloatingReturn, ReferenceType} from "@floating-ui/react";
+import {
+  cloneElement,
+  createContext,
+  forwardRef,
+  isValidElement,
+  useContext,
+  useMemo,
+  useState,
+  version,
+} from "react"
 import "@/components/tiptap-ui-primitive/tooltip/tooltip.scss"
 
 interface TooltipProviderProps {
@@ -165,27 +166,34 @@ export const TooltipTrigger = forwardRef<HTMLElement, TooltipTriggerProps>(
     const context = useTooltipContext()
     const childrenRef = isValidElement(children)
       ? parseInt(version, 10) >= 19
-        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ?  
           (children as { props: { ref?: React.Ref<any> } }).props.ref
-        : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        :  
           (children as any).ref
       : undefined
     const ref = useMergeRefs([context.refs.setReference, propRef, childrenRef])
 
     if (asChild && isValidElement(children)) {
+      /* eslint-disable react-hooks/refs */
       const dataAttributes = {
         "data-tooltip-state": context.open ? "open" : "closed",
       }
+      const childProps =
+        typeof children.props === "object" ? children.props : {}
+      const referenceProps = context.getReferenceProps({
+        ...props,
+        ...childProps,
+        ...dataAttributes,
+      })
 
       return cloneElement(
         children,
-        context.getReferenceProps({
+        {
+          ...referenceProps,
           ref,
-          ...props,
-          ...(typeof children.props === "object" ? children.props : {}),
-          ...dataAttributes,
-        })
+        }
       )
+      /* eslint-enable react-hooks/refs */
     }
 
     return (
