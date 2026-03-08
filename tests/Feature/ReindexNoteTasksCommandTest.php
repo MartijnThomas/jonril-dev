@@ -27,12 +27,28 @@ test('reindex tasks command rebuilds task index for notes', function () {
                             'attrs' => [
                                 'checked' => false,
                                 'dueDate' => '2026-03-09',
+                                'priority' => 'high',
+                                'taskStatus' => 'canceled',
                             ],
                             'content' => [
                                 [
                                     'type' => 'paragraph',
                                     'content' => [
                                         ['type' => 'text', 'text' => 'Imported task'],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'checked' => false,
+                            ],
+                            'content' => [
+                                [
+                                    'type' => 'paragraph',
+                                    'content' => [
+                                        ['type' => 'text', 'text' => '> !! Follow up task'],
                                     ],
                                 ],
                             ],
@@ -56,6 +72,10 @@ test('reindex tasks command rebuilds task index for notes', function () {
         ->expectsOutput('Reindexed note tasks for all users.')
         ->assertSuccessful();
 
-    expect(NoteTask::query()->where('note_id', $noteId)->count())->toBe(1);
-    expect(NoteTask::query()->where('note_id', $noteId)->value('content_text'))->toBe('Imported task');
+    expect(NoteTask::query()->where('note_id', $noteId)->count())->toBe(2);
+    expect(NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('content_text'))->toBe('Imported task');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('priority'))->toBe('high');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('task_status'))->toBe('canceled');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('position', 2)->value('priority'))->toBe('medium');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('position', 2)->value('task_status'))->toBe('deferred');
 });

@@ -10,24 +10,33 @@ export type TaskRenderFragment = {
         | 'hashtag'
         | 'wikilink'
         | 'due_date_token'
-        | 'deadline_date_token';
+        | 'deadline_date_token'
+        | 'priority_token'
+        | 'status_token';
     text?: string;
     label?: string;
     note_id?: string | null;
     href?: string | null;
     date?: string;
+    value?: string;
+    priority?: 'high' | 'medium' | 'normal' | null;
+    status?: 'canceled' | 'deferred' | null;
 };
 
 type TaskInlineContentProps = {
     fragments: TaskRenderFragment[];
     language?: 'nl' | 'en';
     className?: string;
+    priorityStyle?: 'token' | 'range';
+    canceled?: boolean;
 };
 
 export function TaskInlineContent({
     fragments,
     language = 'nl',
     className = '',
+    priorityStyle = 'token',
+    canceled = false,
 }: TaskInlineContentProps) {
     const dateLocale = language === 'en' ? enUS : nl;
     const formatReadableDate = (value: string) => {
@@ -38,15 +47,59 @@ export function TaskInlineContent({
         }
     };
 
+    const classForPriority = (priority: TaskRenderFragment['priority']) => {
+        if (priority === 'high') {
+            return 'md-priority-range md-priority-range--high';
+        }
+
+        if (priority === 'medium') {
+            return 'md-priority-range md-priority-range--medium';
+        }
+
+        return 'md-priority-range md-priority-range--normal';
+    };
+
+    let activePriority: TaskRenderFragment['priority'] = null;
+
     return (
-        <span className={`task-inline ${className}`.trim()}>
+        <span
+            className={`task-inline ${canceled ? 'task-inline--canceled' : ''} ${className}`.trim()}
+        >
             {fragments.map((fragment, index) => {
-                if (fragment.type === 'text') {
+                if (priorityStyle === 'range' && fragment.type === 'priority_token') {
+                    const value = fragment.value ?? '';
+                    const priority = fragment.priority ?? 'normal';
+                    activePriority = priority;
+
                     return (
+                        <span
+                            key={`priority-${index}`}
+                            className={classForPriority(priority)}
+                        >
+                            {value}
+                        </span>
+                    );
+                }
+
+                if (fragment.type === 'text') {
+                    const content = (
                         <Fragment key={`text-${index}`}>
                             {fragment.text ?? ''}
                         </Fragment>
                     );
+
+                    if (priorityStyle === 'range' && activePriority) {
+                        return (
+                            <span
+                                key={`text-range-${index}`}
+                                className={classForPriority(activePriority)}
+                            >
+                                {content}
+                            </span>
+                        );
+                    }
+
+                    return content;
                 }
 
                 if (fragment.type === 'mention') {
@@ -55,11 +108,24 @@ export function TaskInlineContent({
                         return null;
                     }
 
-                    return (
+                    const content = (
                         <span key={`mention-${index}`} className="mention">
                             @{label}
                         </span>
                     );
+
+                    if (priorityStyle === 'range' && activePriority) {
+                        return (
+                            <span
+                                key={`mention-range-${index}`}
+                                className={classForPriority(activePriority)}
+                            >
+                                {content}
+                            </span>
+                        );
+                    }
+
+                    return content;
                 }
 
                 if (fragment.type === 'hashtag') {
@@ -68,11 +134,24 @@ export function TaskInlineContent({
                         return null;
                     }
 
-                    return (
+                    const content = (
                         <span key={`hashtag-${index}`} className="hashtag">
                             #{label}
                         </span>
                     );
+
+                    if (priorityStyle === 'range' && activePriority) {
+                        return (
+                            <span
+                                key={`hashtag-range-${index}`}
+                                className={classForPriority(activePriority)}
+                            >
+                                {content}
+                            </span>
+                        );
+                    }
+
+                    return content;
                 }
 
                 if (fragment.type === 'wikilink') {
@@ -80,14 +159,27 @@ export function TaskInlineContent({
                     const href = (fragment.href ?? '').trim();
 
                     if (!href) {
-                        return (
+                        const content = (
                             <span key={`wikilink-${index}`} className="md-wikilink">
                                 {text}
                             </span>
                         );
+
+                        if (priorityStyle === 'range' && activePriority) {
+                            return (
+                                <span
+                                    key={`wikilink-range-${index}`}
+                                    className={classForPriority(activePriority)}
+                                >
+                                    {content}
+                                </span>
+                            );
+                        }
+
+                        return content;
                     }
 
-                    return (
+                    const content = (
                         <Link
                             key={`wikilink-${index}`}
                             href={href}
@@ -96,6 +188,19 @@ export function TaskInlineContent({
                             {text}
                         </Link>
                     );
+
+                    if (priorityStyle === 'range' && activePriority) {
+                        return (
+                            <span
+                                key={`wikilink-link-range-${index}`}
+                                className={classForPriority(activePriority)}
+                            >
+                                {content}
+                            </span>
+                        );
+                    }
+
+                    return content;
                 }
 
                 if (fragment.type === 'due_date_token') {
@@ -104,11 +209,24 @@ export function TaskInlineContent({
                         return null;
                     }
 
-                    return (
+                    const content = (
                         <span key={`due-${index}`} className="md-task-due-token">
                             &gt;{formatReadableDate(date)}
                         </span>
                     );
+
+                    if (priorityStyle === 'range' && activePriority) {
+                        return (
+                            <span
+                                key={`due-range-${index}`}
+                                className={classForPriority(activePriority)}
+                            >
+                                {content}
+                            </span>
+                        );
+                    }
+
+                    return content;
                 }
 
                 if (fragment.type === 'deadline_date_token') {
@@ -117,11 +235,75 @@ export function TaskInlineContent({
                         return null;
                     }
 
-                    return (
+                    const content = (
                         <span key={`deadline-${index}`} className="md-task-deadline-token">
                             &gt;&gt;{formatReadableDate(date)}
                         </span>
                     );
+
+                    if (priorityStyle === 'range' && activePriority) {
+                        return (
+                            <span
+                                key={`deadline-range-${index}`}
+                                className={classForPriority(activePriority)}
+                            >
+                                {content}
+                            </span>
+                        );
+                    }
+
+                    return content;
+                }
+
+                if (fragment.type === 'priority_token') {
+                    const value = (fragment.value ?? '').trim();
+                    if (!value) {
+                        return null;
+                    }
+
+                    const className =
+                        fragment.priority === 'high'
+                            ? 'md-priority md-priority--critical'
+                            : fragment.priority === 'medium'
+                              ? 'md-priority md-priority--medium'
+                              : 'md-priority md-priority--low';
+
+                    return (
+                        <span key={`priority-${index}`} className={className}>
+                            {value}
+                        </span>
+                    );
+                }
+
+                if (fragment.type === 'status_token') {
+                    const value = (fragment.value ?? '').trim();
+                    if (!value) {
+                        return null;
+                    }
+
+                    const statusClass =
+                        fragment.status === 'deferred'
+                            ? 'md-task-status-token md-task-status-token--deferred'
+                            : '';
+
+                    const content = (
+                        <span key={`status-${index}`} className={statusClass}>
+                            {value}
+                        </span>
+                    );
+
+                    if (priorityStyle === 'range' && activePriority) {
+                        return (
+                            <span
+                                key={`status-range-${index}`}
+                                className={classForPriority(activePriority)}
+                            >
+                                {content}
+                            </span>
+                        );
+                    }
+
+                    return content;
                 }
 
                 return null;

@@ -773,7 +773,7 @@ class NotesController extends Controller
 
         $taskCounts = NoteTask::query()
             ->where('workspace_id', $workspaceId)
-            ->selectRaw('note_id, COUNT(*) as total_count, SUM(CASE WHEN checked = 0 THEN 1 ELSE 0 END) as open_count')
+            ->selectRaw("note_id, COUNT(*) as total_count, SUM(CASE WHEN checked = 0 AND (task_status IS NULL OR task_status <> 'canceled') THEN 1 ELSE 0 END) as open_count")
             ->groupBy('note_id')
             ->get()
             ->keyBy('note_id');

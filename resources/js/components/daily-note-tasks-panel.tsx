@@ -18,6 +18,7 @@ type DailyTaskItem = {
     block_id: string | null;
     position: number;
     checked: boolean;
+    task_status: 'canceled' | 'deferred' | null;
     content: string;
     render_fragments: TaskRenderFragment[];
     due_date: string | null;
@@ -52,12 +53,16 @@ export function DailyNoteTasksPanel({
             ? 'No due or deadline tasks for today.'
             : 'Geen taken met een deadline of due-datum vandaag.';
 
-    const remainingCount = useMemo(
-        () => items.filter((task) => !task.checked).length,
+    const openCount = useMemo(
+        () =>
+            items.filter(
+                (task) =>
+                    task.checked !== true && task.task_status !== 'canceled',
+            ).length,
         [items],
     );
-    const closedCount = items.length - remainingCount;
-    const counterLabel = `${closedCount}/${items.length}`;
+    const doneOrCanceledCount = items.length - openCount;
+    const counterLabel = `${doneOrCanceledCount}/${items.length}`;
 
     const toggleTask = (task: DailyTaskItem) => {
         if (pendingTaskIds.includes(task.id)) {
@@ -182,9 +187,10 @@ export function DailyNoteTasksPanel({
                                     <TaskToggleCheckbox
                                         className="mt-0.5"
                                         checked={task.checked}
-                                        disabled={pendingTaskIds.includes(
-                                            task.id,
-                                        )}
+                                        disabled={
+                                            pendingTaskIds.includes(task.id) ||
+                                            task.task_status === 'canceled'
+                                        }
                                         ariaLabel={`Toggle task ${task.content || task.id}`}
                                         onCheckedChange={() => toggleTask(task)}
                                     />
@@ -192,7 +198,12 @@ export function DailyNoteTasksPanel({
                                         <p
                                             className={cn(
                                                 'text-sm leading-5',
-                                                task.checked &&
+                                                task.task_status ===
+                                                    'canceled' &&
+                                                    'line-through task-canceled-strike',
+                                                task.task_status !==
+                                                    'canceled' &&
+                                                    task.checked &&
                                                     'text-muted-foreground line-through',
                                             )}
                                         >
@@ -214,6 +225,10 @@ export function DailyNoteTasksPanel({
                                                           ]
                                                 }
                                                 language={language}
+                                                canceled={
+                                                    task.task_status ===
+                                                    'canceled'
+                                                }
                                             />
                                         </p>
                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

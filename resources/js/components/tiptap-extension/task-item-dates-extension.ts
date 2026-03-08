@@ -2,6 +2,12 @@ import { TaskItem } from '@tiptap/extension-list';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
+declare module '@tiptap/extension-list' {
+    interface TaskItemOptions {
+        displayLocale: string;
+    }
+}
+
 type ParsedTaskDates = {
     dueDate: string | null;
     deadlineDate: string | null;
@@ -441,8 +447,13 @@ function buildTokenDecorations(
 
 export const TaskItemWithDates = TaskItem.extend({
     addOptions() {
+        const parentOptions = this.parent?.();
+
         return {
-            ...(this.parent?.() ?? {}),
+            ...(parentOptions ?? {}),
+            nested: parentOptions?.nested ?? true,
+            HTMLAttributes: parentOptions?.HTMLAttributes ?? {},
+            taskListTypeName: parentOptions?.taskListTypeName ?? 'taskList',
             displayLocale: 'nl-NL',
         };
     },
@@ -465,6 +476,24 @@ export const TaskItemWithDates = TaskItem.extend({
                         'data-id': value,
                     };
                 },
+            },
+            priority: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-priority'),
+                renderHTML: (attributes: { priority?: string | null }) =>
+                    attributes.priority
+                        ? { 'data-priority': attributes.priority }
+                        : {},
+            },
+            taskStatus: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-task-status'),
+                renderHTML: (attributes: { taskStatus?: string | null }) =>
+                    attributes.taskStatus
+                        ? { 'data-task-status': attributes.taskStatus }
+                        : {},
             },
             dueDate: {
                 default: null,

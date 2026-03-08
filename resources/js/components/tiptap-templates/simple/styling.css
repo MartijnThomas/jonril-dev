@@ -229,6 +229,85 @@
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > div
+    > p {
+    opacity: 1 !important;
+    text-decoration-line: line-through !important;
+    text-decoration-thickness: 2px !important;
+    text-decoration-color: color-mix(
+        in srgb,
+        currentColor 62%,
+        transparent
+    ) !important;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > div
+    > p
+    :is(
+        .mention,
+        .hashtag,
+        .md-wikilink,
+        .md-task-due-token,
+        .md-task-deadline-token,
+        .md-task-date-display,
+        .md-task-status-token--deferred,
+        .md-priority,
+        .md-priority-range
+    ) {
+    color: inherit !important;
+    background: transparent !important;
+    text-decoration: inherit !important;
+    font-weight: inherit !important;
+    border-radius: 0 !important;
+    opacity: 1 !important;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > div
+    > p
+    .md-wikilink {
+    text-decoration: inherit !important;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > label {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > label
+    input {
+    cursor: not-allowed !important;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > label
+    span {
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
     li[data-checked='true']
     > div
     > p,
@@ -271,6 +350,24 @@
     @apply bg-blue-400/10;
 }
 
+.md-priority-range {
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    @apply rounded-xs;
+}
+
+.md-priority-range--high {
+    @apply bg-red-400/18;
+}
+
+.md-priority-range--medium {
+    @apply bg-orange-400/16;
+}
+
+.md-priority-range--normal {
+    @apply bg-yellow-400/14;
+}
+
 .mention {
     @apply bg-purple-400/10 text-purple-600;
 }
@@ -301,4 +398,8 @@
 
 .md-task-date-ghost {
     @apply text-sm font-normal;
+}
+
+.md-task-status-token--deferred {
+    @apply font-semibold text-blue-600;
 }

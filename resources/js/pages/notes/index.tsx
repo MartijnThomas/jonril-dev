@@ -379,7 +379,7 @@ export default function NotesIndex({ roots, filters }: Props) {
                                                 </span>
                                             </TooltipTrigger>
                                             <TooltipContent side="bottom">
-                                                Tasks (closed/total).
+                                                Tasks ((done + canceled)/total).
                                             </TooltipContent>
                                         </Tooltip>
                                         <Tooltip>

@@ -11,10 +11,13 @@ import { CharacterCount, Selection } from '@tiptap/extensions';
 import { StarterKit } from '@tiptap/starter-kit';
 
 import { HeadingAnchorIdExtension } from '@/components/tiptap-extension/heading-anchor-id-extension';
+import { ListItemPriorityExtension } from '@/components/tiptap-extension/list-item-priority-extension';
+import { ListItemWithPriority } from '@/components/tiptap-extension/list-item-with-priority-extension';
 import {
     NoteTitleIconExtension,
 } from '@/components/tiptap-extension/note-title-icon-extension';
 import { TaskItemWithDates } from '@/components/tiptap-extension/task-item-dates-extension';
+import { TaskItemStatusExtension } from '@/components/tiptap-extension/task-item-status-extension';
 import { WikiLinkMark } from '@/components/tiptap-extension/wiki-link-mark-extension';
 import { WikiLinkSuggestion } from '@/components/tiptap-extension/wiki-link-suggestion-extension';
 import { InlineCommands } from '@/components/tiptap-inline-commands/InlineCommands';
@@ -183,11 +186,13 @@ export function createSimpleEditorExtensions({
         }),
         StarterKit.configure({
             horizontalRule: false,
+            listItem: false,
             link: {
                 openOnClick: false,
                 enableClickSelection: true,
             },
         }),
+        ListItemWithPriority.configure({}),
         WikiLinkMark,
         HorizontalRule,
         TextAlignExtension.configure({ types: ['heading', 'paragraph'] }),
@@ -203,6 +208,8 @@ export function createSimpleEditorExtensions({
         Subscript,
         Selection,
         InlineCommands,
+        ListItemPriorityExtension,
+        TaskItemStatusExtension,
         WikiLinkSuggestion.configure({
             notes: wikiLinkNotes,
         }),

@@ -108,6 +108,8 @@ class NoteRelatedPanelBuilder
             'block_id' => $task->block_id,
             'position' => (int) $task->position,
             'checked' => (bool) $task->checked,
+            'task_status' => $task->task_status,
+            'priority' => $task->priority,
             'content' => $task->content_text ?? '',
             'render_fragments' => is_array($task->render_fragments) ? $task->render_fragments : [],
             'due_date' => $task->due_date?->toDateString(),

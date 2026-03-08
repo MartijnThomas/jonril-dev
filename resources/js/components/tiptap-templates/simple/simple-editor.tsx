@@ -31,6 +31,22 @@ import '@/components/tiptap-templates/simple/styling.css';
 type SimpleEditorContent = string | Record<string, any> | null;
 const EMPTY_SUGGESTIONS: string[] = [];
 
+function serializeEditorContent(content: SimpleEditorContent): string {
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    if (content && typeof content === 'object') {
+        try {
+            return JSON.stringify(content);
+        } catch {
+            return '';
+        }
+    }
+
+    return '';
+}
+
 type SimpleEditorProps = {
     id: string;
     noteUpdateUrl: string;
@@ -60,13 +76,17 @@ type SimpleEditorProps = {
                 | 'hashtag'
                 | 'wikilink'
                 | 'due_date_token'
-                | 'deadline_date_token';
+                | 'deadline_date_token'
+                | 'status_token';
             text?: string;
             label?: string;
             note_id?: string | null;
             href?: string | null;
             date?: string;
+            value?: string;
+            status?: 'canceled' | 'deferred' | null;
         }[];
+        task_status?: 'canceled' | 'deferred' | null;
         due_date: string | null;
         deadline_date: string | null;
         note: {
@@ -86,12 +106,15 @@ type SimpleEditorProps = {
                 | 'hashtag'
                 | 'wikilink'
                 | 'due_date_token'
-                | 'deadline_date_token';
+                | 'deadline_date_token'
+                | 'status_token';
             text?: string;
             label?: string;
             note_id?: string | null;
             href?: string | null;
             date?: string;
+            value?: string;
+            status?: 'canceled' | 'deferred' | null;
         }[];
         note: {
             id: string;
@@ -149,6 +172,7 @@ export function SimpleEditor({
     const toolbarRef = useRef<HTMLDivElement>(null);
     const previousNoteIdRef = useRef<string | null>(null);
     const previousLoadedContentRef = useRef<SimpleEditorContent | null>(null);
+    const previousLoadedContentSerializedRef = useRef<string>('');
 
     const extensions = useMemo(
         () =>
@@ -220,19 +244,33 @@ export function SimpleEditor({
             return;
         }
 
+        const incomingSerialized = serializeEditorContent(initialContent);
+
         if (previousNoteIdRef.current === null) {
             previousNoteIdRef.current = id;
             previousLoadedContentRef.current = initialContent;
+            previousLoadedContentSerializedRef.current = incomingSerialized;
             return;
         }
 
         const noteChanged = previousNoteIdRef.current !== id;
-        const contentChanged = previousLoadedContentRef.current !== initialContent;
+        const contentChanged =
+            previousLoadedContentSerializedRef.current !== incomingSerialized;
 
         if (noteChanged || contentChanged) {
             previousNoteIdRef.current = id;
             previousLoadedContentRef.current = initialContent;
-            editor.commands.setContent(initialContent);
+            previousLoadedContentSerializedRef.current = incomingSerialized;
+
+            if (noteChanged) {
+                editor.commands.setContent(initialContent, { emitUpdate: false });
+                return;
+            }
+
+            const editorSerialized = JSON.stringify(editor.getJSON());
+            if (editorSerialized !== incomingSerialized) {
+                editor.commands.setContent(initialContent, { emitUpdate: false });
+            }
         }
     }, [editor, id, initialContent]);
 
@@ -359,7 +397,8 @@ export function SimpleEditor({
                 }
 
                 tasksTotal += 1;
-                if (node.attrs.checked === true) {
+                const isCanceled = node.attrs.taskStatus === 'canceled';
+                if (node.attrs.checked === true || isCanceled) {
                     tasksClosed += 1;
                 }
 

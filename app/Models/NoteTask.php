@@ -16,6 +16,8 @@ class NoteTask extends Model
         'parent_note_title',
         'position',
         'checked',
+        'task_status',
+        'priority',
         'content_text',
         'render_fragments',
         'due_date',

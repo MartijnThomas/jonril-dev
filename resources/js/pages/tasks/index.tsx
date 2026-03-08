@@ -41,6 +41,8 @@ type TaskItem = {
     block_id: string | null;
     position: number;
     checked: boolean;
+    task_status: 'canceled' | 'deferred' | null;
+    priority: 'high' | 'medium' | 'normal' | null;
     content: string;
     render_fragments: TaskRenderFragment[];
     due_date: string | null;
@@ -583,9 +585,13 @@ export default function TasksIndex({
                                         <TableCell>
                                             <TaskToggleCheckbox
                                                 checked={task.checked}
-                                                disabled={pendingTaskIds.includes(
-                                                    task.id,
-                                                )}
+                                                disabled={
+                                                    pendingTaskIds.includes(
+                                                        task.id,
+                                                    ) ||
+                                                    task.task_status ===
+                                                        'canceled'
+                                                }
                                                 ariaLabel={`Toggle task ${task.content || task.id}`}
                                                 onCheckedChange={() =>
                                                     toggleTaskChecked(task)
@@ -595,9 +601,12 @@ export default function TasksIndex({
                                         <TableCell className="max-w-0 pl-5 whitespace-normal">
                                             <div
                                                 className={
-                                                    task.checked
-                                                        ? 'text-muted-foreground line-through'
-                                                        : ''
+                                                    task.task_status ===
+                                                    'canceled'
+                                                        ? 'line-through task-canceled-strike'
+                                                        : task.checked
+                                                          ? 'text-muted-foreground line-through'
+                                                          : ''
                                                 }
                                             >
                                                 <TaskInlineContent
@@ -615,6 +624,10 @@ export default function TasksIndex({
                                                               ]
                                                     }
                                                     language={language}
+                                                    canceled={
+                                                        task.task_status ===
+                                                        'canceled'
+                                                    }
                                                 />
                                             </div>
                                             <div className="mt-1 text-xs text-muted-foreground">

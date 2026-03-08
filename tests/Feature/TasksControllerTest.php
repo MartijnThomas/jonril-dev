@@ -29,7 +29,7 @@ test('tasks index extracts tasks and hides completed items by default', function
                                 [
                                     'type' => 'paragraph',
                                     'content' => [
-                                        ['type' => 'text', 'text' => 'Call '],
+                                        ['type' => 'text', 'text' => '> ! Call '],
                                         [
                                             'type' => 'mention',
                                             'attrs' => [
@@ -81,8 +81,14 @@ test('tasks index extracts tasks and hides completed items by default', function
             ->where('tasks.data.0.checked', false)
             ->where('tasks.data.0.due_date', '2026-03-10')
             ->where('tasks.data.0.deadline_date', '2026-03-12')
+            ->where('tasks.data.0.task_status', 'deferred')
+            ->where('tasks.data.0.priority', 'normal')
             ->where('tasks.data.0.mentions.0', 'Lea')
             ->where('tasks.data.0.hashtags.0', 'work')
+            ->where('tasks.data.0.render_fragments.0.type', 'status_token')
+            ->where('tasks.data.0.render_fragments.0.status', 'deferred')
+            ->where('tasks.data.0.render_fragments.2.type', 'priority_token')
+            ->where('tasks.data.0.render_fragments.2.priority', 'normal')
             ->where('filters.show_completed', false),
         );
 });

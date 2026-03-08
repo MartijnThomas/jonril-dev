@@ -19,6 +19,7 @@ type RelatedTaskItem = {
     block_id: string | null;
     position: number;
     checked: boolean;
+    task_status?: 'canceled' | 'deferred' | null;
     content: string;
     render_fragments: TaskRenderFragment[];
     due_date: string | null;
@@ -54,11 +55,13 @@ export function NoteRelatedPanel({
     backlinks,
     language,
 }: NoteRelatedPanelProps) {
-    const hasOpenRelatedTasks = relatedTasks.some((task) => !task.checked);
+    const isOpenTask = (task: RelatedTaskItem) =>
+        task.checked !== true && task.task_status !== 'canceled';
+    const hasOpenRelatedTasks = relatedTasks.some((task) => isOpenTask(task));
     const [panelOpen, setPanelOpen] = useState(hasOpenRelatedTasks);
     const [tasksOpen, setTasksOpen] = useState(hasOpenRelatedTasks);
     const [backlinksOpen, setBacklinksOpen] = useState(false);
-    const [includeClosedTasks, setIncludeClosedTasks] = useState(false);
+    const [onlyOpenTasks, setOnlyOpenTasks] = useState(true);
     const [taskItems, setTaskItems] = useState(relatedTasks);
     const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
     const [openTaskGroups, setOpenTaskGroups] = useState<Record<string, boolean>>({});
@@ -76,14 +79,17 @@ export function NoteRelatedPanel({
     const backlinksEmptyText =
         language === 'en' ? 'No backlinks found.' : 'Geen backlinks gevonden.';
 
-    const remainingCount = useMemo(
-        () => taskItems.filter((task) => !task.checked).length,
+    const openCount = useMemo(
+        () => taskItems.filter((task) => isOpenTask(task)).length,
         [taskItems],
     );
 
     const visibleTaskItems = useMemo(
-        () => (includeClosedTasks ? taskItems : taskItems.filter((task) => !task.checked)),
-        [includeClosedTasks, taskItems],
+        () =>
+            onlyOpenTasks
+                ? taskItems.filter((task) => isOpenTask(task))
+                : taskItems,
+        [onlyOpenTasks, taskItems],
     );
 
     const visibleGroupedTaskItems = useMemo(() => {
@@ -138,8 +144,8 @@ export function NoteRelatedPanel({
         return Array.from(groups.values());
     }, [backlinks]);
 
-    const closedCount = taskItems.length - remainingCount;
-    const taskCounterLabel = `${closedCount}/${taskItems.length}`;
+    const doneOrCanceledCount = taskItems.length - openCount;
+    const taskCounterLabel = `${doneOrCanceledCount}/${taskItems.length}`;
     const relatedItemsCount = taskItems.length + backlinks.length;
 
     const toggleTask = (task: RelatedTaskItem) => {
@@ -292,19 +298,19 @@ export function NoteRelatedPanel({
                                     </span>
                                 </button>
                             </CollapsibleTrigger>
-                            {taskItems.length > 0 && closedCount > 0 ? (
+                            {taskItems.length > 0 && doneOrCanceledCount > 0 ? (
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs text-muted-foreground">
-                                        {language === 'en' ? 'Include done' : 'Incl. afgerond'}
+                                        {language === 'en' ? 'Only open' : 'Alleen open'}
                                     </span>
                                     <Switch
-                                        checked={includeClosedTasks}
-                                        onCheckedChange={setIncludeClosedTasks}
+                                        checked={onlyOpenTasks}
+                                        onCheckedChange={setOnlyOpenTasks}
                                         className="h-4 w-7 data-[state=checked]:bg-zinc-400 data-[state=unchecked]:bg-zinc-300 [&>span]:h-3 [&>span]:w-3"
                                         aria-label={
                                             language === 'en'
-                                                ? 'Include done tasks'
-                                                : 'Inclusief afgeronde taken'
+                                                ? 'Only open tasks'
+                                                : 'Alleen open taken'
                                         }
                                     />
                                 </div>
@@ -369,9 +375,13 @@ export function NoteRelatedPanel({
                                                                 <TaskToggleCheckbox
                                                                     className="mt-0.5"
                                                                     checked={task.checked}
-                                                                    disabled={pendingTaskIds.includes(
-                                                                        task.id,
-                                                                    )}
+                                                                    disabled={
+                                                                        pendingTaskIds.includes(
+                                                                            task.id,
+                                                                        ) ||
+                                                                        task.task_status ===
+                                                                            'canceled'
+                                                                    }
                                                                     ariaLabel={`Toggle task ${task.content || task.id}`}
                                                                     onCheckedChange={() =>
                                                                         toggleTask(task)
@@ -381,7 +391,12 @@ export function NoteRelatedPanel({
                                                                     <p
                                                                         className={cn(
                                                                             'text-sm leading-5',
-                                                                            task.checked &&
+                                                                            task.task_status ===
+                                                                                'canceled' &&
+                                                                                'line-through task-canceled-strike',
+                                                                            task.task_status !==
+                                                                                'canceled' &&
+                                                                                task.checked &&
                                                                                 'line-through opacity-72',
                                                                         )}
                                                                     >
@@ -404,6 +419,11 @@ export function NoteRelatedPanel({
                                                                                       ]
                                                                             }
                                                                             language={language}
+                                                                            priorityStyle="range"
+                                                                            canceled={
+                                                                                task.task_status ===
+                                                                                'canceled'
+                                                                            }
                                                                         />
                                                                     </p>
                                                                 </div>

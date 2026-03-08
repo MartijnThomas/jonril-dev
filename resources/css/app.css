@@ -211,6 +211,37 @@ html {
     @apply text-sm font-normal text-red-700/70;
 }
 
+.task-inline .md-task-status-token--deferred {
+    @apply font-semibold text-blue-600;
+}
+
+.task-inline.task-inline--canceled :is(
+        .mention,
+        .hashtag,
+        .md-wikilink,
+        .md-task-due-token,
+        .md-task-deadline-token,
+        .md-task-date-display,
+        .md-task-status-token--deferred,
+        .md-priority,
+        .md-priority-range
+    ) {
+    color: inherit !important;
+    background: transparent !important;
+    font-weight: inherit !important;
+    text-decoration: inherit !important;
+    border-radius: 0 !important;
+}
+
+.task-inline.task-inline--canceled .md-wikilink {
+    text-decoration: inherit !important;
+}
+
+.task-canceled-strike {
+    text-decoration-thickness: 2px;
+    text-decoration-color: color-mix(in srgb, currentColor 62%, transparent);
+}
+
 .md-task-due-token {
     @apply text-sm font-normal text-orange-600/70;
 }

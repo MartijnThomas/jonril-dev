@@ -41,6 +41,12 @@ class NoteTaskIndexer
                 $fallbackDates = $this->extractDatesFromText($text);
 
                 $attrs = Arr::get($taskItem, 'attrs', []);
+                $priorityFromAttrs = $this->normalizePriority(
+                    Arr::get($attrs, 'priority'),
+                );
+                $taskStatusFromAttrs = $this->normalizeTaskStatus(
+                    Arr::get($attrs, 'taskStatus'),
+                );
 
                 $rows[] = [
                     'workspace_id' => $note->workspace_id,
@@ -51,6 +57,8 @@ class NoteTaskIndexer
                     'parent_note_title' => $note->parent?->title,
                     'position' => $position,
                     'checked' => (bool) Arr::get($attrs, 'checked', false),
+                    'task_status' => $taskStatusFromAttrs ?? $this->extractTaskStatusFromText($text),
+                    'priority' => $priorityFromAttrs ?? $this->extractPriorityFromText($text),
                     'content_text' => $text,
                     'render_fragments' => json_encode($fragments),
                     'due_date' => Arr::get($attrs, 'dueDate') ?? $fallbackDates['due_date'],
@@ -197,6 +205,23 @@ class NoteTaskIndexer
                 if ($date !== '') {
                     $parts[] = ">>{$date}";
                 }
+
+                continue;
+            }
+
+            if ($type === 'priority_token') {
+                $value = trim((string) ($fragment['value'] ?? ''));
+                if ($value !== '') {
+                    $parts[] = $value;
+                }
+                continue;
+            }
+
+            if ($type === 'status_token') {
+                $value = trim((string) ($fragment['value'] ?? ''));
+                if ($value !== '') {
+                    $parts[] = $value;
+                }
             }
         }
 
@@ -294,11 +319,61 @@ class NoteTaskIndexer
      */
     private function splitTaskDateTokens(string $text): array
     {
+        $leadingFragments = [];
+        if (preg_match('/^(\s*)(—|>)(?=\s|$)/u', $text, $statusMatch)) {
+            $leading = (string) ($statusMatch[1] ?? '');
+            $token = (string) ($statusMatch[2] ?? '');
+            $taskStatus = $this->taskStatusFromToken($token);
+
+            if ($leading !== '') {
+                $leadingFragments[] = [
+                    'type' => 'text',
+                    'text' => $leading,
+                ];
+            }
+
+            if ($taskStatus !== null) {
+                $leadingFragments[] = [
+                    'type' => 'status_token',
+                    'value' => $token,
+                    'status' => $taskStatus,
+                ];
+            }
+
+            $consumedLength = strlen((string) ($statusMatch[0] ?? ''));
+            $text = substr($text, $consumedLength) ?: '';
+        }
+
+        if (preg_match('/^(\s*)(!{1,3})(?=\s|$)/', $text, $priorityMatch)) {
+            $leading = (string) ($priorityMatch[1] ?? '');
+            $token = (string) ($priorityMatch[2] ?? '');
+
+            if ($leading !== '') {
+                $leadingFragments[] = [
+                    'type' => 'text',
+                    'text' => $leading,
+                ];
+            }
+
+            $leadingFragments[] = [
+                'type' => 'priority_token',
+                'value' => $token,
+                'priority' => $this->priorityFromToken($token),
+            ];
+
+            $consumedLength = strlen((string) ($priorityMatch[0] ?? ''));
+            $text = substr($text, $consumedLength) ?: '';
+        }
+
         if (! preg_match('/(>>\d{4}-\d{2}-\d{2}|>\d{4}-\d{2}-\d{2})/', $text)) {
-            return [[
-                'type' => 'text',
-                'text' => $text,
-            ]];
+            if ($text !== '') {
+                $leadingFragments[] = [
+                    'type' => 'text',
+                    'text' => $text,
+                ];
+            }
+
+            return $leadingFragments;
         }
 
         $parts = preg_split(
@@ -343,7 +418,7 @@ class NoteTaskIndexer
             ];
         }
 
-        return $fragments;
+        return [...$leadingFragments, ...$fragments];
     }
 
     /**
@@ -374,6 +449,69 @@ class NoteTaskIndexer
         }
 
         return $result;
+    }
+
+    private function extractPriorityFromText(string $text): ?string
+    {
+        if (! preg_match('/^\s*(?:—|>)?\s*(!{1,3})(?=\s|$)/u', $text, $match)) {
+            return null;
+        }
+
+        return $this->priorityFromToken((string) ($match[1] ?? ''));
+    }
+
+    private function extractTaskStatusFromText(string $text): ?string
+    {
+        if (! preg_match('/^\s*(—|>)(?=\s|$)/u', $text, $match)) {
+            return null;
+        }
+
+        return $this->taskStatusFromToken((string) ($match[1] ?? ''));
+    }
+
+    private function priorityFromToken(string $token): ?string
+    {
+        return match ($token) {
+            '!!!' => 'high',
+            '!!' => 'medium',
+            '!' => 'normal',
+            default => null,
+        };
+    }
+
+    private function normalizePriority(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = strtolower(trim($value));
+
+        return in_array($normalized, ['high', 'medium', 'normal'], true)
+            ? $normalized
+            : null;
+    }
+
+    private function taskStatusFromToken(string $token): ?string
+    {
+        return match ($token) {
+            '—' => 'canceled',
+            '>' => 'deferred',
+            default => null,
+        };
+    }
+
+    private function normalizeTaskStatus(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        return match (strtolower(trim($value))) {
+            'canceled' => 'canceled',
+            'deferred' => 'deferred',
+            default => null,
+        };
     }
 
     /**
