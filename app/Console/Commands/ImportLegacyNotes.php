@@ -9,8 +9,8 @@ use Illuminate\Console\Command;
 class ImportLegacyNotes extends Command
 {
     protected $signature = 'notes:import-legacy
-        {--notes=storage/old-notes.json : Path to old notes JSON export}
-        {--blocks=storage/old-note_blocks.json : Path to old note blocks JSON export}
+        {--notes=database/legacy-import/old-notes.json : Path to old notes JSON export}
+        {--blocks=database/legacy-import/old-note_blocks.json : Path to old note blocks JSON export}
         {--workspace= : Workspace UUID}
         {--clear-workspace : Clear workspace content before importing}
         {--skip-wiki : Skip wiki-link conversion}
