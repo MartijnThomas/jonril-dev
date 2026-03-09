@@ -17,6 +17,7 @@ import {
     NoteTitleIconExtension,
 } from '@/components/tiptap-extension/note-title-icon-extension';
 import { TaskItemWithDates } from '@/components/tiptap-extension/task-item-dates-extension';
+import { TaskMigrationMetaExtension } from '@/components/tiptap-extension/task-migration-meta-extension';
 import { TaskItemStatusExtension } from '@/components/tiptap-extension/task-item-status-extension';
 import { WikiLinkMark } from '@/components/tiptap-extension/wiki-link-mark-extension';
 import { WikiLinkSuggestion } from '@/components/tiptap-extension/wiki-link-suggestion-extension';
@@ -210,6 +211,9 @@ export function createSimpleEditorExtensions({
         InlineCommands,
         ListItemPriorityExtension,
         TaskItemStatusExtension,
+        TaskMigrationMetaExtension.configure({
+            notes: wikiLinkNotes,
+        }),
         WikiLinkSuggestion.configure({
             notes: wikiLinkNotes,
         }),

@@ -495,6 +495,39 @@ export const TaskItemWithDates = TaskItem.extend({
                         ? { 'data-task-status': attributes.taskStatus }
                         : {},
             },
+            migratedToNoteId: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-migrated-to-note-id'),
+                renderHTML: (attributes: {
+                    migratedToNoteId?: string | null;
+                }) =>
+                    attributes.migratedToNoteId
+                        ? { 'data-migrated-to-note-id': attributes.migratedToNoteId }
+                        : {},
+            },
+            migratedFromNoteId: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-migrated-from-note-id'),
+                renderHTML: (attributes: {
+                    migratedFromNoteId?: string | null;
+                }) =>
+                    attributes.migratedFromNoteId
+                        ? { 'data-migrated-from-note-id': attributes.migratedFromNoteId }
+                        : {},
+            },
+            migratedFromBlockId: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-migrated-from-block-id'),
+                renderHTML: (attributes: {
+                    migratedFromBlockId?: string | null;
+                }) =>
+                    attributes.migratedFromBlockId
+                        ? { 'data-migrated-from-block-id': attributes.migratedFromBlockId }
+                        : {},
+            },
             dueDate: {
                 default: null,
                 parseHTML: (element: HTMLElement) =>

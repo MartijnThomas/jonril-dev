@@ -21,6 +21,8 @@ type RelatedTaskItem = {
     checked: boolean;
     task_status?:
         | 'canceled'
+        | 'assigned'
+        | 'migrated'
         | 'deferred'
         | 'starred'
         | 'question'
@@ -61,7 +63,9 @@ export function NoteRelatedPanel({
     language,
 }: NoteRelatedPanelProps) {
     const isOpenTask = (task: RelatedTaskItem) =>
-        task.checked !== true && task.task_status !== 'canceled';
+        task.checked !== true &&
+        task.task_status !== 'canceled' &&
+        task.task_status !== 'migrated';
     const hasOpenRelatedTasks = relatedTasks.some((task) => isOpenTask(task));
     const [panelOpen, setPanelOpen] = useState(hasOpenRelatedTasks);
     const [tasksOpen, setTasksOpen] = useState(hasOpenRelatedTasks);

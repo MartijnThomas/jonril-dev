@@ -4,16 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\Note;
 use App\Models\NoteTask;
+use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\NoteSlugService;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Illuminate\Support\Str;
 
 class TasksController extends Controller
 {
     public function __construct(
         private readonly NoteSlugService $noteSlugService,
+        private readonly JournalNoteService $journalNoteService,
     ) {}
 
     public function index(Request $request)
@@ -326,6 +330,233 @@ class TasksController extends Controller
         return back();
     }
 
+    public function migrateTargets(Request $request)
+    {
+        $user = $request->user();
+        if (! $user) {
+            abort(403);
+        }
+
+        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->all();
+        if ($workspaceIds === []) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'source_note_id' => [
+                'required',
+                'uuid',
+                Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
+            ],
+            'q' => ['nullable', 'string', 'max:160'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:30'],
+        ]);
+
+        $sourceNote = Note::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->findOrFail($data['source_note_id']);
+
+        $workspaceId = (string) $sourceNote->workspace_id;
+        $limit = (int) ($data['limit'] ?? 20);
+        $query = trim((string) ($data['q'] ?? ''));
+        $language = $user->language ?? 'nl';
+        $today = CarbonImmutable::now();
+
+        $presetTargets = [
+            [Note::JOURNAL_DAILY, $today],
+            [Note::JOURNAL_DAILY, $today->addDay()],
+            [Note::JOURNAL_WEEKLY, $today],
+            [Note::JOURNAL_WEEKLY, $today->addWeek()],
+            [Note::JOURNAL_MONTHLY, $today],
+            [Note::JOURNAL_MONTHLY, $today->addMonth()],
+        ];
+
+        $existingJournalNotes = Note::query()
+            ->where('workspace_id', $workspaceId)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->where(function ($builder) use ($presetTargets): void {
+                foreach ($presetTargets as [$granularity, $date]) {
+                    $builder->orWhere(function ($inner) use ($granularity, $date): void {
+                        $inner->where('journal_granularity', $granularity)
+                            ->whereDate('journal_date', $date->toDateString());
+                    });
+                }
+            })
+            ->get(['id', 'journal_granularity', 'journal_date', 'title', 'slug']);
+
+        $journalByKey = $existingJournalNotes->keyBy(
+            fn (Note $note) => "{$note->journal_granularity}:{$note->journal_date?->toDateString()}"
+        );
+
+        $items = [];
+        foreach ($presetTargets as [$granularity, $date]) {
+            $period = $this->journalNoteService->periodFor($granularity, $date);
+            $title = $this->journalNoteService->titleFor($granularity, $date, $language);
+            $key = "{$granularity}:{$date->toDateString()}";
+            $existing = $journalByKey->get($key);
+
+            $items[] = [
+                'key' => "journal:{$granularity}:{$period}",
+                'title' => $title,
+                'path' => "/journal/{$granularity}/{$period}",
+                'target_note_id' => $existing?->id,
+                'target_journal_granularity' => $granularity,
+                'target_journal_period' => $period,
+            ];
+        }
+
+        $noteItems = Note::query()
+            ->where('workspace_id', $workspaceId)
+            ->where('id', '!=', $sourceNote->id)
+            ->when($query !== '', function ($builder) use ($query): void {
+                $builder->where(function ($inner) use ($query): void {
+                    $inner->where('title', 'like', "%{$query}%")
+                        ->orWhere('slug', 'like', "%{$query}%");
+                });
+            })
+            ->orderByDesc('updated_at')
+            ->limit($limit)
+            ->get(['id', 'title', 'slug'])
+            ->map(fn (Note $note) => [
+                'key' => "note:{$note->id}",
+                'title' => $note->display_title,
+                'path' => $note->path,
+                'target_note_id' => $note->id,
+                'target_journal_granularity' => null,
+                'target_journal_period' => null,
+            ])
+            ->values()
+            ->all();
+
+        $items = collect([...$items, ...$noteItems])
+            ->filter(function (array $item) use ($query): bool {
+                if ($query === '') {
+                    return true;
+                }
+
+                $haystacks = [
+                    mb_strtolower((string) ($item['title'] ?? '')),
+                    mb_strtolower((string) ($item['path'] ?? '')),
+                ];
+                $needle = mb_strtolower($query);
+
+                foreach ($haystacks as $haystack) {
+                    if ($haystack !== '' && str_contains($haystack, $needle)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })
+            ->unique('key')
+            ->take($limit)
+            ->values()
+            ->all();
+
+        return response()->json([
+            'items' => $items,
+        ]);
+    }
+
+    public function migrate(Request $request)
+    {
+        $user = $request->user();
+        if (! $user) {
+            abort(403);
+        }
+
+        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->all();
+        if ($workspaceIds === []) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'source_note_id' => [
+                'required',
+                'uuid',
+                Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
+            ],
+            'block_id' => ['nullable', 'string', 'max:255'],
+            'position' => ['required_without:block_id', 'integer', 'min:1'],
+            'target_note_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
+            ],
+            'target_journal_granularity' => [
+                'nullable',
+                Rule::in([
+                    Note::JOURNAL_DAILY,
+                    Note::JOURNAL_WEEKLY,
+                    Note::JOURNAL_MONTHLY,
+                    Note::JOURNAL_YEARLY,
+                ]),
+            ],
+            'target_journal_period' => ['nullable', 'string', 'max:32'],
+        ]);
+
+        $sourceNote = Note::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->findOrFail($data['source_note_id']);
+
+        $targetNote = null;
+        if (is_string($data['target_note_id'] ?? null) && $data['target_note_id'] !== '') {
+            $targetNote = Note::query()
+                ->where('workspace_id', $sourceNote->workspace_id)
+                ->find($data['target_note_id']);
+        } elseif (
+            is_string($data['target_journal_granularity'] ?? null) &&
+            is_string($data['target_journal_period'] ?? null)
+        ) {
+            $workspace = $sourceNote->workspace()->first();
+            if (! $workspace) {
+                abort(404);
+            }
+
+            $targetNote = $this->journalNoteService->resolveOrCreate(
+                $workspace,
+                $data['target_journal_granularity'],
+                $data['target_journal_period'],
+                $user->language,
+            );
+        }
+
+        if (! $targetNote) {
+            abort(422, 'A target note is required.');
+        }
+
+        if ((string) $targetNote->id === (string) $sourceNote->id) {
+            abort(422, 'Source and target note cannot be the same.');
+        }
+
+        $sourceContent = is_array($sourceNote->content) ? $sourceNote->content : null;
+        $targetContent = is_array($targetNote->content) ? $targetNote->content : null;
+        if (! $sourceContent || ! $targetContent) {
+            abort(422, 'Note content is invalid.');
+        }
+
+        $migrated = $this->migrateTaskBetweenNotes(
+            sourceContent: $sourceContent,
+            targetContent: $targetContent,
+            sourceNote: $sourceNote,
+            targetNote: $targetNote,
+            blockId: is_string($data['block_id'] ?? null) ? trim((string) $data['block_id']) : null,
+            position: (int) ($data['position'] ?? 0),
+        );
+
+        if (! $migrated) {
+            abort(422, 'Unable to locate task item in note content.');
+        }
+
+        $sourceNote->content = $sourceContent;
+        $sourceNote->save();
+
+        $targetNote->content = $targetContent;
+        $targetNote->save();
+
+        return back();
+    }
+
     /**
      * @param  array<string, string>  $workspaceNamesById
      * @param  array<int, array{id: string, title: string, workspace_id: string, workspace_name: string|null}>  $notes
@@ -416,6 +647,174 @@ class TasksController extends Controller
                 ->orderBy('due_date', $direction)
                 ->orderBy('updated_at', 'desc'),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $sourceContent
+     * @param  array<string, mixed>  $targetContent
+     */
+    private function migrateTaskBetweenNotes(
+        array &$sourceContent,
+        array &$targetContent,
+        Note $sourceNote,
+        Note $targetNote,
+        ?string $blockId,
+        int $position,
+    ): bool {
+        if (! isset($sourceContent['content']) || ! is_array($sourceContent['content'])) {
+            return false;
+        }
+
+        $counter = 0;
+        $clonedTask = null;
+        $sourceTaskBlockId = null;
+
+        $matched = $this->walkAndMigrateTask(
+            $sourceContent['content'],
+            $blockId,
+            $position,
+            $counter,
+            $sourceNote,
+            $targetNote,
+            $clonedTask,
+            $sourceTaskBlockId,
+        );
+
+        if (! $matched || ! is_array($clonedTask)) {
+            return false;
+        }
+
+        if (! isset($targetContent['content']) || ! is_array($targetContent['content'])) {
+            $targetContent['content'] = [];
+        }
+
+        $this->appendTaskToDocumentEnd($targetContent['content'], $clonedTask);
+
+        return true;
+    }
+
+    /**
+     * @param  array<int, mixed>  $nodes
+     * @param  array<string, mixed>|null  $clonedTask
+     */
+    private function walkAndMigrateTask(
+        array &$nodes,
+        ?string $blockId,
+        int $targetPosition,
+        int &$counter,
+        Note $sourceNote,
+        Note $targetNote,
+        ?array &$clonedTask,
+        ?string &$sourceTaskBlockId,
+    ): bool {
+        foreach ($nodes as &$node) {
+            if (! is_array($node)) {
+                continue;
+            }
+
+            if (($node['type'] ?? null) === 'taskItem') {
+                $counter += 1;
+                $nodeAttrs = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
+                $nodeBlockId = is_string($nodeAttrs['id'] ?? null) ? (string) $nodeAttrs['id'] : null;
+                $isMatch = ($blockId !== null && $blockId !== '' && $nodeBlockId === $blockId)
+                    || (($blockId === null || $blockId === '') && $targetPosition > 0 && $counter === $targetPosition);
+
+                if ($isMatch) {
+                    $sourceTaskBlockId = $nodeBlockId && $nodeBlockId !== ''
+                        ? $nodeBlockId
+                        : (string) Str::uuid();
+
+                    $baseTask = $node;
+                    $baseAttrs = is_array($baseTask['attrs'] ?? null) ? $baseTask['attrs'] : [];
+                    $baseContent = is_array($baseTask['content'] ?? null) ? $baseTask['content'] : [];
+                    $baseContent = array_values(array_filter($baseContent, fn ($child) => ! $this->isMigrationMetaParagraph($child)));
+
+                    $baseAttrs['id'] = $sourceTaskBlockId;
+
+                    $node = $baseTask;
+                    $node['attrs'] = array_merge($baseAttrs, [
+                        'checked' => false,
+                        'taskStatus' => 'migrated',
+                        'migratedToNoteId' => (string) $targetNote->id,
+                        'migratedFromNoteId' => null,
+                        'migratedFromBlockId' => null,
+                    ]);
+                    $node['content'] = $baseContent;
+
+                    $newTaskId = (string) Str::uuid();
+                    $clonedTask = $baseTask;
+                    $clonedTask['attrs'] = array_merge($baseAttrs, [
+                        'id' => $newTaskId,
+                        'checked' => false,
+                        'taskStatus' => null,
+                        'migratedToNoteId' => null,
+                        'migratedFromNoteId' => (string) $sourceNote->id,
+                        'migratedFromBlockId' => $sourceTaskBlockId,
+                    ]);
+                    $clonedTask['content'] = $baseContent;
+
+                    return true;
+                }
+            }
+
+            if (isset($node['content']) && is_array($node['content'])) {
+                if ($this->walkAndMigrateTask(
+                    $node['content'],
+                    $blockId,
+                    $targetPosition,
+                    $counter,
+                    $sourceNote,
+                    $targetNote,
+                    $clonedTask,
+                    $sourceTaskBlockId,
+                )) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, mixed>  $docContent
+     * @param  array<string, mixed>  $taskItem
+     */
+    private function appendTaskToDocumentEnd(array &$docContent, array $taskItem): void
+    {
+        $lastIndex = count($docContent) - 1;
+        if (
+            $lastIndex >= 0
+            && is_array($docContent[$lastIndex] ?? null)
+            && (($docContent[$lastIndex]['type'] ?? null) === 'taskList')
+            && is_array($docContent[$lastIndex]['content'] ?? null)
+        ) {
+            $docContent[$lastIndex]['content'][] = $taskItem;
+
+            return;
+        }
+
+        $docContent[] = [
+            'type' => 'taskList',
+            'content' => [$taskItem],
+        ];
+    }
+
+    private function isMigrationMetaParagraph(mixed $node): bool
+    {
+        if (! is_array($node) || ($node['type'] ?? null) !== 'paragraph') {
+            return false;
+        }
+
+        $content = $node['content'] ?? null;
+        if (! is_array($content) || ! isset($content[0]) || ! is_array($content[0])) {
+            return false;
+        }
+
+        $firstText = strtolower(trim((string) ($content[0]['text'] ?? '')));
+
+        return str_starts_with($firstText, 'migrated to:')
+            || str_starts_with($firstText, 'migrated from:');
     }
 
     /**

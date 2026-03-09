@@ -2,8 +2,10 @@
 
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { router } from '@inertiajs/react';
 
 import { NoteRelatedPanel } from '@/components/note-related-panel';
+import { TaskMigratePicker } from '@/components/task-migrate-picker';
 import { NOTE_TITLE_ICON_PLUGIN_KEY } from '@/components/tiptap-extension/note-title-icon-extension';
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
 import type { DocumentPropertiesValue } from '@/components/tiptap-properties/document-properties';
@@ -86,6 +88,8 @@ type SimpleEditorProps = {
             value?: string;
             status?:
                 | 'canceled'
+                | 'assigned'
+                | 'migrated'
                 | 'deferred'
                 | 'starred'
                 | 'question'
@@ -93,6 +97,8 @@ type SimpleEditorProps = {
         }[];
         task_status?:
             | 'canceled'
+            | 'assigned'
+            | 'migrated'
             | 'deferred'
             | 'starred'
             | 'question'
@@ -126,6 +132,8 @@ type SimpleEditorProps = {
             value?: string;
             status?:
                 | 'canceled'
+                | 'assigned'
+                | 'migrated'
                 | 'deferred'
                 | 'starred'
                 | 'question'
@@ -173,6 +181,15 @@ export function SimpleEditor({
     const [mobileView, setMobileView] = useState<
         'main' | 'highlighter' | 'link'
     >('main');
+    const [taskMigratePicker, setTaskMigratePicker] = useState<{
+        open: boolean;
+        blockId: string | null;
+        position: number | null;
+    }>({
+        open: false,
+        blockId: null,
+        position: null,
+    });
 
     const [documentProperties, setDocumentProperties] =
         useState<DocumentPropertiesValue>(properties);
@@ -321,6 +338,39 @@ export function SimpleEditor({
     }, [editor]);
 
     useEffect(() => {
+        const openTaskMigratePicker = (event: Event) => {
+            const customEvent = event as CustomEvent<{
+                blockId?: string | null;
+                position?: number | null;
+            }>;
+
+            setTaskMigratePicker({
+                open: true,
+                blockId:
+                    typeof customEvent.detail?.blockId === 'string'
+                        ? customEvent.detail.blockId
+                        : null,
+                position:
+                    typeof customEvent.detail?.position === 'number'
+                        ? customEvent.detail.position
+                        : null,
+            });
+        };
+
+        window.addEventListener(
+            'task-migrate:open',
+            openTaskMigratePicker as EventListener,
+        );
+
+        return () => {
+            window.removeEventListener(
+                'task-migrate:open',
+                openTaskMigratePicker as EventListener,
+            );
+        };
+    }, []);
+
+    useEffect(() => {
         if (!editor) {
             return;
         }
@@ -413,7 +463,8 @@ export function SimpleEditor({
 
                 tasksTotal += 1;
                 const isCanceled = node.attrs.taskStatus === 'canceled';
-                if (node.attrs.checked === true || isCanceled) {
+                const isMigrated = node.attrs.taskStatus === 'migrated';
+                if (node.attrs.checked === true || isCanceled || isMigrated) {
                     tasksClosed += 1;
                 }
 
@@ -468,6 +519,27 @@ export function SimpleEditor({
     return (
         <div className="mx-auto max-w-3xl px-8">
             <EditorContext.Provider value={{ editor }}>
+                <TaskMigratePicker
+                    open={taskMigratePicker.open}
+                    sourceNoteId={id}
+                    blockId={taskMigratePicker.blockId}
+                    position={taskMigratePicker.position}
+                    language={language}
+                    onClose={() =>
+                        setTaskMigratePicker({
+                            open: false,
+                            blockId: null,
+                            position: null,
+                        })
+                    }
+                    onMigrated={() => {
+                        router.reload({
+                            only: ['content', 'relatedTasks', 'backlinks'],
+                            preserveScroll: true,
+                            preserveState: false,
+                        });
+                    }}
+                />
                 {showRelatedPanel ? (
                     <div className="mt-4">
                         <NoteRelatedPanel

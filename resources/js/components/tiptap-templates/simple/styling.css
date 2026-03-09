@@ -228,6 +228,35 @@
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
+    li[data-task-status='migrated'][data-migrated-to-note-id]
+    > label
+    > span {
+    position: relative;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated'][data-migrated-to-note-id]
+    > label
+    > span::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0.92rem;
+    height: 0.92rem;
+    background-color: rgb(107 114 128);
+    -webkit-mask: center / contain no-repeat
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+    mask: center / contain no-repeat
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+    pointer-events: none;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
     li
     > label
     > input[type='checkbox']:checked
@@ -239,7 +268,7 @@
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
-    li[data-task-status='deferred']
+    li[data-task-status='assigned']
     > label::before,
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
@@ -288,7 +317,16 @@
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
-    li[data-task-status='deferred']
+    li[data-task-status='migrated']
+    > label::before {
+    filter: blur(10.8px);
+    opacity: 0.7;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='assigned']
     > label::before {
     content: '';
     color: rgb(37 99 235);
@@ -296,9 +334,9 @@
     height: 0.95rem;
     background-color: currentColor;
     -webkit-mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E");
     mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E");
 }
 
 .simple-editor-content
@@ -521,6 +559,7 @@
         .md-task-due-token,
         .md-task-deadline-token,
         .md-task-date-display,
+        .md-task-status-token--assigned,
         .md-task-status-token--deferred,
         .md-priority,
         .md-priority-range
@@ -585,6 +624,78 @@
     > p
     span {
     opacity: 0.72;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated']
+    > label {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated']
+    > label
+    input {
+    cursor: not-allowed !important;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated']
+    > label
+    span {
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated']
+    > div
+    > p,
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated']
+    > div
+    > p
+    span {
+    opacity: 0.72;
+}
+
+.md-task-migration-meta {
+    margin-top: 0.15rem;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    color: color-mix(in srgb, currentColor 64%, transparent);
+    user-select: none;
+    pointer-events: auto;
+}
+
+.md-task-migration-meta .md-task-migration-meta-label {
+    font-variant-caps: small-caps;
+}
+
+.md-task-migration-meta .md-task-migration-link {
+    color: inherit !important;
+    text-decoration: none !important;
+}
+
+.md-task-migration-meta .md-task-migration-link:hover {
+    text-decoration: underline !important;
+}
+
+.md-task-migration-meta .md-task-migration-link::before,
+.md-task-migration-meta .md-task-migration-link::after {
+    content: none !important;
 }
 
 .inline-command-ghost {
@@ -686,6 +797,10 @@
 
 .md-task-date-ghost {
     @apply text-sm font-normal;
+}
+
+.md-task-status-token--assigned {
+    @apply font-semibold text-blue-600;
 }
 
 .md-task-status-token--deferred {

@@ -20,7 +20,7 @@ export type TaskRenderFragment = {
     date?: string;
     value?: string;
     priority?: 'high' | 'medium' | 'normal' | null;
-    status?: 'canceled' | 'deferred' | 'starred' | 'question' | null;
+    status?: 'canceled' | 'assigned' | 'migrated' | 'deferred' | 'starred' | 'question' | null;
 };
 
 type TaskInlineContentProps = {

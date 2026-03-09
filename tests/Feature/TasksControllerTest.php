@@ -29,7 +29,7 @@ test('tasks index extracts tasks and hides completed items by default', function
                                 [
                                     'type' => 'paragraph',
                                     'content' => [
-                                        ['type' => 'text', 'text' => '> ! Call '],
+                                        ['type' => 'text', 'text' => '< ! Call '],
                                         [
                                             'type' => 'mention',
                                             'attrs' => [
@@ -81,12 +81,12 @@ test('tasks index extracts tasks and hides completed items by default', function
             ->where('tasks.data.0.checked', false)
             ->where('tasks.data.0.due_date', '2026-03-10')
             ->where('tasks.data.0.deadline_date', '2026-03-12')
-            ->where('tasks.data.0.task_status', 'deferred')
+            ->where('tasks.data.0.task_status', 'assigned')
             ->where('tasks.data.0.priority', 'normal')
             ->where('tasks.data.0.mentions.0', 'Lea')
             ->where('tasks.data.0.hashtags.0', 'work')
             ->where('tasks.data.0.render_fragments.0.type', 'status_token')
-            ->where('tasks.data.0.render_fragments.0.status', 'deferred')
+            ->where('tasks.data.0.render_fragments.0.status', 'assigned')
             ->where('tasks.data.0.render_fragments.2.type', 'priority_token')
             ->where('tasks.data.0.render_fragments.2.priority', 'normal')
             ->where('filters.show_completed', false),
@@ -743,4 +743,121 @@ test('task checkbox can be toggled and undone via stable task reference', functi
     expect(data_get($note->content, 'content.0.content.0.attrs.checked'))->toBeFalse();
     expect($reindexedTask)->not->toBeNull();
     expect($reindexedTask?->checked)->toBeFalse();
+});
+
+test('migrate targets endpoint returns journal presets and workspace notes', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $source = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Source note',
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Client follow-up',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson('/tasks/migrate-targets?source_note_id='.$source->id.'&q=');
+
+    $response
+        ->assertOk()
+        ->assertJsonStructure([
+            'items' => [[
+                'key',
+                'title',
+                'path',
+                'target_note_id',
+                'target_journal_granularity',
+                'target_journal_period',
+            ]],
+        ]);
+
+    expect($response->json('items'))->toBeArray();
+    expect(collect($response->json('items'))->contains(
+        fn (array $item) => ($item['target_journal_granularity'] ?? null) === Note::JOURNAL_DAILY
+    ))->toBeTrue();
+    expect(collect($response->json('items'))->contains(
+        fn (array $item) => str_contains(strtolower((string) ($item['title'] ?? '')), 'client')
+    ))->toBeTrue();
+});
+
+test('migrating a task marks source as migrated and appends cloned task to target note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $source = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Source note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'task-migrate-source-1',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Prepare migration']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $target = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Target note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'content' => [['type' => 'text', 'text' => 'Existing content']],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->post('/tasks/migrate', [
+            'source_note_id' => $source->id,
+            'block_id' => 'task-migrate-source-1',
+            'target_note_id' => $target->id,
+        ])
+        ->assertRedirect();
+
+    $source->refresh();
+    $target->refresh();
+
+    $sourceTask = data_get($source->content, 'content.0.content.0');
+    expect(data_get($sourceTask, 'attrs.taskStatus'))->toBe('migrated');
+    expect(data_get($sourceTask, 'attrs.checked'))->toBeFalse();
+    expect(data_get($sourceTask, 'attrs.migratedToNoteId'))->toBe($target->id);
+    expect(data_get($sourceTask, 'attrs.migratedFromNoteId'))->toBeNull();
+    expect(data_get($sourceTask, 'attrs.migratedFromBlockId'))->toBeNull();
+    expect(data_get($sourceTask, 'content.1'))->toBeNull();
+
+    $targetTaskList = collect((array) data_get($target->content, 'content'))
+        ->first(fn ($node) => is_array($node) && (($node['type'] ?? null) === 'taskList'));
+    $targetTask = data_get($targetTaskList, 'content.0');
+    expect((string) data_get($targetTask, 'attrs.id'))->not->toBe('task-migrate-source-1');
+    expect(data_get($targetTask, 'attrs.checked'))->toBeFalse();
+    expect(data_get($targetTask, 'attrs.taskStatus'))->toBeNull();
+    expect(data_get($targetTask, 'attrs.migratedFromNoteId'))->toBe($source->id);
+    expect(data_get($targetTask, 'attrs.migratedFromBlockId'))->toBe('task-migrate-source-1');
+    expect(data_get($targetTask, 'attrs.migratedToNoteId'))->toBeNull();
+    expect(data_get($targetTask, 'content.1'))->toBeNull();
+
+    $sourceIndexed = NoteTask::query()
+        ->where('note_id', $source->id)
+        ->where('block_id', 'task-migrate-source-1')
+        ->first();
+
+    expect($sourceIndexed?->task_status)->toBe('migrated');
 });

@@ -18,7 +18,7 @@ type DailyTaskItem = {
     block_id: string | null;
     position: number;
     checked: boolean;
-    task_status: 'canceled' | 'deferred' | 'starred' | 'question' | null;
+    task_status: 'canceled' | 'assigned' | 'migrated' | 'deferred' | 'starred' | 'question' | null;
     content: string;
     render_fragments: TaskRenderFragment[];
     due_date: string | null;
@@ -57,7 +57,9 @@ export function DailyNoteTasksPanel({
         () =>
             items.filter(
                 (task) =>
-                    task.checked !== true && task.task_status !== 'canceled',
+                    task.checked !== true &&
+                    task.task_status !== 'canceled' &&
+                    task.task_status !== 'migrated',
             ).length,
         [items],
     );

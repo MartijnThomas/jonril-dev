@@ -48,7 +48,7 @@ test('reindex tasks command rebuilds task index for notes', function () {
                                 [
                                     'type' => 'paragraph',
                                     'content' => [
-                                        ['type' => 'text', 'text' => '> !! Follow up task'],
+                                        ['type' => 'text', 'text' => '< !! Follow up task'],
                                     ],
                                 ],
                             ],
@@ -105,7 +105,7 @@ test('reindex tasks command rebuilds task index for notes', function () {
     expect(NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('priority'))->toBe('high');
     expect(NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('task_status'))->toBe('canceled');
     expect(NoteTask::query()->where('note_id', $noteId)->where('position', 2)->value('priority'))->toBe('medium');
-    expect(NoteTask::query()->where('note_id', $noteId)->where('position', 2)->value('task_status'))->toBe('deferred');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('position', 2)->value('task_status'))->toBe('assigned');
     expect(NoteTask::query()->where('note_id', $noteId)->where('position', 3)->value('priority'))->toBe('normal');
     expect(NoteTask::query()->where('note_id', $noteId)->where('position', 3)->value('task_status'))->toBe('starred');
     expect(NoteTask::query()->where('note_id', $noteId)->where('position', 4)->value('task_status'))->toBe('question');

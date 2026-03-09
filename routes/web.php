@@ -70,6 +70,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('tasks.checked-by-reference');
     Route::patch('tasks/{task}/checked', [TasksController::class, 'updateChecked'])
         ->name('tasks.checked');
+    Route::get('tasks/migrate-targets', [TasksController::class, 'migrateTargets'])
+        ->name('tasks.migrate-targets');
+    Route::post('tasks/migrate', [TasksController::class, 'migrate'])
+        ->name('tasks.migrate');
 
     Route::post('workspaces/switch', WorkspaceSwitchController::class)
         ->name('workspaces.switch');

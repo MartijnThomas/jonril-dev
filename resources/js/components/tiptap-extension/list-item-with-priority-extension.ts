@@ -3,7 +3,8 @@ import { ListItem } from '@tiptap/extension-list';
 export type TaskPriority = 'high' | 'medium' | 'normal' | null;
 export type ListItemTaskStatus =
     | 'canceled'
-    | 'deferred'
+    | 'assigned'
+    | 'migrated'
     | 'starred'
     | 'question'
     | null;

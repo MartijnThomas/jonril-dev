@@ -4,6 +4,35 @@ export type InlineCommand = {
     run: (editor: any, range: { from: number; to: number }) => boolean;
 };
 
+function findCurrentTaskPosition(editor: any): number | null {
+    const selectionFrom = editor?.state?.selection?.from;
+    if (!selectionFrom) {
+        return null;
+    }
+
+    let position = 0;
+    let found: number | null = null;
+
+    editor.state.doc.descendants((node: any, pos: number) => {
+        if (node.type?.name !== 'taskItem') {
+            return true;
+        }
+
+        position += 1;
+
+        const from = pos;
+        const to = pos + node.nodeSize;
+        if (selectionFrom >= from && selectionFrom <= to) {
+            found = position;
+            return false;
+        }
+
+        return true;
+    });
+
+    return found;
+}
+
 export const inlineCommands: InlineCommand[] = [
     {
         name: 'task',
@@ -71,6 +100,38 @@ export const inlineCommands: InlineCommand[] = [
                 .deleteRange(range)
                 .toggleHeading({ level: 1 })
                 .run();
+        },
+    },
+    {
+        name: 'migrate',
+        aliases: ['move-task'],
+        run: (editor, range) => {
+            if (!editor.isActive('taskItem')) {
+                return false;
+            }
+
+            const blockId = (editor.getAttributes('taskItem')?.id ?? null) as
+                | string
+                | null;
+            const taskPosition = findCurrentTaskPosition(editor);
+
+            const didDelete = editor.chain().focus().deleteRange(range).run();
+            if (!didDelete) {
+                return false;
+            }
+
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                    new CustomEvent('task-migrate:open', {
+                        detail: {
+                            blockId,
+                            position: taskPosition,
+                        },
+                    }),
+                );
+            }
+
+            return true;
         },
     },
 ];

@@ -4,20 +4,21 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 export type TaskStatus =
     | 'canceled'
-    | 'deferred'
+    | 'assigned'
+    | 'migrated'
     | 'starred'
     | 'question'
     | null;
 
-const TASK_STATUS_TOKEN_REGEX = /^(\s*)(—|>|\*|\?)(?=\s|$)/u;
+const TASK_STATUS_TOKEN_REGEX = /^(\s*)(—|<|\*|\?)(?=\s|$)/u;
 
 function statusFromToken(token: string): TaskStatus {
     if (token === '—') {
         return 'canceled';
     }
 
-    if (token === '>') {
-        return 'deferred';
+    if (token === '<') {
+        return 'assigned';
     }
 
     if (token === '*') {
@@ -83,6 +84,35 @@ function extractStatusFromTaskItem(node: any): TaskStatus {
     });
 
     return result;
+}
+
+function hasMeaningfulTaskText(node: any): boolean {
+    let hasText = false;
+
+    node.descendants((child: any) => {
+        if (hasText) {
+            return false;
+        }
+
+        if (
+            child.type?.name === 'taskList' ||
+            child.type?.name === 'bulletList' ||
+            child.type?.name === 'orderedList'
+        ) {
+            return false;
+        }
+
+        if (!child.isText || typeof child.text !== 'string') {
+            return;
+        }
+
+        if (child.text.trim() !== '') {
+            hasText = true;
+            return false;
+        }
+    });
+
+    return hasText;
 }
 
 function buildStatusDecorations(doc: any): DecorationSet {
@@ -171,14 +201,83 @@ export const TaskItemStatusExtension = Extension.create({
 
                         const nextStatus = extractStatusFromTaskItem(node);
                         const currentStatus = (node.attrs.taskStatus ?? null) as TaskStatus;
+                        const isTaskNode = node.type.name === 'taskItem';
+                        const migratedToNoteId = isTaskNode
+                            ? (typeof node.attrs.migratedToNoteId === 'string'
+                                  ? node.attrs.migratedToNoteId.trim()
+                                  : '')
+                            : '';
+                        const migratedFromNoteId = isTaskNode
+                            ? (typeof node.attrs.migratedFromNoteId === 'string'
+                                  ? node.attrs.migratedFromNoteId.trim()
+                                  : '')
+                            : '';
+                        const migratedFromBlockId = isTaskNode
+                            ? (typeof node.attrs.migratedFromBlockId === 'string'
+                                  ? node.attrs.migratedFromBlockId.trim()
+                                  : '')
+                            : '';
+                        let resolvedStatus = nextStatus;
+                        let resolvedChecked = Boolean(node.attrs.checked);
+                        let resolvedMigratedToNoteId = migratedToNoteId;
+                        let resolvedMigratedFromNoteId = migratedFromNoteId;
+                        let resolvedMigratedFromBlockId = migratedFromBlockId;
 
-                        if (currentStatus === nextStatus) {
+                        if (
+                            isTaskNode &&
+                            currentStatus === 'migrated' &&
+                            nextStatus === null
+                        ) {
+                            if (migratedToNoteId !== '') {
+                                resolvedStatus = 'migrated';
+                                resolvedChecked = false;
+                            } else {
+                                resolvedStatus = null;
+                                resolvedChecked = false;
+                            }
+                        }
+
+                        if (
+                            isTaskNode &&
+                            (migratedToNoteId !== '' ||
+                                migratedFromNoteId !== '' ||
+                                migratedFromBlockId !== '') &&
+                            !hasMeaningfulTaskText(node)
+                        ) {
+                            resolvedStatus = null;
+                            resolvedChecked = false;
+                            resolvedMigratedToNoteId = '';
+                            resolvedMigratedFromNoteId = '';
+                            resolvedMigratedFromBlockId = '';
+                        }
+
+                        if (
+                            currentStatus === resolvedStatus &&
+                            (!isTaskNode ||
+                                (Boolean(node.attrs.checked) === resolvedChecked &&
+                                    migratedToNoteId === resolvedMigratedToNoteId &&
+                                    migratedFromNoteId === resolvedMigratedFromNoteId &&
+                                    migratedFromBlockId === resolvedMigratedFromBlockId))
+                        ) {
                             return;
                         }
 
                         tr.setNodeMarkup(pos, undefined, {
                             ...node.attrs,
-                            taskStatus: nextStatus,
+                            checked: resolvedChecked,
+                            taskStatus: resolvedStatus,
+                            migratedToNoteId:
+                                resolvedMigratedToNoteId !== ''
+                                    ? resolvedMigratedToNoteId
+                                    : null,
+                            migratedFromNoteId:
+                                resolvedMigratedFromNoteId !== ''
+                                    ? resolvedMigratedFromNoteId
+                                    : null,
+                            migratedFromBlockId:
+                                resolvedMigratedFromBlockId !== ''
+                                    ? resolvedMigratedFromBlockId
+                                    : null,
                         });
                         changed = true;
                     });
