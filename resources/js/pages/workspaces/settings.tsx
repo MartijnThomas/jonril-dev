@@ -1,6 +1,7 @@
 import { Head, useForm } from '@inertiajs/react';
-import { Settings2, Users } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Check, Copy, Settings2, Shield, Users } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CopyToClipboard } from 'react-copy-to-clipboard';
 import { COLOR_SWATCH_OPTIONS, ColorSwatchPicker } from '@/components/color-swatch-picker';
 import Heading from '@/components/heading';
 import { DEFAULT_WORKSPACE_ICON, IconPicker } from '@/components/icon-picker';
@@ -34,7 +35,22 @@ type Props = {
 
 export default function WorkspaceSettings({ workspace, members, status }: Props) {
     const { t } = useI18n();
-    const [section, setSection] = useState<'general' | 'members'>('general');
+    const [section, setSection] = useState<'general' | 'members' | 'advanced'>('general');
+    const [workspaceIdCopied, setWorkspaceIdCopied] = useState(false);
+
+    useEffect(() => {
+        if (!workspaceIdCopied) {
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            setWorkspaceIdCopied(false);
+        }, 2500);
+
+        return () => {
+            window.clearTimeout(timeout);
+        };
+    }, [workspaceIdCopied]);
 
     const breadcrumbs: BreadcrumbItem[] = useMemo(
         () => [
@@ -104,11 +120,27 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                 <Users className="size-4" />
                                 {t('workspace_settings.members', 'Members')}
                             </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={`w-full justify-start ${section === 'advanced' ? 'bg-muted' : ''}`}
+                                onClick={() => setSection('advanced')}
+                            >
+                                <Shield className="size-4" />
+                                {t('workspace_settings.advanced', 'Advanced')}
+                            </Button>
                         </nav>
                     </aside>
 
                     <div className="flex-1 md:max-w-3xl">
-                        <Tabs value={section} onValueChange={(value) => setSection(value as 'general' | 'members')} className="space-y-6">
+                        <Tabs
+                            value={section}
+                            onValueChange={(value) =>
+                                setSection(value as 'general' | 'members' | 'advanced')
+                            }
+                            className="space-y-6"
+                        >
                             <TabsList className="w-full lg:hidden">
                                 <TabsTrigger value="general" className="flex-1">
                                     <Settings2 className="size-4" />
@@ -117,6 +149,10 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                 <TabsTrigger value="members" className="flex-1">
                                     <Users className="size-4" />
                                     {t('workspace_settings.members', 'Members')}
+                                </TabsTrigger>
+                                <TabsTrigger value="advanced" className="flex-1">
+                                    <Shield className="size-4" />
+                                    {t('workspace_settings.advanced', 'Advanced')}
                                 </TabsTrigger>
                             </TabsList>
                         </Tabs>
@@ -297,6 +333,70 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                         {t('workspace_settings.changes_saved', 'Changes saved.')}
                                     </p>
                                 ) : null}
+                            </section>
+                        ) : null}
+
+                        {section === 'advanced' ? (
+                            <section className="max-w-2xl space-y-6">
+                                <div className="rounded-xl border bg-card p-5">
+                                    <div className="mb-4 space-y-1">
+                                        <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">
+                                            {t('workspace_settings.advanced', 'Advanced')}
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            {t(
+                                                'workspace_settings.advanced_description',
+                                                'Technical and read-only workspace values.',
+                                            )}
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label>
+                                            {t('workspace_settings.workspace_id_label', 'Workspace ID')}
+                                        </Label>
+                                        <div className="flex w-full max-w-xl">
+                                            <div
+                                                id="workspace-id"
+                                                className="flex h-9 flex-1 items-center rounded-l-md rounded-r-none border border-r-0 bg-muted/30 px-3 font-mono text-sm text-muted-foreground"
+                                            >
+                                                {workspace.id}
+                                            </div>
+                                            <CopyToClipboard
+                                                text={workspace.id}
+                                                onCopy={() => setWorkspaceIdCopied(true)}
+                                            >
+                                                <Button
+                                                    type="button"
+                                                    aria-label={t(
+                                                        'workspace_settings.copy_workspace_id',
+                                                        'Copy workspace ID',
+                                                    )}
+                                                    className="relative h-9 w-9 shrink-0 rounded-l-none rounded-r-md border border-black bg-black p-0 text-white transition-colors duration-200 hover:bg-black/85"
+                                                >
+                                                    <span
+                                                        className={`absolute inset-0 inline-flex items-center justify-center transition-all duration-300 ease-out ${
+                                                            workspaceIdCopied
+                                                                ? 'scale-75 -rotate-12 opacity-0'
+                                                                : 'scale-100 rotate-0 opacity-100'
+                                                        }`}
+                                                    >
+                                                        <Copy className="size-4" />
+                                                    </span>
+                                                    <span
+                                                        className={`pointer-events-none absolute inset-0 inline-flex items-center justify-center transition-all duration-300 ease-out ${
+                                                            workspaceIdCopied
+                                                                ? 'scale-100 rotate-0 opacity-100'
+                                                                : 'scale-75 rotate-12 opacity-0'
+                                                        }`}
+                                                    >
+                                                        <Check className="size-4" />
+                                                    </span>
+                                                </Button>
+                                            </CopyToClipboard>
+                                        </div>
+                                    </div>
+                                </div>
                             </section>
                         ) : null}
                     </div>
