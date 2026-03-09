@@ -56,6 +56,8 @@ export const WikiLinkMark = Mark.create({
             mergeAttributes(HTMLAttributes, {
                 'data-wikilink': 'true',
                 class: 'md-wikilink',
+                contenteditable: 'false',
+                spellcheck: 'false',
             }),
             0,
         ];
@@ -75,13 +77,12 @@ export const WikiLinkMark = Mark.create({
     },
 
     addProseMirrorPlugins() {
-        const findWikiLinkRange = (state: any) => {
+        const findWikiLinkRange = (state: any, from: number) => {
             const markType = state.schema.marks.wikiLink;
             if (!markType) {
                 return null;
             }
 
-            const { from } = state.selection;
             let start = from;
             let end = from;
 
@@ -118,20 +119,21 @@ export const WikiLinkMark = Mark.create({
             return {
                 from: start,
                 to: end,
-                text: state.doc.textBetween(start, end, '', ''),
             };
         };
 
-        const isEditKey = (event: KeyboardEvent) => {
+        const isInsideWikiLink = (state: any): boolean => {
+            return state.selection.$from
+                .marks()
+                .some((mark: any) => mark.type.name === 'wikiLink');
+        };
+
+        const isTextInputKey = (event: KeyboardEvent) => {
             if (event.metaKey || event.ctrlKey || event.altKey) {
                 return false;
             }
 
-            if (event.key.length === 1) {
-                return true;
-            }
-
-            return event.key === 'Backspace' || event.key === 'Delete';
+            return event.key.length === 1;
         };
 
         return [
@@ -139,44 +141,73 @@ export const WikiLinkMark = Mark.create({
                 props: {
                     handleKeyDown: (view, event) => {
                         const { state } = view;
+                        const markType = state.schema.marks.wikiLink;
 
-                        if (!state.selection.empty || !isEditKey(event)) {
+                        if (!markType || !state.selection.empty) {
                             return false;
                         }
 
-                        const isInsideWikiLink = state.selection.$from
-                            .marks()
-                            .some((mark: any) => mark.type.name === 'wikiLink');
+                        if (
+                            event.key === 'Backspace' ||
+                            event.key === 'Delete'
+                        ) {
+                            let range = null;
+                            const cursor = state.selection.from;
 
-                        if (!isInsideWikiLink) {
-                            return false;
+                            if (isInsideWikiLink(state)) {
+                                range = findWikiLinkRange(state, cursor);
+                            } else {
+                                const $cursor = state.doc.resolve(cursor);
+                                if (event.key === 'Backspace') {
+                                    const nodeBefore = $cursor.nodeBefore;
+                                    if (
+                                        nodeBefore &&
+                                        nodeBefore.isText &&
+                                        markType.isInSet(nodeBefore.marks)
+                                    ) {
+                                        range = findWikiLinkRange(
+                                            state,
+                                            Math.max(1, cursor - 1),
+                                        );
+                                    }
+                                } else {
+                                    const nodeAfter = $cursor.nodeAfter;
+                                    if (
+                                        nodeAfter &&
+                                        nodeAfter.isText &&
+                                        markType.isInSet(nodeAfter.marks)
+                                    ) {
+                                        range = findWikiLinkRange(
+                                            state,
+                                            cursor + 1,
+                                        );
+                                    }
+                                }
+                            }
+
+                            if (!range) {
+                                return false;
+                            }
+
+                            event.preventDefault();
+
+                            const tr = state.tr.delete(range.from, range.to);
+                            tr.setSelection(
+                                TextSelection.create(tr.doc, range.from),
+                            );
+                            view.dispatch(tr);
+
+                            return true;
                         }
 
-                        const range = findWikiLinkRange(state);
-                        if (!range) {
+                        if (
+                            !isTextInputKey(event) ||
+                            !isInsideWikiLink(state)
+                        ) {
                             return false;
                         }
 
                         event.preventDefault();
-
-                        let nextQuery = range.text;
-                        if (event.key === 'Backspace') {
-                            nextQuery = nextQuery.slice(0, -1);
-                        } else if (event.key.length === 1) {
-                            nextQuery = `${nextQuery}${event.key}`;
-                        }
-
-                        const replacement = `[[${nextQuery}`;
-                        const tr = state.tr.insertText(
-                            replacement,
-                            range.from,
-                            range.to,
-                        );
-
-                        const cursorPos = range.from + replacement.length;
-                        tr.setSelection(TextSelection.create(tr.doc, cursorPos));
-                        view.dispatch(tr);
-
                         return true;
                     },
                     handleClick: (view, _pos, event) => {

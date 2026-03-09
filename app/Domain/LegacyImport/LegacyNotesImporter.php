@@ -29,7 +29,69 @@ class LegacyNotesImporter
      *   imported_journals: int,
      *   imported_legacy_rows: int,
      *   created_synthetic_notes: int,
-     *   unresolved_wikilinks: array<int, string>
+     *   tasks_total: int,
+     *   tasks_open: int,
+     *   tasks_closed: int,
+     *   normal_note_summaries: array<int, array{
+     *      slug: string,
+     *      tasks_total: int,
+     *      tasks_open: int,
+     *      tasks_closed: int,
+     *      tasks_with_legacy_ids: int,
+     *      wikilinks: int,
+     *      mentions: int,
+     *      hashtags: int
+     *   }>,
+     *   journal_note_summaries: array<int, array{
+     *      slug: string,
+     *      tasks_total: int,
+     *      tasks_open: int,
+     *      tasks_closed: int,
+     *      tasks_with_legacy_ids: int,
+     *      wikilinks: int,
+     *      mentions: int,
+     *      hashtags: int
+     *   }>,
+     *   unresolved_wikilinks: array<int, string>,
+     *   unresolved_wikilink_details: array<int, array{
+     *      slug: string,
+     *      wikilink: string,
+     *      raw_markdown: string,
+     *      block_path: string
+     *   }>,
+     *   pipeline: array{
+     *      markdown: array{
+     *          tasks_total: int,
+     *          tasks_open: int,
+     *          tasks_closed: int,
+     *          tasks_with_legacy_ids: int,
+     *          wikilinks: int,
+     *          mentions: int,
+     *          hashtags: int
+     *      },
+     *      enrichment: array{
+     *          task_blocks_available: int,
+     *          task_ids_assigned: int,
+     *          task_ids_missing: int
+     *      }
+     *   },
+     *   task_id_check: array{
+     *      tasks_total: int,
+     *      task_ids_assigned: int,
+     *      task_ids_missing: int,
+     *      notes_with_missing_ids: array<int, array{slug: string, missing: int}>,
+     *      missing_tasks: array<int, array{
+     *         slug: string,
+     *         block_id: string,
+     *         raw_markdown: string,
+     *         priority: string,
+     *         mentions: string,
+     *         hashtags: string,
+     *         wikilinks: string,
+     *         due_date: string,
+     *         deadline_date: string
+     *      }>
+     *   },
      * }
      */
     public function import(
@@ -38,6 +100,7 @@ class LegacyNotesImporter
         string $blocksPath,
         bool $skipWiki = false,
         bool $dryRun = false,
+        ?callable $progress = null,
     ): array {
         $legacyNotes = $this->loadJsonArray($notesPath);
         $legacyBlocks = $this->loadJsonArray($blocksPath);
@@ -54,6 +117,28 @@ class LegacyNotesImporter
         $workspaceMentions = $this->normalizeSuggestionList($workspace->mention_suggestions);
         $workspaceHashtags = $this->normalizeSuggestionList($workspace->hashtag_suggestions);
         $unresolvedWikiLinks = [];
+        $unresolvedWikiLinkDetails = [];
+        $tasksTotal = 0;
+        $tasksOpen = 0;
+        $tasksClosed = 0;
+        $normalNoteSummaries = [];
+        $journalNoteSummaries = [];
+        $noteTypeBySlug = [];
+        $markdownPhaseTotals = [
+            'tasks_total' => 0,
+            'tasks_open' => 0,
+            'tasks_closed' => 0,
+            'wikilinks' => 0,
+            'mentions' => 0,
+            'hashtags' => 0,
+        ];
+        $enrichmentPhaseTotals = [
+            'task_blocks_available' => 0,
+            'task_ids_assigned' => 0,
+            'task_ids_missing' => 0,
+        ];
+        $notesWithMissingTaskIds = [];
+        $missingTaskRows = [];
 
         /** @var Collection<int, array<string, mixed>> $activeLegacyNotes */
         $activeLegacyNotes = collect($legacyNotes)
@@ -72,14 +157,20 @@ class LegacyNotesImporter
             }
 
             $frontmatter = $this->decodeJsonField($legacyRow['frontmatter'] ?? null);
+            $noteBlocks = $blocksBySlug->get($legacySlug, collect())->values()->all();
             $journalInfo = $this->resolveJournalInfo(
                 $legacySlug,
                 $frontmatter,
                 (string) ($legacyRow['created_at'] ?? ''),
             );
+            $noteTypeBySlug[$legacySlug] = $journalInfo !== null ? 'journal' : 'note';
 
             if ($journalInfo !== null) {
                 if ($dryRun) {
+                    $legacyReferenceBySlug[$legacySlug] = [
+                        'id' => $legacySlug,
+                        'href' => "/notes/legacy/{$legacySlug}",
+                    ];
                     $importedJournals++;
 
                     continue;
@@ -112,7 +203,7 @@ class LegacyNotesImporter
                     $workspace,
                     $note,
                     $legacyRow,
-                    $blocksBySlug->get($legacySlug, collect())->values()->all(),
+                    $noteBlocks,
                     $frontmatter,
                 );
 
@@ -136,6 +227,10 @@ class LegacyNotesImporter
                 }
 
                 if ($dryRun) {
+                    $legacyReferenceBySlug[$parentPath] = [
+                        'id' => $parentPath,
+                        'href' => "/notes/legacy/{$parentPath}",
+                    ];
                     $createdSyntheticNotes++;
 
                     continue;
@@ -143,11 +238,15 @@ class LegacyNotesImporter
 
                 $parentParentPath = $this->parentPath($parentPath);
                 $parentParent = $parentParentPath !== '' ? ($pathKeyToNote[$parentParentPath] ?? null) : null;
+                $syntheticTitle = $this->segmentToTitle($segment);
+                $syntheticContent = $this->defaultNoteContentFromTitle($syntheticTitle);
 
                 $synthetic = $workspace->notes()->create([
                     'type' => Note::TYPE_NOTE,
-                    'title' => $this->segmentToTitle($segment),
+                    'title' => $syntheticTitle,
                     'parent_id' => $parentParent?->id,
+                    'content' => $syntheticContent,
+                    'word_count' => $this->noteWordCountExtractor->count($syntheticContent),
                     'properties' => $this->buildLegacyProperties(
                         [],
                         $parentPath,
@@ -165,13 +264,17 @@ class LegacyNotesImporter
                 $createdSyntheticNotes++;
             }
 
+            $legacyPathKey = $legacySlug;
             if ($dryRun) {
+                $legacyReferenceBySlug[$legacyPathKey] = [
+                    'id' => $legacyPathKey,
+                    'href' => "/notes/legacy/{$legacyPathKey}",
+                ];
                 $importedNotes++;
 
                 continue;
             }
 
-            $legacyPathKey = $legacySlug;
             $existing = $pathKeyToNote[$legacyPathKey] ?? null;
 
             $title = $this->resolveLegacyTitle($legacyRow, $segments);
@@ -180,10 +283,13 @@ class LegacyNotesImporter
                 : null;
 
             if (! $existing || $existing->type !== Note::TYPE_NOTE) {
+                $noteContent = $this->defaultNoteContentFromTitle($title);
                 $existing = $workspace->notes()->create([
                     'type' => Note::TYPE_NOTE,
                     'title' => $title,
                     'parent_id' => $parent?->id,
+                    'content' => $noteContent,
+                    'word_count' => $this->noteWordCountExtractor->count($noteContent),
                     'properties' => $this->buildLegacyProperties(
                         [],
                         $legacyPathKey,
@@ -194,12 +300,16 @@ class LegacyNotesImporter
             } else {
                 $existing->title = $title;
                 $existing->parent_id = $parent?->id;
+                if (! is_array($existing->content) || ($existing->content['type'] ?? null) !== 'doc') {
+                    $existing->content = $this->defaultNoteContentFromTitle($title);
+                }
                 $existing->properties = $this->buildLegacyProperties(
                     $existing->properties,
                     $legacyPathKey,
                     $frontmatter,
                     false,
                 );
+                $existing->word_count = $this->noteWordCountExtractor->count($existing->content);
                 $existing->save();
             }
 
@@ -214,34 +324,100 @@ class LegacyNotesImporter
                 $workspace,
                 $existing,
                 $legacyRow,
-                $blocksBySlug->get($legacySlug, collect())->values()->all(),
+                $noteBlocks,
                 $frontmatter,
             );
 
             $importedNotes++;
         }
 
-        if (! $dryRun) {
-            foreach ($activeLegacyNotes as $legacyRow) {
-                $legacySlug = trim((string) ($legacyRow['slug'] ?? ''));
-                $reference = $legacyReferenceBySlug[$legacySlug] ?? null;
-                if (! $reference) {
+        foreach ($activeLegacyNotes as $legacyRow) {
+            $legacySlug = trim((string) ($legacyRow['slug'] ?? ''));
+            $reference = $legacyReferenceBySlug[$legacySlug] ?? null;
+            if (! $reference) {
+                continue;
+            }
+
+            $noteBlocks = $blocksBySlug->get($legacySlug, collect())->values()->all();
+            $conversion = $this->converter->convert(
+                (string) ($legacyRow['markdown'] ?? ''),
+                is_array($noteBlocks) ? $noteBlocks : [],
+                $legacyReferenceBySlug,
+                $skipWiki,
+            );
+
+            $metrics = $conversion['metrics'];
+            $tasksTotal += $metrics['tasks_total'];
+            $tasksOpen += $metrics['tasks_open'];
+            $tasksClosed += $metrics['tasks_closed'];
+
+            $summary = [
+                'slug' => $legacySlug,
+                ...$metrics,
+            ];
+            $missingTaskIds = max(0, ((int) $metrics['tasks_total']) - ((int) ($metrics['tasks_with_legacy_ids'] ?? 0)));
+            if ($missingTaskIds > 0) {
+                $notesWithMissingTaskIds[] = [
+                    'slug' => $legacySlug,
+                    'missing' => $missingTaskIds,
+                ];
+            }
+
+            if (($noteTypeBySlug[$legacySlug] ?? 'note') === 'journal') {
+                $journalNoteSummaries[] = $summary;
+            } else {
+                $normalNoteSummaries[] = $summary;
+            }
+
+            $markdownPhase = $conversion['pipeline']['markdown'];
+            $enrichmentPhase = $conversion['pipeline']['enrichment'];
+            $markdownPhaseTotals['tasks_total'] += $markdownPhase['tasks_total'];
+            $markdownPhaseTotals['tasks_open'] += $markdownPhase['tasks_open'];
+            $markdownPhaseTotals['tasks_closed'] += $markdownPhase['tasks_closed'];
+            $markdownPhaseTotals['wikilinks'] += $markdownPhase['wikilinks'];
+            $markdownPhaseTotals['mentions'] += $markdownPhase['mentions'];
+            $markdownPhaseTotals['hashtags'] += $markdownPhase['hashtags'];
+            $enrichmentPhaseTotals['task_blocks_available'] += $enrichmentPhase['task_blocks_available'];
+            $enrichmentPhaseTotals['task_ids_assigned'] += $enrichmentPhase['task_ids_assigned'];
+            $enrichmentPhaseTotals['task_ids_missing'] += $enrichmentPhase['task_ids_missing'];
+            foreach (($enrichmentPhase['missing_tasks'] ?? []) as $missingTask) {
+                if (! is_array($missingTask)) {
                     continue;
                 }
 
+                $line = trim((string) ($missingTask['raw_markdown'] ?? ''));
+                if ($line === '') {
+                    continue;
+                }
+
+                $missingTaskRows[] = [
+                    'slug' => $legacySlug,
+                    'block_id' => trim((string) ($missingTask['block_id'] ?? '')),
+                    'raw_markdown' => $line,
+                    'priority' => trim((string) ($missingTask['priority'] ?? '')),
+                    'mentions' => implode(', ', array_values(array_filter(
+                        (array) ($missingTask['mentions'] ?? []),
+                        fn (mixed $item): bool => is_string($item) && trim($item) !== '',
+                    ))),
+                    'hashtags' => implode(', ', array_values(array_filter(
+                        (array) ($missingTask['hashtags'] ?? []),
+                        fn (mixed $item): bool => is_string($item) && trim($item) !== '',
+                    ))),
+                    'wikilinks' => implode(', ', array_values(array_filter(
+                        (array) ($missingTask['wikilinks'] ?? []),
+                        fn (mixed $item): bool => is_string($item) && trim($item) !== '',
+                    ))),
+                    'due_date' => trim((string) ($missingTask['due_date'] ?? '')),
+                    'deadline_date' => trim((string) ($missingTask['deadline_date'] ?? '')),
+                ];
+            }
+
+            if (! $dryRun) {
                 /** @var Note|null $note */
                 $note = Note::query()->find($reference['id']);
                 if (! $note) {
                     continue;
                 }
-
-                $noteBlocks = $blocksBySlug->get($legacySlug, collect())->values()->all();
-                $conversion = $this->converter->convert(
-                    (string) ($legacyRow['markdown'] ?? ''),
-                    is_array($noteBlocks) ? $noteBlocks : [],
-                    $legacyReferenceBySlug,
-                    $skipWiki,
-                );
 
                 $note->content = $conversion['document'];
                 if ($note->type !== Note::TYPE_JOURNAL) {
@@ -250,32 +426,182 @@ class LegacyNotesImporter
                 }
                 $note->word_count = $this->noteWordCountExtractor->count($conversion['document']);
                 $note->save();
-
-                $workspaceMentions = $this->mergeSuggestions(
-                    $workspaceMentions,
-                    $conversion['mentions'],
-                );
-                $workspaceHashtags = $this->mergeSuggestions(
-                    $workspaceHashtags,
-                    $conversion['hashtags'],
-                );
-                $unresolvedWikiLinks = array_values(array_unique([
-                    ...$unresolvedWikiLinks,
-                    ...$conversion['unresolved_wikilinks'],
-                ]));
             }
 
+            $workspaceMentions = $this->mergeSuggestions(
+                $workspaceMentions,
+                $conversion['mentions'],
+            );
+            $workspaceHashtags = $this->mergeSuggestions(
+                $workspaceHashtags,
+                $conversion['hashtags'],
+            );
+            $unresolvedDetails = $this->collectUnresolvedWikiLinkDetails(
+                $legacySlug,
+                is_array($noteBlocks) ? $noteBlocks : [],
+                $legacyReferenceBySlug,
+            );
+            if ($unresolvedDetails !== []) {
+                $unresolvedWikiLinkDetails = [...$unresolvedWikiLinkDetails, ...$unresolvedDetails];
+            }
+            $unresolvedWikiLinks = array_values(array_unique([
+                ...$unresolvedWikiLinks,
+                ...$conversion['unresolved_wikilinks'],
+            ]));
+        }
+
+        $unresolvedWikiLinks = array_values(array_unique([
+            ...$unresolvedWikiLinks,
+            ...collect($unresolvedWikiLinkDetails)
+                ->map(fn (array $item): string => (string) ($item['wikilink'] ?? ''))
+                ->filter(fn (string $target): bool => $target !== '')
+                ->values()
+                ->all(),
+        ]));
+        $unresolvedWikiLinkDetails = collect($unresolvedWikiLinkDetails)
+            ->unique(fn (array $item): string => sprintf(
+                '%s|%s',
+                (string) ($item['slug'] ?? ''),
+                (string) ($item['wikilink'] ?? ''),
+            ))
+            ->values()
+            ->all();
+
+        if (! $dryRun) {
             $workspace->mention_suggestions = $workspaceMentions;
             $workspace->hashtag_suggestions = $workspaceHashtags;
             $workspace->save();
         }
+
+        if (is_callable($progress)) {
+            $progress('markdown', $markdownPhaseTotals);
+            $progress('enrichment', $enrichmentPhaseTotals);
+        }
+
+        usort($notesWithMissingTaskIds, function (array $a, array $b): int {
+            return $b['missing'] <=> $a['missing'];
+        });
+        $missingTaskRows = collect($missingTaskRows)
+            ->unique(fn (array $item): string => sprintf(
+                '%s|%s|%s|%s|%s|%s|%s|%s',
+                (string) ($item['slug'] ?? ''),
+                (string) ($item['block_id'] ?? ''),
+                (string) ($item['raw_markdown'] ?? ''),
+                (string) ($item['priority'] ?? ''),
+                (string) ($item['mentions'] ?? ''),
+                (string) ($item['hashtags'] ?? ''),
+                (string) ($item['wikilinks'] ?? ''),
+                (string) ($item['due_date'] ?? '').'|'.(string) ($item['deadline_date'] ?? ''),
+            ))
+            ->values()
+            ->all();
 
         return [
             'imported_notes' => $importedNotes,
             'imported_journals' => $importedJournals,
             'imported_legacy_rows' => $activeLegacyNotes->count(),
             'created_synthetic_notes' => $createdSyntheticNotes,
+            'tasks_total' => $tasksTotal,
+            'tasks_open' => $tasksOpen,
+            'tasks_closed' => $tasksClosed,
+            'normal_note_summaries' => collect($normalNoteSummaries)
+                ->sortBy(fn (array $item) => strtolower($item['slug']))
+                ->values()
+                ->all(),
+            'journal_note_summaries' => collect($journalNoteSummaries)
+                ->sortBy(fn (array $item) => strtolower($item['slug']))
+                ->values()
+                ->all(),
             'unresolved_wikilinks' => $unresolvedWikiLinks,
+            'unresolved_wikilink_details' => $unresolvedWikiLinkDetails,
+            'pipeline' => [
+                'markdown' => $markdownPhaseTotals,
+                'enrichment' => $enrichmentPhaseTotals,
+            ],
+            'task_id_check' => [
+                'tasks_total' => $tasksTotal,
+                'task_ids_assigned' => $enrichmentPhaseTotals['task_ids_assigned'],
+                'task_ids_missing' => max(0, $tasksTotal - $enrichmentPhaseTotals['task_ids_assigned']),
+                'notes_with_missing_ids' => $notesWithMissingTaskIds,
+                'missing_tasks' => $missingTaskRows,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $blocks
+     * @return array{
+     *   tasks_total: int,
+     *   tasks_open: int,
+     *   tasks_closed: int,
+     *   wikilinks: int,
+     *   mentions: int,
+     *   hashtags: int
+     * }
+     */
+    private function metricsFromLegacyBlocks(array $blocks): array
+    {
+        $tasksTotal = 0;
+        $tasksOpen = 0;
+        $tasksClosed = 0;
+        $wikilinks = [];
+        $mentions = [];
+        $hashtags = [];
+
+        foreach ($blocks as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+
+            foreach ($this->decodeJsonList($block['mentions'] ?? null) as $mention) {
+                if (is_string($mention) && trim($mention) !== '') {
+                    $mentions[] = trim($mention);
+                }
+            }
+
+            foreach ($this->decodeJsonList($block['hashtags'] ?? null) as $hashtag) {
+                if (is_string($hashtag) && trim($hashtag) !== '') {
+                    $hashtags[] = trim($hashtag);
+                }
+            }
+
+            foreach ($this->decodeJsonList($block['wikilinks'] ?? null) as $link) {
+                if (! is_array($link)) {
+                    continue;
+                }
+
+                $wikilinks[] = json_encode([
+                    'raw' => (string) ($link['raw'] ?? ''),
+                    'target' => (string) ($link['target'] ?? ''),
+                    'title' => (string) ($link['title'] ?? ''),
+                ]);
+            }
+
+            if (($block['type'] ?? null) !== 'task_item') {
+                continue;
+            }
+
+            $tasksTotal++;
+            $meta = $this->decodeJsonField($block['meta'] ?? null);
+            $task = Arr::get($meta, 'task', []);
+
+            $status = strtolower(trim((string) ($task['status'] ?? '')));
+            $checkbox = strtolower(trim((string) ($task['checkbox'] ?? '')));
+            $isClosed = $status === 'done' || $checkbox === 'x';
+            if ($isClosed) {
+                $tasksClosed++;
+            } else {
+                $tasksOpen++;
+            }
+        }
+
+        return [
+            'tasks_total' => $tasksTotal,
+            'tasks_open' => $tasksOpen,
+            'tasks_closed' => $tasksClosed,
+            'wikilinks' => count(array_values(array_unique($wikilinks))),
+            'mentions' => count(array_values(array_unique($mentions))),
+            'hashtags' => count(array_values(array_unique($hashtags))),
         ];
     }
 
@@ -422,6 +748,25 @@ class LegacyNotesImporter
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function defaultNoteContentFromTitle(string $title): array
+    {
+        return [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 1],
+                    'content' => [
+                        ['type' => 'text', 'text' => $title],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>|null  $frontmatter
      * @return array{granularity: string, date: CarbonImmutable}|null
      */
@@ -507,6 +852,27 @@ class LegacyNotesImporter
     }
 
     /**
+     * @return array<int, mixed>
+     */
+    private function decodeJsonList(mixed $value): array
+    {
+        if (is_array($value)) {
+            return array_values($value);
+        }
+
+        if (! is_string($value) || trim($value) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        return array_values($decoded);
+    }
+
+    /**
      * @return array<int, string>
      */
     private function normalizeSuggestionList(mixed $current): array
@@ -548,5 +914,81 @@ class LegacyNotesImporter
         usort($merged, fn (string $a, string $b): int => strcasecmp($a, $b));
 
         return array_values($merged);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $noteBlocks
+     * @param  array<string, array{id: string, href: string}>  $legacyReferenceBySlug
+     * @return array<int, array{slug: string, wikilink: string, raw_markdown: string, block_path: string}>
+     */
+    private function collectUnresolvedWikiLinkDetails(
+        string $legacySlug,
+        array $noteBlocks,
+        array $legacyReferenceBySlug,
+    ): array {
+        $bestByTarget = [];
+
+        foreach ($noteBlocks as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+
+            $rawMarkdown = (string) ($block['markdown'] ?? '');
+            if (trim($rawMarkdown) === '') {
+                continue;
+            }
+
+            $blockPath = trim((string) ($block['path'] ?? ''));
+            $specificity = substr_count($blockPath, '.') + mb_strlen($rawMarkdown, 'UTF-8') * -0.001;
+
+            $targets = collect($this->decodeJsonList($block['wikilinks'] ?? null))
+                ->map(fn (mixed $item): string => trim((string) (is_array($item) ? ($item['target'] ?? '') : '')))
+                ->filter(fn (string $target): bool => $target !== '')
+                ->values()
+                ->all();
+
+            if ($targets === []) {
+                $unescapedMarkdown = str_replace(['\\[\\[', '\\]\\]'], ['[[', ']]'], $rawMarkdown);
+                $withoutInlineCode = preg_replace('/`[^`\n]*`/u', '', $unescapedMarkdown) ?? $unescapedMarkdown;
+                preg_match_all('/\[\[([^\]\|\n]+)(?:\|([^\]\n]+))?\]\]/u', $withoutInlineCode, $matches, PREG_SET_ORDER);
+                $targets = collect($matches)
+                    ->map(fn (array $match): string => trim((string) ($match[1] ?? '')))
+                    ->filter(fn (string $target): bool => $target !== '')
+                    ->values()
+                    ->all();
+            }
+
+            foreach ($targets as $target) {
+                if (isset($legacyReferenceBySlug[$target])) {
+                    continue;
+                }
+
+                if (str_contains($target, '`')) {
+                    continue;
+                }
+
+                $existing = $bestByTarget[$target] ?? null;
+                if (is_array($existing) && ((float) ($existing['_score'] ?? 0.0) >= $specificity)) {
+                    continue;
+                }
+
+                $bestByTarget[$target] = [
+                    'slug' => $legacySlug,
+                    'wikilink' => $target,
+                    'raw_markdown' => $rawMarkdown,
+                    'block_path' => $blockPath,
+                    '_score' => $specificity,
+                ];
+            }
+        }
+
+        return collect($bestByTarget)
+            ->values()
+            ->map(function (array $item): array {
+                unset($item['_score']);
+
+                return $item;
+            })
+            ->all();
     }
 }
