@@ -35,6 +35,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('notes/create', [NotesController::class, 'start'])
         ->name('notes.start');
+    Route::post('notes', [NotesController::class, 'store'])
+        ->name('notes.store');
 
     Route::get('journal/{granularity}/{period}', [NotesController::class, 'showJournal'])
         ->name('journal.show');
@@ -42,6 +44,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('notes/{noteId}/rename', [NotesController::class, 'rename'])
         ->whereUuid('noteId')
         ->name('notes.rename');
+    Route::patch('notes/{noteId}/move', [NotesController::class, 'move'])
+        ->whereUuid('noteId')
+        ->name('notes.move');
     Route::patch('notes/{noteId}/clear', [NotesController::class, 'clear'])
         ->whereUuid('noteId')
         ->name('notes.clear');

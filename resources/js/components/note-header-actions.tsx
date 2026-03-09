@@ -1,7 +1,8 @@
 import { router } from '@inertiajs/react';
-import { Eraser, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Eraser, FolderInput, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { MoveNoteDialog } from '@/components/move-note-dialog';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -24,24 +25,59 @@ import { useI18n } from '@/lib/i18n';
 type Props = {
     noteId: string;
     title: string;
+    currentLocation?: string | null;
+    currentParentId?: string | null;
+    moveParentOptions?: Array<{ id: string; title: string; path: string }>;
+    canMove: boolean;
     canRename: boolean;
     canDelete: boolean;
     canClear: boolean;
+    triggerClassName?: string;
+    dropdownAlign?: 'start' | 'center' | 'end';
+    dropdownSide?: 'top' | 'right' | 'bottom' | 'left';
+    listenForMoveEvent?: boolean;
 };
 
 export function NoteHeaderActions({
     noteId,
     title,
+    currentLocation,
+    currentParentId,
+    moveParentOptions = [],
+    canMove,
     canRename,
     canDelete,
     canClear,
+    triggerClassName,
+    dropdownAlign = 'start',
+    dropdownSide = 'bottom',
+    listenForMoveEvent = true,
 }: Props) {
     const { t } = useI18n();
     const [renameOpen, setRenameOpen] = useState(false);
+    const [moveOpen, setMoveOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [clearOpen, setClearOpen] = useState(false);
     const [nextTitle, setNextTitle] = useState(title);
     const [processing, setProcessing] = useState(false);
+
+    useEffect(() => {
+        if (!listenForMoveEvent) {
+            return;
+        }
+
+        const openMoveDialog = () => {
+            if (canMove) {
+                setMoveOpen(true);
+            }
+        };
+
+        window.addEventListener('open-move-note-dialog', openMoveDialog);
+
+        return () => {
+            window.removeEventListener('open-move-note-dialog', openMoveDialog);
+        };
+    }, [canMove, listenForMoveEvent]);
 
     const submitRename = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -102,13 +138,19 @@ export function NoteHeaderActions({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7"
+                        className={triggerClassName ?? 'h-7 w-7'}
                         aria-label={t('note_actions.menu_aria', 'Note actions')}
                     >
-                        <MoreHorizontal className="h-4 w-4" />
+                        <MoreVertical className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
+                <DropdownMenuContent align={dropdownAlign} side={dropdownSide}>
+                    {canMove ? (
+                        <DropdownMenuItem onClick={() => setMoveOpen(true)}>
+                            <FolderInput className="mr-2 h-4 w-4" />
+                            {t('note_actions.move', 'Move note')}
+                        </DropdownMenuItem>
+                    ) : null}
                     {canRename ? (
                         <DropdownMenuItem
                             onClick={() => {
@@ -137,6 +179,17 @@ export function NoteHeaderActions({
                     ) : null}
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            {canMove ? (
+                <MoveNoteDialog
+                    open={moveOpen}
+                    onOpenChange={setMoveOpen}
+                    noteId={noteId}
+                    currentLocation={currentLocation ?? null}
+                    currentParentId={currentParentId ?? null}
+                    options={moveParentOptions}
+                />
+            ) : null}
 
             <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
                 <DialogContent>

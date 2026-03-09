@@ -15,6 +15,7 @@ use App\Support\Notes\NoteWordCountExtractor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -42,93 +43,76 @@ class NotesController extends Controller
                     fn ($query) => $query->where('workspace_id', $this->currentWorkspace()->id),
                 ),
             ],
-            'path' => ['nullable', 'string', 'max:500'],
+            'title' => ['nullable', 'string', 'max:255'],
         ]);
 
         $workspace = $this->currentWorkspace();
-        $path = trim((string) ($data['path'] ?? ''));
-
-        if ($path !== '') {
-            $segments = collect(explode('/', $path))
-                ->map(fn (string $segment): string => trim($segment))
-                ->filter(fn (string $segment): bool => $segment !== '')
-                ->values();
-
-            if ($segments->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'path' => 'The path is invalid.',
-                ]);
-            }
-
-            $parentId = $data['parent_id'] ?? null;
-            $parentSlugPath = null;
-            if ($parentId) {
-                $parent = $workspace->notes()
-                    ->where('id', $parentId)
-                    ->first();
-                $parentSlugPath = $parent?->slug;
-            }
-
-            $current = null;
-
-            foreach ($segments as $segment) {
-                $normalizedSegment = Str::slug($segment);
-                if ($normalizedSegment === '') {
-                    $normalizedSegment = 'untitled';
-                }
-
-                $expectedSlug = $parentSlugPath
-                    ? "{$parentSlugPath}/{$normalizedSegment}"
-                    : $normalizedSegment;
-
-                /** @var Note|null $existing */
-                $existing = $workspace->notes()
-                    ->where('type', Note::TYPE_NOTE)
-                    ->where('parent_id', $parentId)
-                    ->where('slug', $expectedSlug)
-                    ->first();
-
-                if ($existing) {
-                    $current = $existing;
-                    $parentId = $existing->id;
-                    $parentSlugPath = $existing->slug;
-
-                    continue;
-                }
-
-                /** @var Note $created */
-                $created = $workspace->notes()->create([
-                    'type' => Note::TYPE_NOTE,
-                    'title' => $normalizedSegment,
-                    'parent_id' => $parentId,
-                ]);
-
-                $this->noteSlugService->syncSingleNote($created);
-                $created->refresh();
-
-                $current = $created;
-                $parentId = $created->id;
-                $parentSlugPath = $created->slug;
-            }
-
-            if (! $current instanceof Note) {
-                throw ValidationException::withMessages([
-                    'path' => 'The path is invalid.',
-                ]);
-            }
-
-            return redirect("/notes/{$current->id}");
-        }
+        $title = trim((string) ($data['title'] ?? ''));
 
         /** @var Note $note */
         $note = $workspace->notes()->create([
             'type' => Note::TYPE_NOTE,
             'parent_id' => $data['parent_id'] ?? null,
+            'title' => $title !== '' ? $title : null,
         ]);
 
         $this->noteSlugService->syncSingleNote($note);
 
         return redirect($this->noteSlugService->urlFor($note));
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'parent_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('notes', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $this->currentWorkspace()->id),
+                ),
+            ],
+        ]);
+
+        $workspace = $this->currentWorkspace();
+        $title = trim((string) ($data['title'] ?? ''));
+        if ($title === '') {
+            throw ValidationException::withMessages([
+                'title' => 'The title field is required.',
+            ]);
+        }
+
+        /** @var Note $note */
+        $note = DB::transaction(function () use ($workspace, $data, $title): Note {
+            $content = [
+                'type' => 'doc',
+                'content' => [
+                    [
+                        'type' => 'heading',
+                        'attrs' => ['level' => 1],
+                        'content' => [
+                            ['type' => 'text', 'text' => $title],
+                        ],
+                    ],
+                ],
+            ];
+
+            /** @var Note $created */
+            $created = $workspace->notes()->create([
+                'type' => Note::TYPE_NOTE,
+                'parent_id' => $data['parent_id'] ?? null,
+                'title' => $title,
+                'content' => $content,
+                'properties' => [],
+                'word_count' => $this->noteWordCountExtractor->count($content),
+            ]);
+
+            $this->noteSlugService->syncSingleNote($created);
+
+            return $created->fresh();
+        });
+
+        return redirect("/notes/{$note->id}");
     }
 
     public function index(Request $request)
@@ -260,6 +244,38 @@ class NotesController extends Controller
         return redirect($this->noteSlugService->urlFor($note));
     }
 
+    public function move(Request $request, string $noteId)
+    {
+        $note = $this->currentWorkspace()
+            ->notes()
+            ->where('id', $noteId)
+            ->firstOrFail();
+
+        if ($note->type !== Note::TYPE_NOTE) {
+            abort(404);
+        }
+
+        $data = $request->validate([
+            'parent_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('notes', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $this->currentWorkspace()->id),
+                ),
+            ],
+        ]);
+
+        $nextParentId = $data['parent_id'] ?? null;
+        $this->assertParentAssignmentIsValid($note, $nextParentId);
+
+        $note->parent_id = $nextParentId;
+        $note->save();
+
+        $this->noteSlugService->syncNoteAndDescendants($note);
+
+        return redirect($this->noteSlugService->urlFor($note));
+    }
+
     public function destroy(string $noteId)
     {
         $note = $this->currentWorkspace()
@@ -384,6 +400,36 @@ class NotesController extends Controller
             ])
             ->values();
 
+        $childrenByParent = $allNotes
+            ->filter(fn (Note $candidate) => $candidate->parent_id !== null)
+            ->groupBy('parent_id');
+        $excludedMoveTargetIds = [$note->id => true];
+        $queue = [$note->id];
+
+        while ($queue !== []) {
+            $parentId = array_shift($queue);
+            $children = $childrenByParent->get($parentId, collect());
+            foreach ($children as $child) {
+                if (isset($excludedMoveTargetIds[$child->id])) {
+                    continue;
+                }
+
+                $excludedMoveTargetIds[$child->id] = true;
+                $queue[] = $child->id;
+            }
+        }
+
+        $moveParentOptions = $allNotes
+            ->filter(fn (Note $candidate) => ! isset($excludedMoveTargetIds[$candidate->id]))
+            ->filter(fn (Note $candidate) => $candidate->type === Note::TYPE_NOTE)
+            ->map(fn (Note $candidate) => [
+                'id' => $candidate->id,
+                'title' => $candidate->display_title,
+                'path' => $candidate->path,
+            ])
+            ->sortBy(fn (array $candidate) => strtolower($candidate['path']))
+            ->values();
+
         $noteTrail = $buildTrail($note->id);
         if ($noteTrail === []) {
             $noteTrail = [[
@@ -410,6 +456,9 @@ class NotesController extends Controller
             'noteActions' => [
                 'id' => $note->id,
                 'title' => (string) ($note->getRawOriginal('title') ?: $note->title ?: 'Untitled'),
+                'path' => $note->path,
+                'parent_id' => $note->parent_id,
+                'parent_path' => $note->parent_id ? $resolvePath($note->parent_id) : null,
                 'type' => $note->type,
                 'journal_granularity' => $note->journal_granularity,
                 'icon' => $noteActionIcon,
@@ -417,9 +466,11 @@ class NotesController extends Controller
                 'canRename' => $note->type === Note::TYPE_NOTE,
                 'canDelete' => $note->type === Note::TYPE_NOTE,
                 'canClear' => true,
+                'canMove' => $note->type === Note::TYPE_NOTE,
             ],
             'properties' => $note->properties ?? [],
             'linkableNotes' => $linkableNotes,
+            'moveParentOptions' => $moveParentOptions,
             'breadcrumbs' => $breadcrumbs,
             'language' => $this->userLanguage(),
             'relatedTasks' => $relatedPanel['tasks'],

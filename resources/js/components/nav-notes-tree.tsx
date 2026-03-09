@@ -1,8 +1,14 @@
 import { Link, usePage } from '@inertiajs/react';
-import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, FileText, Plus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { getColorBgClass, getColorTextClass } from '@/components/color-swatch-picker';
+import {
+    CreateNoteDialog,
+} from '@/components/create-note-dialog';
+import type { CreateNoteParentOption } from '@/components/create-note-dialog';
 import { getWorkspaceIconComponent } from '@/components/icon-picker';
+import { NoteHeaderActions } from '@/components/note-header-actions';
+import { Button } from '@/components/ui/button';
 import {
     Collapsible,
     CollapsibleContent,
@@ -20,11 +26,15 @@ import {
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { SidebarNoteTreeItem } from '@/types';
 
 type NotesTreeProps = {
     items: SidebarNoteTreeItem[];
+    allOptions: CreateNoteParentOption[];
+    parentPath: string | null;
+    parentId: string | null;
 };
 
 function hasActiveInBranch(
@@ -38,7 +48,27 @@ function hasActiveInBranch(
     return item.children.some((child) => hasActiveInBranch(child, isCurrentUrl));
 }
 
-function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
+function collectDescendantIds(items: SidebarNoteTreeItem[]): string[] {
+    const ids: string[] = [];
+    for (const item of items) {
+        ids.push(item.id);
+        ids.push(...collectDescendantIds(item.children));
+    }
+
+    return ids;
+}
+
+function RootNoteItem({
+    item,
+    allOptions,
+    parentPath,
+    parentId,
+}: {
+    item: SidebarNoteTreeItem;
+    allOptions: CreateNoteParentOption[];
+    parentPath: string | null;
+    parentId: string | null;
+}) {
     const { isCurrentUrl } = useCurrentUrl();
     const isActive = isCurrentUrl(item.href);
     const hasChildren = item.children.length > 0;
@@ -54,11 +84,20 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
         : FileText;
     const iconColorClass = getColorTextClass(item.icon_color ?? null);
     const iconBgClass = getColorBgClass(item.icon_bg ?? null);
+    const excludedMoveTargetIds = useMemo(
+        () => new Set([item.id, ...collectDescendantIds(item.children)]),
+        [item.id, item.children],
+    );
+    const moveParentOptions = useMemo(
+        () => allOptions.filter((option) => !excludedMoveTargetIds.has(option.id)),
+        [allOptions, excludedMoveTargetIds],
+    );
+    const currentPath = parentPath ? `${parentPath} / ${item.title}` : item.title;
 
     if (!hasChildren) {
         return (
             <SidebarMenuItem>
-                <div className="flex items-center gap-1">
+                <div className="group/item relative flex items-center gap-1">
                     <button
                         type="button"
                         tabIndex={-1}
@@ -67,7 +106,7 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
                     >
                         <ChevronRight className="h-4 w-4" />
                     </button>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton asChild isActive={isActive} className="pr-8">
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
                                 <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
@@ -75,6 +114,23 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
                             <span>{item.title}</span>
                         </Link>
                     </SidebarMenuButton>
+                    <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
+                        <NoteHeaderActions
+                            noteId={item.id}
+                            title={item.title}
+                            currentLocation={parentPath}
+                            currentParentId={parentId}
+                            moveParentOptions={moveParentOptions}
+                            canMove
+                            canRename
+                            canDelete
+                            canClear
+                            triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
+                            dropdownAlign="end"
+                            dropdownSide="bottom"
+                            listenForMoveEvent={false}
+                        />
+                    </div>
                 </div>
             </SidebarMenuItem>
         );
@@ -83,7 +139,7 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
     return (
         <SidebarMenuItem>
             <Collapsible open={open} onOpenChange={setOpen}>
-                <div className="flex items-center gap-1">
+                <div className="group/item relative flex items-center gap-1">
                     <CollapsibleTrigger asChild>
                         <button
                             type="button"
@@ -98,7 +154,7 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
                         </button>
                     </CollapsibleTrigger>
 
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton asChild isActive={isActive} className="pr-8">
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
                                 <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
@@ -106,17 +162,39 @@ function RootNoteItem({ item }: { item: SidebarNoteTreeItem }) {
                             <span>{item.title}</span>
                         </Link>
                     </SidebarMenuButton>
+                    <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
+                        <NoteHeaderActions
+                            noteId={item.id}
+                            title={item.title}
+                            currentLocation={parentPath}
+                            currentParentId={parentId}
+                            moveParentOptions={moveParentOptions}
+                            canMove
+                            canRename
+                            canDelete
+                            canClear
+                            triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
+                            dropdownAlign="end"
+                            dropdownSide="bottom"
+                            listenForMoveEvent={false}
+                        />
+                    </div>
                 </div>
 
                 <CollapsibleContent>
-                    <NoteSubTree items={item.children} />
+                    <NoteSubTree
+                        items={item.children}
+                        allOptions={allOptions}
+                        parentPath={currentPath}
+                        parentId={item.id}
+                    />
                 </CollapsibleContent>
             </Collapsible>
         </SidebarMenuItem>
     );
 }
 
-function NoteSubTree({ items }: NotesTreeProps) {
+function NoteSubTree({ items, allOptions, parentPath, parentId }: NotesTreeProps) {
     const { isCurrentUrl } = useCurrentUrl();
 
     return (
@@ -126,6 +204,9 @@ function NoteSubTree({ items }: NotesTreeProps) {
                     key={item.id}
                     item={item}
                     isCurrentUrl={isCurrentUrl}
+                    allOptions={allOptions}
+                    parentPath={parentPath}
+                    parentId={parentId}
                 />
             ))}
         </SidebarMenuSub>
@@ -135,9 +216,15 @@ function NoteSubTree({ items }: NotesTreeProps) {
 function SubTreeNode({
     item,
     isCurrentUrl,
+    allOptions,
+    parentPath,
+    parentId,
 }: {
     item: SidebarNoteTreeItem;
     isCurrentUrl: ReturnType<typeof useCurrentUrl>['isCurrentUrl'];
+    allOptions: CreateNoteParentOption[];
+    parentPath: string | null;
+    parentId: string | null;
 }) {
     const isActive = isCurrentUrl(item.href);
     const hasChildren = item.children.length > 0;
@@ -153,11 +240,20 @@ function SubTreeNode({
         : FileText;
     const iconColorClass = getColorTextClass(item.icon_color ?? null);
     const iconBgClass = getColorBgClass(item.icon_bg ?? null);
+    const excludedMoveTargetIds = useMemo(
+        () => new Set([item.id, ...collectDescendantIds(item.children)]),
+        [item.id, item.children],
+    );
+    const moveParentOptions = useMemo(
+        () => allOptions.filter((option) => !excludedMoveTargetIds.has(option.id)),
+        [allOptions, excludedMoveTargetIds],
+    );
+    const currentPath = parentPath ? `${parentPath} / ${item.title}` : item.title;
 
     if (!hasChildren) {
         return (
             <SidebarMenuSubItem>
-                <div className="flex items-center gap-1">
+                <div className="group/item relative flex items-center gap-1">
                     <button
                         type="button"
                         tabIndex={-1}
@@ -166,7 +262,7 @@ function SubTreeNode({
                     >
                         <ChevronRight className="h-4 w-4" />
                     </button>
-                    <SidebarMenuSubButton asChild isActive={isActive}>
+                    <SidebarMenuSubButton asChild isActive={isActive} className="pr-8">
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
                                 <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
@@ -174,6 +270,23 @@ function SubTreeNode({
                             <span>{item.title}</span>
                         </Link>
                     </SidebarMenuSubButton>
+                    <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
+                        <NoteHeaderActions
+                            noteId={item.id}
+                            title={item.title}
+                            currentLocation={parentPath}
+                            currentParentId={parentId}
+                            moveParentOptions={moveParentOptions}
+                            canMove
+                            canRename
+                            canDelete
+                            canClear
+                            triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
+                            dropdownAlign="end"
+                            dropdownSide="bottom"
+                            listenForMoveEvent={false}
+                        />
+                    </div>
                 </div>
             </SidebarMenuSubItem>
         );
@@ -182,7 +295,7 @@ function SubTreeNode({
     return (
         <SidebarMenuSubItem>
             <Collapsible open={open} onOpenChange={setOpen}>
-                <div className="flex items-center gap-1">
+                <div className="group/item relative flex items-center gap-1">
                     <CollapsibleTrigger asChild>
                         <button
                             type="button"
@@ -197,7 +310,7 @@ function SubTreeNode({
                         </button>
                     </CollapsibleTrigger>
 
-                    <SidebarMenuSubButton asChild isActive={isActive}>
+                    <SidebarMenuSubButton asChild isActive={isActive} className="pr-8">
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
                                 <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
@@ -205,10 +318,32 @@ function SubTreeNode({
                             <span>{item.title}</span>
                         </Link>
                     </SidebarMenuSubButton>
+                    <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
+                        <NoteHeaderActions
+                            noteId={item.id}
+                            title={item.title}
+                            currentLocation={parentPath}
+                            currentParentId={parentId}
+                            moveParentOptions={moveParentOptions}
+                            canMove
+                            canRename
+                            canDelete
+                            canClear
+                            triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
+                            dropdownAlign="end"
+                            dropdownSide="bottom"
+                            listenForMoveEvent={false}
+                        />
+                    </div>
                 </div>
 
                 <CollapsibleContent>
-                    <NoteSubTree items={item.children} />
+                    <NoteSubTree
+                        items={item.children}
+                        allOptions={allOptions}
+                        parentPath={currentPath}
+                        parentId={item.id}
+                    />
                 </CollapsibleContent>
             </Collapsible>
         </SidebarMenuSubItem>
@@ -217,11 +352,91 @@ function SubTreeNode({
 
 export function NavNotesTree() {
     const { notesTree } = usePage().props;
-    const items = (notesTree ?? []) as SidebarNoteTreeItem[];
+    const { t } = useI18n();
+    const items = useMemo(
+        () => (notesTree ?? []) as SidebarNoteTreeItem[],
+        [notesTree],
+    );
+    const [createOpen, setCreateOpen] = useState(false);
+
+    const parentOptions = useMemo(() => {
+        const flattened: CreateNoteParentOption[] = [];
+
+        const visit = (
+            node: SidebarNoteTreeItem,
+            ancestors: string[],
+        ) => {
+            const path = [...ancestors, node.title].join(' / ');
+            flattened.push({
+                id: node.id,
+                title: node.title,
+                path,
+            });
+
+            node.children.forEach((child) =>
+                visit(child, [...ancestors, node.title]),
+            );
+        };
+
+        items.forEach((item) => visit(item, []));
+
+        return flattened;
+    }, [items]);
+
+    const openDialog = () => {
+        setCreateOpen(true);
+    };
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'n') {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            openDialog();
+        };
+
+        document.addEventListener('keydown', onKeyDown, { capture: true });
+        return () => {
+            document.removeEventListener('keydown', onKeyDown, { capture: true });
+        };
+        // Intentionally global shortcut registration.
+         
+    }, []);
+
+    useEffect(() => {
+        const openHandler = () => {
+            openDialog();
+        };
+
+        window.addEventListener('open-create-note-dialog', openHandler);
+
+        return () => {
+            window.removeEventListener('open-create-note-dialog', openHandler);
+        };
+        // Intentionally global event registration.
+         
+    }, []);
 
     return (
         <SidebarGroup className="px-2 py-0 group-data-[collapsible=icon]:hidden">
-            <SidebarGroupLabel>Notes</SidebarGroupLabel>
+            <div className="mb-1 flex items-center justify-between px-2">
+                <SidebarGroupLabel className="px-0">
+                    {t('notes_create.heading', 'Notes')}
+                </SidebarGroupLabel>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    aria-label={t('notes_create.new_note', 'New note')}
+                    onClick={openDialog}
+                >
+                    <Plus className="h-4 w-4" />
+                </Button>
+            </div>
             <SidebarMenu>
                 {items.length === 0 && (
                     <SidebarMenuItem>
@@ -234,9 +449,20 @@ export function NavNotesTree() {
                     </SidebarMenuItem>
                 )}
                 {items.map((item) => (
-                    <RootNoteItem key={item.id} item={item} />
+                    <RootNoteItem
+                        key={item.id}
+                        item={item}
+                        allOptions={parentOptions}
+                        parentPath={null}
+                        parentId={null}
+                    />
                 ))}
             </SidebarMenu>
+            <CreateNoteDialog
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                parentOptions={parentOptions}
+            />
         </SidebarGroup>
     );
 }

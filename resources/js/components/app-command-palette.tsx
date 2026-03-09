@@ -60,10 +60,12 @@ type HeadingSearchItem = {
 type NoteActionsContext = {
     id: string;
     title: string;
+    path?: string | null;
     type?: string | null;
     journal_granularity?: string | null;
     icon?: string | null;
     icon_color?: string | null;
+    canMove?: boolean;
     canRename: boolean;
     canDelete: boolean;
     canClear: boolean;
@@ -74,7 +76,7 @@ type RecentNoteItem = NoteSearchItem & {
 };
 
 type CommandDefinition = {
-    id: 'create' | 'rename' | 'clear' | 'delete';
+    id: 'create' | 'move' | 'rename' | 'clear' | 'delete';
     aliases?: string[];
     label: string;
     syntax: string;
@@ -102,6 +104,30 @@ export function AppCommandPalette() {
     const [selectedCommandValue, setSelectedCommandValue] = useState('');
     const noteActions = page.noteActions ?? null;
     const workspaceId = page.currentWorkspace?.id ?? 'global';
+
+    const openInCommandMode = useCallback(() => {
+        setShowOptions(false);
+        setSelectedCommandValue('');
+        setQuery(':');
+        setOpen(true);
+        quickSwitchActiveRef.current = false;
+        quickSwitchPressCountRef.current = 0;
+        quickSwitchIndexRef.current = -1;
+
+        requestAnimationFrame(() => {
+            const input = document.querySelector(
+                '[data-slot="command-input"]',
+            ) as HTMLInputElement | null;
+
+            if (!input) {
+                return;
+            }
+
+            input.focus();
+            const caretPosition = input.value.length;
+            input.setSelectionRange(caretPosition, caretPosition);
+        });
+    }, []);
 
     useEffect(() => {
         const resetQuickSwitch = () => {
@@ -153,6 +179,11 @@ export function AppCommandPalette() {
 
             event.preventDefault();
 
+            if (event.shiftKey) {
+                openInCommandMode();
+                return;
+            }
+
             if (!open) {
                 setQuery('');
                 setOpen(true);
@@ -196,7 +227,7 @@ export function AppCommandPalette() {
         };
     // This keyboard session intentionally tracks state across rapid key events.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, query, recentItems]);
+    }, [open, query, recentItems, openInCommandMode]);
 
     useEffect(() => {
         if (open) {
@@ -213,13 +244,24 @@ export function AppCommandPalette() {
         const openHandler = () => {
             setOpen(true);
         };
+        const openCommandModeHandler = () => {
+            openInCommandMode();
+        };
 
         window.addEventListener('open-command-palette', openHandler);
+        window.addEventListener(
+            'open-command-palette-command-mode',
+            openCommandModeHandler,
+        );
 
         return () => {
             window.removeEventListener('open-command-palette', openHandler);
+            window.removeEventListener(
+                'open-command-palette-command-mode',
+                openCommandModeHandler,
+            );
         };
-    }, []);
+    }, [openInCommandMode]);
 
     const isCommandMode = query.trimStart().startsWith(':');
     const isHeadingMode = !isCommandMode && query.startsWith('# ');
@@ -331,15 +373,23 @@ export function AppCommandPalette() {
                 id: 'create',
                 aliases: ['new', 'n'],
                 label: t('command_palette.create_note', 'Create note'),
-                syntax: t(
-                    'command_palette.create_syntax',
-                    ':create path/to/note',
-                ),
+                syntax: t('command_palette.create_syntax', ':create'),
                 description: t(
                     'command_palette.create_description',
-                    'Create a regular note by path (missing parents are created).',
+                    'Open the create note dialog.',
                 ),
                 available: true,
+            },
+            {
+                id: 'move',
+                aliases: ['mv'],
+                label: t('command_palette.move_note', 'Move note'),
+                syntax: t('command_palette.move_syntax', ':move'),
+                description: t(
+                    'command_palette.move_description',
+                    'Move the current note to a different parent.',
+                ),
+                available: Boolean(noteActions?.canMove),
             },
             {
                 id: 'rename',
@@ -378,7 +428,13 @@ export function AppCommandPalette() {
                 available: Boolean(noteActions?.canDelete),
             },
         ],
-        [noteActions?.canClear, noteActions?.canDelete, noteActions?.canRename, t],
+        [
+            noteActions?.canClear,
+            noteActions?.canDelete,
+            noteActions?.canMove,
+            noteActions?.canRename,
+            t,
+        ],
     );
 
     const renderNoteIcon = (item: Pick<NoteSearchItem, 'type' | 'icon' | 'icon_color'>) => {
@@ -400,26 +456,6 @@ export function AppCommandPalette() {
             args: rest.join(' ').trim(),
         };
     }, [commandText, isCommandMode]);
-
-    const normalizedCreatePath = useMemo(() => {
-        if (parsedCommand.args.trim() === '') {
-            return '';
-        }
-
-        return parsedCommand.args
-            .split('/')
-            .map((segment) =>
-                segment
-                    .trim()
-                    .toLowerCase()
-                    .replace(/[^a-z0-9\s-]/g, '')
-                    .replace(/\s+/g, '-')
-                    .replace(/-+/g, '-')
-                    .replace(/^-|-$/g, ''),
-            )
-            .filter((segment) => segment !== '')
-            .join('/');
-    }, [parsedCommand.args]);
 
     const commandItems = useMemo(() => {
         if (!isCommandMode) {
@@ -448,14 +484,19 @@ export function AppCommandPalette() {
 
         const normalizedCommand: CommandDefinition['id'] =
             commandId === 'create' ||
+            commandId === 'move' ||
             commandId === 'clear' ||
             commandId === 'delete' ||
             commandId === 'rename'
                 ? commandId
                 : parsedCommand.name === 'erase'
                   ? 'clear'
-                  : parsedCommand.name === 'new' || parsedCommand.name === 'n'
+                  : parsedCommand.name === 'new'
                     ? 'create'
+                  : parsedCommand.name === 'n'
+                    ? 'create'
+                  : parsedCommand.name === 'mv'
+                    ? 'move'
                   : parsedCommand.name === 'remove'
                     ? 'delete'
                     : parsedCommand.name === 'r'
@@ -467,13 +508,14 @@ export function AppCommandPalette() {
                           : commandId;
 
         if (normalizedCommand === 'create') {
-            const path = normalizedCreatePath;
-            if (path === '') {
-                return;
-            }
-
             setOpen(false);
-            window.location.assign(`/notes/create?path=${encodeURIComponent(path)}`);
+            window.dispatchEvent(new Event('open-create-note-dialog'));
+            return;
+        }
+
+        if (normalizedCommand === 'move') {
+            setOpen(false);
+            window.dispatchEvent(new Event('open-move-note-dialog'));
             return;
         }
 
@@ -561,7 +603,7 @@ export function AppCommandPalette() {
 
     const commandPreview = (command: CommandDefinition) => {
         const currentTitle =
-            noteActions?.title?.trim() !== ''
+            noteActions?.title?.trim()
                 ? noteActions.title
                 : t('command_palette.untitled', 'Untitled');
 
@@ -579,16 +621,23 @@ export function AppCommandPalette() {
                 .replace(':to', nextTitle);
         }
 
-        if (command.id === 'create') {
-            const target =
-                normalizedCreatePath !== ''
-                    ? normalizedCreatePath
-                    : t('command_palette.create_target_placeholder', 'path/to/note');
+        if (command.id === 'move') {
+            const currentPath =
+                noteActions?.path?.trim() ||
+                noteActions?.title?.trim() ||
+                t('command_palette.untitled', 'Untitled');
 
             return t(
+                'command_palette.move_preview',
+                'Move :path',
+            ).replace(':path', currentPath);
+        }
+
+        if (command.id === 'create') {
+            return t(
                 'command_palette.create_preview',
-                `Create ${target}`,
-            ).replace(':path', target);
+                'Open create note dialog',
+            );
         }
 
         if (command.id === 'clear') {
@@ -792,8 +841,7 @@ export function AppCommandPalette() {
                                 value={`${command.id} ${(command.aliases ?? []).join(' ')} ${command.label} ${command.syntax}`}
                                 onSelect={() => {
                                     if (
-                                        (command.id === 'rename' && parsedCommand.args === '') ||
-                                        (command.id === 'create' && parsedCommand.args === '')
+                                        command.id === 'rename' && parsedCommand.args === ''
                                     ) {
                                         prefillCommandInput(command.id);
                                         return;

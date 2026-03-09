@@ -19,10 +19,15 @@ type JournalPageProps = {
     noteActions?: {
         id: string;
         title: string;
+        path?: string | null;
+        parent_id?: string | null;
+        parent_path?: string | null;
+        canMove?: boolean;
         canRename?: boolean;
         canDelete?: boolean;
         canClear?: boolean;
     } | null;
+    moveParentOptions?: Array<{ id: string; title: string; path: string }>;
 };
 
 function parseWeekly(period: string): Date | null {
@@ -177,15 +182,6 @@ export function AppSidebarHeader({
             <div className="flex min-w-0 flex-1 items-center gap-2">
                 <SidebarTrigger className="-ml-1" />
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
-                {pageProps.noteActions ? (
-                    <NoteHeaderActions
-                        noteId={pageProps.noteActions.id}
-                        title={pageProps.noteActions.title}
-                        canRename={Boolean(pageProps.noteActions.canRename)}
-                        canDelete={Boolean(pageProps.noteActions.canDelete)}
-                        canClear={Boolean(pageProps.noteActions.canClear)}
-                    />
-                ) : null}
             </div>
             <div className="flex items-center gap-2">
                 {isJournal && (
@@ -212,6 +208,20 @@ export function AppSidebarHeader({
                         </Button>
                     </div>
                 )}
+                {pageProps.noteActions ? (
+                    <NoteHeaderActions
+                        noteId={pageProps.noteActions.id}
+                        title={pageProps.noteActions.title}
+                        currentLocation={pageProps.noteActions.parent_path ?? null}
+                        currentParentId={pageProps.noteActions.parent_id ?? null}
+                        moveParentOptions={pageProps.moveParentOptions ?? []}
+                        canMove={Boolean(pageProps.noteActions.canMove)}
+                        canRename={Boolean(pageProps.noteActions.canRename)}
+                        canDelete={Boolean(pageProps.noteActions.canDelete)}
+                        canClear={Boolean(pageProps.noteActions.canClear)}
+                        dropdownSide="left"
+                    />
+                ) : null}
                 {rightSidebarEnabled && (
                     <Button
                         type="button"

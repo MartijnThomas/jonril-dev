@@ -147,6 +147,101 @@ test('rename does not modify content when no heading level one exists', function
     expect($note->content)->toBe($originalContent);
 });
 
+test('move updates parent and rebuilds slug for note and descendants', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $rootA = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Root A',
+        'slug' => 'root-a',
+    ]);
+    $rootB = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Root B',
+        'slug' => 'root-b',
+    ]);
+    $moving = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Moving',
+        'slug' => 'root-a/moving',
+        'parent_id' => $rootA->id,
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Child',
+        'slug' => 'root-a/moving/child',
+        'parent_id' => $moving->id,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch("/notes/{$moving->id}/move", [
+            'parent_id' => $rootB->id,
+        ])
+        ->assertRedirect('/notes/root-b/moving');
+
+    $moving->refresh();
+    $child->refresh();
+
+    expect($moving->parent_id)->toBe($rootB->id);
+    expect($moving->slug)->toBe('root-b/moving');
+    expect($child->slug)->toBe('root-b/moving/child');
+});
+
+test('move supports moving a note to root', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $parent = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Parent',
+        'slug' => 'parent',
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Child',
+        'slug' => 'parent/child',
+        'parent_id' => $parent->id,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch("/notes/{$child->id}/move", [
+            'parent_id' => null,
+        ])
+        ->assertRedirect('/notes/child');
+
+    $child->refresh();
+    expect($child->parent_id)->toBeNull();
+    expect($child->slug)->toBe('child');
+});
+
+test('move rejects moving under descendant', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Root',
+        'slug' => 'root',
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Child',
+        'slug' => 'root/child',
+        'parent_id' => $root->id,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->from("/notes/{$root->slug}")
+        ->patch("/notes/{$root->id}/move", [
+            'parent_id' => $child->id,
+        ])
+        ->assertSessionHasErrors('parent_id');
+});
+
 test('destroy soft deletes note and redirects to notes list', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
@@ -996,63 +1091,59 @@ test('start can create a child note when parent_id is provided', function () {
     $response->assertRedirect("/notes/{$child->slug}");
 });
 
-test('start can create nested notes from path and normalizes spaces to kebab-case', function () {
+test('start can create a note with a title and optional parent', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
-
-    $response = $this->actingAs($user)->get(route('notes.start', [
-        'path' => 'Project One/Some Child Note',
-    ], absolute: false));
-
-    $parent = Note::query()
-        ->where('workspace_id', $workspace?->id)
-        ->where('slug', 'project-one')
-        ->first();
-
-    $child = Note::query()
-        ->where('workspace_id', $workspace?->id)
-        ->where('slug', 'project-one/some-child-note')
-        ->first();
-
-    expect($parent)->not()->toBeNull();
-    expect($child)->not()->toBeNull();
-    expect($child?->parent_id)->toBe($parent?->id);
-    expect($response->headers->get('Location'))->toBeString()->toContain('/notes/');
-    expect($response->headers->get('Location'))->toContain((string) $child?->id);
-});
-
-test('start with path reuses existing parents and creates only missing note', function () {
-    $user = User::factory()->create();
-    $workspace = $user->currentWorkspace();
-
-    $existingParent = $workspace->notes()->create([
+    $parent = $workspace->notes()->create([
         'type' => Note::TYPE_NOTE,
-        'title' => 'project-one',
-        'slug' => 'project-one',
+        'title' => 'Parent',
+        'slug' => 'parent',
     ]);
 
-    $countBefore = Note::query()
-        ->where('workspace_id', $workspace?->id)
-        ->count();
-
     $response = $this->actingAs($user)->get(route('notes.start', [
-        'path' => 'project one/new item',
+        'title' => 'My New Note',
+        'parent_id' => $parent->id,
     ], absolute: false));
 
-    $countAfter = Note::query()
+    $created = Note::query()
         ->where('workspace_id', $workspace?->id)
-        ->count();
-
-    $child = Note::query()
-        ->where('workspace_id', $workspace?->id)
-        ->where('slug', 'project-one/new-item')
+        ->where('parent_id', $parent->id)
+        ->latest('created_at')
         ->first();
 
-    expect($countAfter)->toBe($countBefore + 1);
-    expect($child)->not()->toBeNull();
-    expect($child?->parent_id)->toBe($existingParent->id);
-    expect($response->headers->get('Location'))->toBeString()->toContain('/notes/');
-    expect($response->headers->get('Location'))->toContain((string) $child?->id);
+    expect($created)->not()->toBeNull();
+    expect($created?->title)->toBe('My New Note');
+    expect($created?->slug)->toContain('my-new-note');
+    $response->assertRedirect("/notes/{$created?->slug}");
+});
+
+test('store creates a regular note with h1 content and redirects to note id', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $parent = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Parent',
+        'slug' => 'parent',
+    ]);
+
+    $response = $this->actingAs($user)->post('/notes', [
+        'title' => 'My Document',
+        'parent_id' => $parent->id,
+    ]);
+
+    $created = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->where('parent_id', $parent->id)
+        ->latest('created_at')
+        ->first();
+
+    expect($created)->not()->toBeNull();
+    expect($created?->type)->toBe(Note::TYPE_NOTE);
+    expect($created?->title)->toBe('My Document');
+    expect(data_get($created?->content, 'content.0.type'))->toBe('heading');
+    expect(data_get($created?->content, 'content.0.attrs.level'))->toBe(1);
+    expect(data_get($created?->content, 'content.0.content.0.text'))->toBe('My Document');
+    $response->assertRedirect("/notes/{$created?->id}");
 });
 
 test('update can move a note under another note of the same user', function () {
