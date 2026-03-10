@@ -11,6 +11,7 @@ declare module '@inertiajs/core' {
                 name: string;
                 slug: string;
                 color: string;
+                timeblock_color?: string | null;
                 icon: string;
                 role: string;
             }>;
@@ -19,6 +20,7 @@ declare module '@inertiajs/core' {
                 name: string;
                 slug: string;
                 color: string;
+                timeblock_color?: string | null;
                 icon: string;
                 role: string;
             } | null;
@@ -33,6 +35,17 @@ declare module '@inertiajs/core' {
             }>;
             sidebarOpen: boolean;
             rightSidebarOpen: boolean;
+            todayEvents?: Array<{
+                id: string;
+                type: 'timeblock' | 'event';
+                title: string;
+                starts_at: string | null;
+                ends_at: string | null;
+                location: string | null;
+                note_title: string | null;
+                href: string | null;
+            }>;
+            todayEventsDate?: string | null;
             [key: string]: unknown;
         };
     }

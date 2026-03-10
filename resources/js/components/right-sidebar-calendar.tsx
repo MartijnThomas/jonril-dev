@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RightSidebarTodayEvents } from '@/components/right-sidebar-today-events';
 import { cn } from '@/lib/utils';
 
 type JournalPageProps = {
@@ -28,7 +29,19 @@ type JournalPageProps = {
     currentWorkspace?: {
         slug?: string | null;
         color?: string | null;
+        timeblock_color?: string | null;
     };
+    todayEvents?: Array<{
+        id: string;
+        type: 'timeblock' | 'event';
+        title: string;
+        starts_at: string | null;
+        ends_at: string | null;
+        location: string | null;
+        note_title: string | null;
+        href: string | null;
+    }>;
+    todayEventsDate?: string | null;
 };
 
 const CALENDAR_SELECTED_DAY_CLASS: Record<string, string> = {
@@ -420,6 +433,14 @@ export function RightSidebarCalendar() {
                         );
                     },
                 }}
+            />
+
+            <RightSidebarTodayEvents
+                events={pageProps.todayEvents ?? []}
+                language={language}
+                anchorDate={pageProps.todayEventsDate ?? null}
+                timeblockColor={pageProps.currentWorkspace?.timeblock_color ?? pageProps.currentWorkspace?.color ?? null}
+                workspaceColor={pageProps.currentWorkspace?.color ?? null}
             />
         </section>
     );

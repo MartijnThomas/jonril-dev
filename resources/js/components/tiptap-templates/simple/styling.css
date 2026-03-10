@@ -209,7 +209,7 @@
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList'] {
     margin: 0.2em 0 0.62em 0;
-    padding-left: 0.2em;
+    padding-left: 0.18em;
 }
 
 .simple-editor-content
@@ -227,7 +227,7 @@
     > label {
     position: relative;
     padding-top: 0.26rem;
-    padding-right: 1rem !important;
+    padding-right: 0.76rem !important;
 }
 
 @media (max-width: 768px) {
@@ -353,6 +353,26 @@
     > label
     > span {
     position: relative;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    .md-timeblock-time-token {
+    font-family:
+        'Roboto Mono',
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        Monaco,
+        Consolas,
+        'Liberation Mono',
+        'Courier New',
+        monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82em;
+    letter-spacing: 0.01em;
+    color: color-mix(in srgb, currentColor 62%, transparent);
+    padding-right: 0.75rem;
 }
 
 .simple-editor-content

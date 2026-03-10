@@ -32,6 +32,7 @@ type Props = {
         id: string;
         name: string;
         color: string;
+        timeblock_color?: string | null;
         icon: string;
         owner_id: number;
     };
@@ -50,6 +51,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
             : 'general';
     const [workspaceIdCopied, setWorkspaceIdCopied] = useState(false);
     const [openColorPicker, setOpenColorPicker] = useState(false);
+    const [openTimeblockColorPicker, setOpenTimeblockColorPicker] = useState(false);
 
     useEffect(() => {
         if (!workspaceIdCopied) {
@@ -78,9 +80,13 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
     const nameForm = useForm({
         name: workspace.name,
         color: workspace.color || 'slate',
+        timeblock_color: workspace.timeblock_color || '',
         icon: workspace.icon || DEFAULT_WORKSPACE_ICON,
     });
     const colorSwatchPreview = getColorSwatchPreviewClasses(nameForm.data.color);
+    const timeblockColorPreview = getColorSwatchPreviewClasses(
+        nameForm.data.timeblock_color || nameForm.data.color,
+    );
 
     const addMemberForm = useForm({
         email: '',
@@ -217,6 +223,83 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
 
                                         <InputError message={nameForm.errors.icon} />
                                         <InputError message={nameForm.errors.color} />
+                                    </div>
+
+                                    <div className="grid gap-3">
+                                        <div className="grid items-center gap-3 sm:grid-cols-[140px_minmax(0,1fr)_auto]">
+                                            <Label>
+                                                {t(
+                                                    'workspace_settings.timeblock_color_label',
+                                                    'Timeblock color',
+                                                )}
+                                            </Label>
+
+                                            <div className="text-sm text-muted-foreground">
+                                                {t(
+                                                    'workspace_settings.timeblock_color_description',
+                                                    'Used for timeblock accents in the sidebar events list.',
+                                                )}
+                                            </div>
+
+                                            <Popover
+                                                open={openTimeblockColorPicker}
+                                                onOpenChange={setOpenTimeblockColorPicker}
+                                            >
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <PopoverTrigger asChild>
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center p-0"
+                                                                aria-label={t('workspace_settings.timeblock_color_label', 'Timeblock color')}
+                                                            >
+                                                                <span
+                                                                    className="relative h-7 w-7 rounded-full border border-border/70"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <span className="absolute inset-[2px] grid grid-cols-2 overflow-hidden rounded-full">
+                                                                        <span className={timeblockColorPreview.light} />
+                                                                        <span className={timeblockColorPreview.dark} />
+                                                                    </span>
+                                                                </span>
+                                                            </button>
+                                                        </PopoverTrigger>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top">
+                                                        {t('workspace_settings.timeblock_color_label', 'Timeblock color')}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                                <PopoverContent
+                                                    align="end"
+                                                    className="w-64 space-y-2 p-3"
+                                                    onCloseAutoFocus={(event) =>
+                                                        event.preventDefault()
+                                                    }
+                                                >
+                                                    <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                        {t('workspace_settings.timeblock_color_label', 'Timeblock color')}
+                                                    </p>
+                                                    <ColorSwatchPicker
+                                                        value={nameForm.data.timeblock_color || 'default'}
+                                                        onValueChange={(color) => {
+                                                            nameForm.setData(
+                                                                'timeblock_color',
+                                                                color === 'default' ? '' : color,
+                                                            );
+                                                            setOpenTimeblockColorPicker(false);
+                                                        }}
+                                                        options={COLOR_SWATCH_OPTIONS}
+                                                        includeDefault
+                                                        defaultLabel={t(
+                                                            'workspace_settings.timeblock_color_default',
+                                                            'Use workspace color',
+                                                        )}
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+
+                                        <InputError message={nameForm.errors.timeblock_color} />
                                     </div>
 
                                     <div className="flex items-center gap-3">

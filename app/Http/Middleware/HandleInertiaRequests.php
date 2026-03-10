@@ -2,9 +2,13 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Event;
 use App\Models\Note;
+use App\Models\Timeblock;
 use App\Models\Workspace;
 use App\Support\Notes\NoteSlugService;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Lang;
@@ -47,6 +51,14 @@ class HandleInertiaRequests extends Middleware
     {
         $locale = $this->resolveLocale($request);
         App::setLocale($locale);
+        $cachedSidebarEventsPayload = null;
+        $sidebarEventsPayload = function () use (&$cachedSidebarEventsPayload, $request): array {
+            if ($cachedSidebarEventsPayload === null) {
+                $cachedSidebarEventsPayload = $this->sidebarEventsPayload($request);
+            }
+
+            return $cachedSidebarEventsPayload;
+        };
 
         return [
             ...parent::share($request),
@@ -59,6 +71,8 @@ class HandleInertiaRequests extends Middleware
             'notesTree' => fn () => $this->buildNotesTree($request),
             'sidebarOpen' => $this->sidebarDefaultOpenState($request, 'left'),
             'rightSidebarOpen' => $this->sidebarDefaultOpenState($request, 'right'),
+            'todayEvents' => fn () => $sidebarEventsPayload()['events'],
+            'todayEventsDate' => fn () => $sidebarEventsPayload()['date'],
             'locale' => $locale,
             'translations' => fn () => [
                 'ui' => Lang::get('ui', [], $locale),
@@ -183,7 +197,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array<int, array{id: string, name: string, slug: string, role: string}>
+     * @return array<int, array{id: string, name: string, slug: string, color: string, timeblock_color: string|null, icon: string, role: string}>
      */
     private function workspaceSummary(Request $request): array
     {
@@ -193,7 +207,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $user->workspaces()
-            ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.icon', 'workspace_user.role')
+            ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.timeblock_color', 'workspaces.icon', 'workspace_user.role')
             ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
             ->orderBy('workspaces.name')
             ->get()
@@ -202,6 +216,7 @@ class HandleInertiaRequests extends Middleware
                 'name' => $workspace->name,
                 'slug' => $workspace->slug,
                 'color' => $workspace->color,
+                'timeblock_color' => $workspace->timeblock_color,
                 'icon' => $workspace->icon,
                 'role' => (string) ($workspace->pivot->role ?? 'member'),
             ])
@@ -210,7 +225,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array{id: string, name: string, slug: string, color: string, icon: string, role: string}|null
+     * @return array{id: string, name: string, slug: string, color: string, timeblock_color: string|null, icon: string, role: string}|null
      */
     private function currentWorkspaceSummary(Request $request): ?array
     {
@@ -234,6 +249,7 @@ class HandleInertiaRequests extends Middleware
             'name' => $workspace->name,
             'slug' => $workspace->slug,
             'color' => $workspace->color,
+            'timeblock_color' => $workspace->timeblock_color,
             'icon' => $workspace->icon,
             'role' => (string) ($membership?->pivot->role ?? 'member'),
         ];
@@ -261,5 +277,87 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $user->currentWorkspace();
+    }
+
+    /**
+     * @return array{
+     *   date: string,
+     *   events: array<int, array{
+     *     id:string,
+     *     type:string,
+     *     title:string,
+     *     starts_at:string|null,
+     *     ends_at:string|null,
+     *     location:string|null,
+     *     note_title:string|null,
+     *     href:string|null
+     *   }>
+     * }
+     */
+    private function sidebarEventsPayload(Request $request): array
+    {
+        $workspace = $this->resolvedWorkspace($request);
+        $anchorDate = $this->resolveSidebarEventsDate($request);
+
+        if (! $workspace) {
+            return [
+                'date' => $anchorDate->toDateString(),
+                'events' => [],
+            ];
+        }
+
+        $startOfDay = $anchorDate->copy()->timezone(config('app.timezone'))->startOfDay();
+        $endOfDay = (clone $startOfDay)->endOfDay();
+
+        $events = Event::query()
+            ->with(['eventable', 'note:id,title,slug,type,journal_granularity,journal_date,workspace_id,parent_id,properties'])
+            ->where('workspace_id', $workspace->id)
+            ->where('starts_at', '<=', $endOfDay)
+            ->where('ends_at', '>=', $startOfDay)
+            ->orderBy('starts_at')
+            ->orderBy('ends_at')
+            ->get()
+            ->map(function (Event $event): array {
+                $isTimeblock = $event->eventable_type === Timeblock::class;
+                $timeblock = $isTimeblock ? $event->eventable : null;
+
+                return [
+                    'id' => $event->id,
+                    'type' => $isTimeblock ? 'timeblock' : 'event',
+                    'title' => (string) $event->title,
+                    'starts_at' => $event->starts_at?->toIso8601String(),
+                    'ends_at' => $event->ends_at?->toIso8601String(),
+                    'location' => $timeblock instanceof Timeblock ? $timeblock->location : null,
+                    'note_title' => $event->note?->display_title,
+                    'href' => $event->note ? $this->noteSlugService->urlFor($event->note) : null,
+                ];
+            })
+            ->values()
+            ->all();
+
+        return [
+            'date' => $anchorDate->toDateString(),
+            'events' => $events,
+        ];
+    }
+
+    private function resolveSidebarEventsDate(Request $request): CarbonInterface
+    {
+        $granularity = $request->route('granularity');
+        $period = $request->route('period');
+
+        if (
+            $granularity === Note::JOURNAL_DAILY &&
+            is_string($period) &&
+            preg_match('/^\d{4}-\d{2}-\d{2}$/', $period) === 1
+        ) {
+            try {
+                return Carbon::createFromFormat('Y-m-d', $period, config('app.timezone'))->startOfDay();
+            } catch (\Throwable) {
+                // Fall back to "today" below.
+            }
+        }
+
+        return now(config('app.timezone'))->startOfDay();
     }
 }

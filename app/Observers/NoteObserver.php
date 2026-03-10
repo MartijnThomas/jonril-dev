@@ -7,17 +7,23 @@ use App\Models\NoteHeading;
 use App\Models\NoteTask;
 use App\Support\Notes\NoteHeadingIndexer;
 use App\Support\Notes\NoteTaskIndexer;
+use App\Support\Notes\TimeblockIndexer;
+use Illuminate\Support\Facades\Auth;
 
 class NoteObserver
 {
     public function __construct(
         private readonly NoteTaskIndexer $noteTaskIndexer,
         private readonly NoteHeadingIndexer $noteHeadingIndexer,
+        private readonly TimeblockIndexer $timeblockIndexer,
     ) {}
 
     public function saved(Note $note): void
     {
+        $defaultDurationMinutes = Auth::user()?->defaultTimeblockDurationMinutes() ?? 60;
+
         $this->noteTaskIndexer->reindexNote($note);
+        $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes);
         $this->noteHeadingIndexer->reindexNote($note);
 
         if ($note->wasChanged('title')) {
@@ -31,6 +37,7 @@ class NoteObserver
     {
         NoteTask::query()->where('note_id', $note->id)->delete();
         NoteHeading::query()->where('note_id', $note->id)->delete();
+        $this->timeblockIndexer->deleteNoteTimeblocks($note);
     }
 
     public function deleting(Note $note): void
@@ -61,7 +68,10 @@ class NoteObserver
                 $child->restore();
             });
 
+        $defaultDurationMinutes = Auth::user()?->defaultTimeblockDurationMinutes() ?? 60;
+
         $this->noteTaskIndexer->reindexNote($note);
+        $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes);
         $this->noteHeadingIndexer->reindexNote($note);
     }
 }

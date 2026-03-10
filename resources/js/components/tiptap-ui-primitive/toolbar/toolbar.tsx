@@ -81,7 +81,36 @@ export const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
   ({ children, className, variant = "fixed", ...props }, ref) => {
     const toolbarRef = useRef<HTMLDivElement>(null)
     const composedRef = useComposedRef(toolbarRef, ref)
+    const [hasHiddenStart, setHasHiddenStart] = useState(false)
+    const [hasHiddenEnd, setHasHiddenEnd] = useState(false)
     useToolbarNavigation(toolbarRef)
+
+    useEffect(() => {
+      const toolbar = toolbarRef.current
+      if (!toolbar || variant !== "fixed") return
+
+      const updateOverflowIndicators = () => {
+        const maxScrollLeft = Math.max(0, toolbar.scrollWidth - toolbar.clientWidth)
+        setHasHiddenStart(toolbar.scrollLeft > 1)
+        setHasHiddenEnd(maxScrollLeft - toolbar.scrollLeft > 1)
+      }
+
+      updateOverflowIndicators()
+
+      const handleScroll = () => updateOverflowIndicators()
+      const resizeObserver = new ResizeObserver(() => updateOverflowIndicators())
+      const mutationObserver = new MutationObserver(() => updateOverflowIndicators())
+
+      toolbar.addEventListener("scroll", handleScroll, { passive: true })
+      resizeObserver.observe(toolbar)
+      mutationObserver.observe(toolbar, { childList: true, subtree: true })
+
+      return () => {
+        toolbar.removeEventListener("scroll", handleScroll)
+        resizeObserver.disconnect()
+        mutationObserver.disconnect()
+      }
+    }, [variant, children])
 
     return (
       <div
@@ -89,6 +118,8 @@ export const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
         role="toolbar"
         aria-label="toolbar"
         data-variant={variant}
+        data-hidden-start={hasHiddenStart ? "true" : "false"}
+        data-hidden-end={hasHiddenEnd ? "true" : "false"}
         className={cn("tiptap-toolbar", className)}
         {...props}
       >

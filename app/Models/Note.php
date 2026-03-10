@@ -123,6 +123,11 @@ class Note extends Model
         return $this->hasMany(NoteTask::class);
     }
 
+    public function events(): HasMany
+    {
+        return $this->hasMany(Event::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *

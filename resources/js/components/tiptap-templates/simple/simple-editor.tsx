@@ -168,6 +168,10 @@ type SimpleEditorProps = {
     }[];
     showRelatedPanel?: boolean;
     language?: 'nl' | 'en';
+    noteType?: string | null;
+    journalGranularity?: string | null;
+    journalDate?: string | null;
+    defaultTimeblockDurationMinutes?: number;
     onSaveStatusChange?: (status: EditorSaveStatus) => void;
     onLastSavedAtChange?: (timestamp: number | null) => void;
     onDebugJsonChange?: (json: string) => void;
@@ -194,6 +198,10 @@ export function SimpleEditor({
     backlinks = [],
     showRelatedPanel = false,
     language = 'nl',
+    noteType = null,
+    journalGranularity = null,
+    journalDate = null,
+    defaultTimeblockDurationMinutes = 60,
     onSaveStatusChange,
     onLastSavedAtChange,
     onDebugJsonChange,
@@ -248,11 +256,19 @@ export function SimpleEditor({
                         : null,
                 noteIconColor: sanitizeIconStyleToken(noteIconColorProp),
                 noteIconBg: sanitizeIconStyleToken(noteIconBgProp),
+                noteType,
+                journalGranularity,
+                journalDate,
+                defaultTimeblockDurationMinutes,
             }),
         [
+            defaultTimeblockDurationMinutes,
+            journalDate,
+            journalGranularity,
             noteIconBgProp,
             noteIconColorProp,
             noteIconProp,
+            noteType,
             language,
             linkableNotes,
             mentionSuggestions,
@@ -458,6 +474,11 @@ export function SimpleEditor({
         noteUpdateUrl,
         properties: documentProperties,
         idleMs: 1500,
+        includeTimeblocks:
+            noteType === 'journal' &&
+            journalGranularity === 'daily' &&
+            typeof journalDate === 'string' &&
+            journalDate.trim() !== '',
     });
 
     useEffect(() => {
@@ -474,7 +495,16 @@ export function SimpleEditor({
         }
 
         const emit = () => {
-            onDebugJsonChange(JSON.stringify(editor.getJSON(), null, 2));
+            onDebugJsonChange(
+                JSON.stringify(
+                    {
+                        content: editor.getJSON(),
+                        timeblocks: editor.storage.timeblock?.timeblocks ?? [],
+                    },
+                    null,
+                    2,
+                ),
+            );
         };
 
         emit();

@@ -16,6 +16,7 @@ type UseEditorSaveProps = {
     noteUpdateUrl: string;
     properties?: DocumentPropertiesValue;
     idleMs?: number;
+    includeTimeblocks?: boolean;
 };
 
 function sanitizeProperties(
@@ -47,6 +48,7 @@ export function useEditorSave({
     noteUpdateUrl,
     properties = {},
     idleMs = 1500,
+    includeTimeblocks = false,
 }: UseEditorSaveProps) {
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSavedContentRef = useRef<string>('');
@@ -73,6 +75,12 @@ export function useEditorSave({
             const serialized = JSON.stringify(json);
             const sanitizedProperties = sanitizeProperties(propertiesRef.current);
             const serializedProperties = JSON.stringify(sanitizedProperties);
+            const timeblocks = includeTimeblocks
+                ? editor.storage.timeblock?.timeblocks ?? []
+                : [];
+            const serializedTimeblocks = includeTimeblocks
+                ? JSON.stringify(timeblocks)
+                : null;
 
             if (
                 !force &&
@@ -97,6 +105,9 @@ export function useEditorSave({
                 {
                     content: json,
                     properties: sanitizedProperties,
+                    ...(includeTimeblocks
+                        ? { timeblocks_json: serializedTimeblocks }
+                        : {}),
                     save_mode: force ? 'manual' : 'auto',
                 },
                 {
@@ -126,7 +137,7 @@ export function useEditorSave({
                 },
             );
         },
-        [editor, noteUpdateUrl],
+        [editor, includeTimeblocks, noteUpdateUrl],
     );
 
     useEffect(() => {

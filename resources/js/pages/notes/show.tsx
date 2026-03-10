@@ -15,6 +15,8 @@ type Props = {
     language: 'nl' | 'en';
     noteType: string | null;
     journalGranularity: string | null;
+    journalDate: string | null;
+    defaultTimeblockDurationMinutes: number;
     workspaceSuggestions: {
         mentions: string[];
         hashtags: string[];
@@ -85,6 +87,8 @@ export default function Dashboard({
     language,
     noteType,
     journalGranularity,
+    journalDate,
+    defaultTimeblockDurationMinutes,
     workspaceSuggestions,
     relatedTasks,
     backlinks,
@@ -178,6 +182,10 @@ export default function Dashboard({
                     (noteType === 'journal' && journalGranularity === 'daily')
                 }
                 language={language}
+                noteType={noteType}
+                journalGranularity={journalGranularity}
+                journalDate={journalDate}
+                defaultTimeblockDurationMinutes={defaultTimeblockDurationMinutes}
                 onSaveStatusChange={setSaveStatus}
                 onLastSavedAtChange={setSaveLastSavedAt}
                 onDebugJsonChange={isAdmin ? setEditorJson : undefined}

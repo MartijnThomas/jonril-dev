@@ -45,6 +45,7 @@ class WorkspaceController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
+            'timeblock_color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
             'icon' => ['nullable', 'regex:/^[a-z][a-z0-9_]*$/'],
         ]);
 
@@ -52,6 +53,7 @@ class WorkspaceController extends Controller
             'owner_id' => $user->id,
             'name' => trim($data['name']),
             'color' => array_key_exists('color', $data) ? $data['color'] : null,
+            'timeblock_color' => array_key_exists('timeblock_color', $data) ? $data['timeblock_color'] : null,
             'icon' => array_key_exists('icon', $data) ? $data['icon'] : null,
         ]);
 
@@ -95,12 +97,16 @@ class WorkspaceController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
+            'timeblock_color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
             'icon' => ['nullable', 'regex:/^[a-z][a-z0-9_]*$/'],
         ]);
 
         $workspace->name = trim($data['name']);
         if (array_key_exists('color', $data)) {
             $workspace->color = $data['color'] ?: null;
+        }
+        if (array_key_exists('timeblock_color', $data)) {
+            $workspace->timeblock_color = $data['timeblock_color'] ?: null;
         }
         if (array_key_exists('icon', $data)) {
             $workspace->icon = $data['icon'] ?: null;
@@ -227,7 +233,7 @@ class WorkspaceController extends Controller
 
     /**
      * @return array{
-     *     workspace: array{id: string, name: string, color: string, icon: string, owner_id: int},
+     *     workspace: array{id: string, name: string, color: string, timeblock_color: string|null, icon: string, owner_id: int},
      *     members: array<int, array{id: int, name: string, email: string, role: string}>
      * }
      */
@@ -252,6 +258,7 @@ class WorkspaceController extends Controller
                 'id' => $workspace->id,
                 'name' => $workspace->name,
                 'color' => $workspace->color,
+                'timeblock_color' => $workspace->timeblock_color,
                 'icon' => $workspace->icon,
                 'owner_id' => (int) $workspace->owner_id,
             ],

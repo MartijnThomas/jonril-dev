@@ -133,4 +133,20 @@ class User extends Authenticatable
 
         return max($min, min($max, $interval));
     }
+
+    public function defaultTimeblockDurationMinutes(): int
+    {
+        $default = 60;
+        $min = 5;
+        $max = 12 * 60;
+
+        $value = data_get($this->settings, 'editor.timeblock_default_duration_minutes');
+        if (! is_numeric($value)) {
+            return $default;
+        }
+
+        $duration = (int) $value;
+
+        return max($min, min($max, $duration));
+    }
 }

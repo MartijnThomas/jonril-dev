@@ -10,6 +10,7 @@ import Heading from '@/components/heading';
 import { IconPicker } from '@/components/icon-picker';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
@@ -130,6 +131,7 @@ type Props = {
     preferences: {
         sidebar_left_open_default: boolean;
         sidebar_right_open_default: boolean;
+        timeblock_default_duration_minutes: number;
         journal_daily_icon: string;
         journal_weekly_icon: string;
         journal_monthly_icon: string;
@@ -176,6 +178,7 @@ export default function EditorPreferences({ preferences }: Props) {
     const form = useForm({
         sidebar_left_open_default: preferences.sidebar_left_open_default,
         sidebar_right_open_default: preferences.sidebar_right_open_default,
+        timeblock_default_duration_minutes: preferences.timeblock_default_duration_minutes,
         journal_daily_icon: preferences.journal_daily_icon,
         journal_weekly_icon: preferences.journal_weekly_icon,
         journal_monthly_icon: preferences.journal_monthly_icon,
@@ -252,6 +255,31 @@ export default function EditorPreferences({ preferences }: Props) {
                                         form.setData('sidebar_right_open_default', checked)
                                     }
                                 />
+                            </div>
+
+                            <div className="space-y-2 py-2">
+                                <Label htmlFor="timeblock-default-duration">
+                                    {t('editor_preferences.timeblock_default_duration_label', 'Default timeblock duration (minutes)')}
+                                </Label>
+                                <p className="text-sm text-muted-foreground">
+                                    {t('editor_preferences.timeblock_default_duration_description', 'Used when a timeblock has only a start time, for example `10:00 Planning`.')}
+                                </p>
+                                <Input
+                                    id="timeblock-default-duration"
+                                    type="number"
+                                    min={5}
+                                    max={720}
+                                    step={5}
+                                    value={form.data.timeblock_default_duration_minutes}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'timeblock_default_duration_minutes',
+                                            Number(event.target.value || 60),
+                                        )
+                                    }
+                                    className="max-w-[200px]"
+                                />
+                                <InputError message={form.errors.timeblock_default_duration_minutes} />
                             </div>
                         </div>
 

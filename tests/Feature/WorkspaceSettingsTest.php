@@ -30,6 +30,23 @@ test('workspace owner can update workspace name', function () {
     expect($workspace?->fresh()?->name)->toBe('Product Team');
 });
 
+test('workspace owner can update workspace timeblock color', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+
+    $this
+        ->actingAs($owner)
+        ->patch(route('workspaces.settings.update', ['workspace' => $workspace?->id], absolute: false), [
+            'name' => $workspace?->name,
+            'color' => $workspace?->color,
+            'icon' => $workspace?->icon,
+            'timeblock_color' => 'emerald',
+        ])
+        ->assertRedirect();
+
+    expect($workspace?->fresh()?->timeblock_color)->toBe('emerald');
+});
+
 test('workspace owner can add and remove members', function () {
     $owner = User::factory()->create();
     $workspace = $owner->currentWorkspace();

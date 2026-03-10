@@ -348,77 +348,17 @@ function SidebarSeparator({
   )
 }
 
-function SidebarContent({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<"div">) {
-  const contentRef = React.useRef<HTMLDivElement | null>(null)
-  const [hasHiddenTop, setHasHiddenTop] = React.useState(false)
-  const [hasHiddenBottom, setHasHiddenBottom] = React.useState(false)
-
-  const updateScrollFades = React.useCallback(() => {
-    const element = contentRef.current
-    if (!element) return
-
-    const { scrollTop, scrollHeight, clientHeight } = element
-    const maxScrollTop = Math.max(0, scrollHeight - clientHeight)
-
-    setHasHiddenTop(scrollTop > 1)
-    setHasHiddenBottom(maxScrollTop - scrollTop > 1)
-  }, [])
-
-  React.useEffect(() => {
-    const element = contentRef.current
-    if (!element) return
-
-    const handleScroll = () => updateScrollFades()
-    const resizeObserver = new ResizeObserver(() => updateScrollFades())
-    const mutationObserver = new MutationObserver(() => updateScrollFades())
-
-    updateScrollFades()
-    element.addEventListener("scroll", handleScroll, { passive: true })
-    resizeObserver.observe(element)
-    mutationObserver.observe(element, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    })
-
-    return () => {
-      element.removeEventListener("scroll", handleScroll)
-      resizeObserver.disconnect()
-      mutationObserver.disconnect()
-    }
-  }, [updateScrollFades])
-
+function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      ref={contentRef}
       data-slot="sidebar-content"
       data-sidebar="content"
       className={cn(
-        "relative flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
       {...props}
-    >
-      <div
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none sticky top-0 z-10 -mb-3 h-3 bg-gradient-to-b from-sidebar to-transparent transition-opacity duration-150",
-          hasHiddenTop ? "opacity-100" : "opacity-0"
-        )}
-      />
-      {children}
-      <div
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none sticky bottom-0 z-10 -mt-3 h-3 bg-gradient-to-t from-sidebar to-transparent transition-opacity duration-150",
-          hasHiddenBottom ? "opacity-100" : "opacity-0"
-        )}
-      />
-    </div>
+    />
   )
 }
 

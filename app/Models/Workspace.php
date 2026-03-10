@@ -24,6 +24,7 @@ class Workspace extends Model
         'name',
         'slug',
         'color',
+        'timeblock_color',
         'icon',
         'mention_suggestions',
         'hashtag_suggestions',

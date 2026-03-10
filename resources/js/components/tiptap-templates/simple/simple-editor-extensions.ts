@@ -19,6 +19,7 @@ import {
 import { TaskItemWithDates } from '@/components/tiptap-extension/task-item-dates-extension';
 import { TaskItemStatusExtension } from '@/components/tiptap-extension/task-item-status-extension';
 import { TaskMigrationMetaExtension } from '@/components/tiptap-extension/task-migration-meta-extension';
+import { TimeblockExtension } from '@/components/tiptap-extension/timeblock-extension';
 import { WikiLinkMark } from '@/components/tiptap-extension/wiki-link-mark-extension';
 import { WikiLinkSuggestion } from '@/components/tiptap-extension/wiki-link-suggestion-extension';
 import { InlineCommands } from '@/components/tiptap-inline-commands/InlineCommands';
@@ -44,6 +45,10 @@ type CreateSimpleEditorExtensionsOptions = {
     noteIcon?: string | null;
     noteIconColor?: string | null;
     noteIconBg?: string | null;
+    noteType?: string | null;
+    journalGranularity?: string | null;
+    journalDate?: string | null;
+    defaultTimeblockDurationMinutes?: number;
 };
 
 export function createSimpleEditorExtensions({
@@ -53,6 +58,10 @@ export function createSimpleEditorExtensions({
     noteIcon = null,
     noteIconColor = null,
     noteIconBg = null,
+    noteType = null,
+    journalGranularity = null,
+    journalDate = null,
+    defaultTimeblockDurationMinutes = 60,
 }: CreateSimpleEditorExtensionsOptions = {}) {
     const displayLocale = language === 'en' ? 'en-US' : 'nl-NL';
     const mentionItemsRef = { current: [...workspaceSuggestions.mentions] };
@@ -217,6 +226,15 @@ export function createSimpleEditorExtensions({
         InlineCommands,
         ListItemPriorityExtension,
         TaskItemStatusExtension,
+        TimeblockExtension.configure({
+            enabled:
+                noteType === 'journal' &&
+                journalGranularity === 'daily' &&
+                typeof journalDate === 'string' &&
+                journalDate.trim() !== '',
+            journalDate,
+            defaultDurationMinutes: defaultTimeblockDurationMinutes,
+        }),
         TaskMigrationMetaExtension.configure({
             notes: wikiLinkNotes,
         }),

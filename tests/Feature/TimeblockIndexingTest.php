@@ -1,0 +1,119 @@
+<?php
+
+use App\Models\Event;
+use App\Models\Note;
+use App\Models\Timeblock;
+use App\Models\Workspace;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
+
+it('indexes daily journal list timeblocks as polymorphic events', function (): void {
+    $workspace = Workspace::factory()->create();
+
+    $firstBlockId = (string) str()->uuid();
+    $secondBlockId = (string) str()->uuid();
+
+    Note::factory()
+        ->for($workspace)
+        ->create([
+            'type' => Note::TYPE_JOURNAL,
+            'journal_granularity' => Note::JOURNAL_DAILY,
+            'journal_date' => '2026-03-10',
+            'content' => [
+                'type' => 'doc',
+                'content' => [
+                    [
+                        'type' => 'bulletList',
+                        'content' => [[
+                            'type' => 'listItem',
+                            'attrs' => ['id' => $firstBlockId],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [
+                                    ['type' => 'text', 'text' => '10:00-11:30 Deep work Project Plan'],
+                                    ['type' => 'text', 'text' => ' @ Office'],
+                                ],
+                            ]],
+                        ]],
+                    ],
+                    [
+                        'type' => 'taskList',
+                        'content' => [[
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'id' => $secondBlockId,
+                                'checked' => true,
+                                'taskStatus' => 'done',
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [
+                                    ['type' => 'text', 'text' => '13:00 Review inbox'],
+                                ],
+                            ]],
+                        ]],
+                    ],
+                ],
+            ],
+        ]);
+
+    $events = Event::query()
+        ->where('eventable_type', Timeblock::class)
+        ->orderBy('starts_at')
+        ->get();
+
+    expect($events)->toHaveCount(2);
+
+    $firstEvent = $events->first();
+    $secondEvent = $events->last();
+
+    expect($firstEvent?->title)->toBe('Deep work Project Plan');
+    expect($firstEvent?->starts_at?->format('Y-m-d H:i:s'))->toBe('2026-03-10 10:00:00');
+    expect($firstEvent?->ends_at?->format('Y-m-d H:i:s'))->toBe('2026-03-10 11:30:00');
+
+    expect($secondEvent?->title)->toBe('Review inbox');
+    expect($secondEvent?->starts_at?->format('Y-m-d H:i:s'))->toBe('2026-03-10 13:00:00');
+    expect($secondEvent?->ends_at?->format('Y-m-d H:i:s'))->toBe('2026-03-10 14:00:00');
+
+    $firstTimeblock = Timeblock::query()->findOrFail($firstEvent?->eventable_id);
+    $secondTimeblock = Timeblock::query()->findOrFail($secondEvent?->eventable_id);
+
+    expect($firstTimeblock->location)->toBe('Office')
+        ->and($firstTimeblock->task_block_id)->toBeNull();
+
+    expect($secondTimeblock->task_block_id)->toBe($secondBlockId)
+        ->and($secondTimeblock->task_checked)->toBeTrue()
+        ->and($secondTimeblock->task_status)->toBe('done');
+});
+
+it('does not index timeblocks for non-daily notes', function (): void {
+    $workspace = Workspace::factory()->create();
+
+    Note::factory()
+        ->for($workspace)
+        ->create([
+            'type' => Note::TYPE_JOURNAL,
+            'journal_granularity' => Note::JOURNAL_WEEKLY,
+            'journal_date' => '2026-03-09',
+            'content' => [
+                'type' => 'doc',
+                'content' => [[
+                    'type' => 'taskList',
+                    'content' => [[
+                        'type' => 'taskItem',
+                        'attrs' => ['id' => (string) str()->uuid()],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [
+                                ['type' => 'text', 'text' => '09:00 Weekly planning'],
+                            ],
+                        ]],
+                    ]],
+                ]],
+            ],
+        ]);
+
+    expect(Event::query()->count())->toBe(0)
+        ->and(Timeblock::query()->count())->toBe(0);
+});

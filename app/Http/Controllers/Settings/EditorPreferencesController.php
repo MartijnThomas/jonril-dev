@@ -64,6 +64,7 @@ class EditorPreferencesController extends Controller
             'preferences' => [
                 'sidebar_left_open_default' => (bool) data_get($settings, 'editor.sidebar_left_open_default', true),
                 'sidebar_right_open_default' => (bool) data_get($settings, 'editor.sidebar_right_open_default', true),
+                'timeblock_default_duration_minutes' => (int) data_get($settings, 'editor.timeblock_default_duration_minutes', 60),
                 'journal_daily_icon' => $this->normalizeDisplayedJournalIcon('daily', (string) data_get($settings, 'editor.journal_icons.daily', self::JOURNAL_ICON_DEFAULTS['daily'])),
                 'journal_weekly_icon' => $this->normalizeDisplayedJournalIcon('weekly', (string) data_get($settings, 'editor.journal_icons.weekly', self::JOURNAL_ICON_DEFAULTS['weekly'])),
                 'journal_monthly_icon' => $this->normalizeDisplayedJournalIcon('monthly', (string) data_get($settings, 'editor.journal_icons.monthly', self::JOURNAL_ICON_DEFAULTS['monthly'])),
@@ -85,6 +86,7 @@ class EditorPreferencesController extends Controller
         $validated = $request->validate([
             'sidebar_left_open_default' => ['required', 'boolean'],
             'sidebar_right_open_default' => ['required', 'boolean'],
+            'timeblock_default_duration_minutes' => ['required', 'integer', 'min:5', 'max:720'],
             'journal_daily_icon' => ['nullable', 'string', 'regex:/^[a-z][a-z0-9_-]*$/'],
             'journal_weekly_icon' => ['nullable', 'string', 'regex:/^[a-z][a-z0-9_-]*$/'],
             'journal_monthly_icon' => ['nullable', 'string', 'regex:/^[a-z][a-z0-9_-]*$/'],
@@ -128,6 +130,7 @@ class EditorPreferencesController extends Controller
 
         data_set($settings, 'editor.sidebar_left_open_default', (bool) $validated['sidebar_left_open_default']);
         data_set($settings, 'editor.sidebar_right_open_default', (bool) $validated['sidebar_right_open_default']);
+        data_set($settings, 'editor.timeblock_default_duration_minutes', (int) $validated['timeblock_default_duration_minutes']);
         data_set($settings, 'editor.journal_icons.daily', $journalIcons['daily']);
         data_set($settings, 'editor.journal_icons.weekly', $journalIcons['weekly']);
         data_set($settings, 'editor.journal_icons.monthly', $journalIcons['monthly']);

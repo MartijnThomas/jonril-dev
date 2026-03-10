@@ -497,9 +497,11 @@ class NotesController extends Controller
             'noteUpdateUrl' => $this->noteSlugService->updateUrlFor($note),
             'noteType' => $note->type,
             'journalGranularity' => $note->journal_granularity,
+            'journalDate' => $note->journal_date?->toDateString(),
             'journalPeriod' => ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date)
                 ? $this->journalNoteService->periodFor($note->journal_granularity, $note->journal_date)
                 : null,
+            'defaultTimeblockDurationMinutes' => Auth::user()?->defaultTimeblockDurationMinutes() ?? 60,
             'noteActions' => [
                 'id' => $note->id,
                 'title' => (string) ($note->getRawOriginal('title') ?: $note->title ?: 'Untitled'),

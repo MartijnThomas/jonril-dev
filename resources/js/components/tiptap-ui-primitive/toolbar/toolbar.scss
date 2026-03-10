@@ -122,8 +122,7 @@
     width: auto !important;
     left: max(0.75rem, env(safe-area-inset-left, 0px)) !important;
     right: max(0.75rem, env(safe-area-inset-right, 0px)) !important;
-    padding-right: 0.75rem !important;
-    scroll-padding-right: max(1.25rem, env(safe-area-inset-right, 0px)) !important;
+    position: fixed;
 
     --tt-toolbar-height: 3rem;
 
@@ -142,6 +141,56 @@
     .tiptap-button-dropdown-small {
       width: 0.75rem;
       height: 0.75rem;
+    }
+
+    mask-image: none;
+    -webkit-mask-image: none;
+
+    &[data-hidden-start="true"] {
+      mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        black 14px,
+        black 100%
+      );
+      -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        black 14px,
+        black 100%
+      );
+    }
+
+    &[data-hidden-end="true"] {
+      mask-image: linear-gradient(
+        to right,
+        black 0,
+        black calc(100% - 14px),
+        transparent 100%
+      );
+      -webkit-mask-image: linear-gradient(
+        to right,
+        black 0,
+        black calc(100% - 14px),
+        transparent 100%
+      );
+    }
+
+    &[data-hidden-start="true"][data-hidden-end="true"] {
+      mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        black 14px,
+        black calc(100% - 14px),
+        transparent 100%
+      );
+      -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        black 14px,
+        black calc(100% - 14px),
+        transparent 100%
+      );
     }
   }
 }
