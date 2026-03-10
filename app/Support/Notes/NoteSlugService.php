@@ -34,18 +34,36 @@ class NoteSlugService
 
     public function urlFor(Note $note): string
     {
+        $workspaceSlug = $this->workspaceSlugFor($note);
+
         if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date) {
             $period = app(JournalNoteService::class)->periodFor(
                 $note->journal_granularity,
                 $note->journal_date,
             );
 
-            return "/journal/{$note->journal_granularity}/{$period}";
+            return "/w/{$workspaceSlug}/journal/{$note->journal_granularity}/{$period}";
         }
 
         $reference = $note->slug ?: $note->id;
 
-        return "/notes/{$reference}";
+        return "/w/{$workspaceSlug}/notes/{$reference}";
+    }
+
+    public function updateUrlFor(Note $note): string
+    {
+        $workspaceSlug = $this->workspaceSlugFor($note);
+
+        return "/w/{$workspaceSlug}/notes/{$note->id}";
+    }
+
+    public function journalUrlFor(Workspace|string $workspace, string $granularity, string $period): string
+    {
+        $workspaceSlug = $workspace instanceof Workspace
+            ? $workspace->slug
+            : trim($workspace);
+
+        return "/w/{$workspaceSlug}/journal/{$granularity}/{$period}";
     }
 
     public function syncNoteAndDescendants(Note $note): void
@@ -146,5 +164,20 @@ class NoteSlugService
 
             $suffix++;
         }
+    }
+
+    private function workspaceSlugFor(Note $note): string
+    {
+        $slug = $note->workspace?->slug;
+        if (is_string($slug) && trim($slug) !== '') {
+            return trim($slug);
+        }
+
+        $workspace = Workspace::query()
+            ->where('id', $note->workspace_id)
+            ->select(['id', 'slug'])
+            ->first();
+
+        return (string) ($workspace?->slug ?? 'workspace');
     }
 }

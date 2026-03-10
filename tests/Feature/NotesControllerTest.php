@@ -7,6 +7,16 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
 
+function scoped_note_url($workspace, string $note): string
+{
+    return "/w/{$workspace?->slug}/notes/{$note}";
+}
+
+function scoped_journal_url($workspace, string $granularity, string $period): string
+{
+    return "/w/{$workspace?->slug}/journal/{$granularity}/{$period}";
+}
+
 test('start creates a note for the authenticated user and redirects to it', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
@@ -18,11 +28,12 @@ test('start creates a note for the authenticated user and redirects to it', func
 
     expect($note)->not()->toBeNull();
     expect($note->slug)->not()->toBeNull();
-    $response->assertRedirect("/notes/{$note->slug}");
+    $response->assertRedirect(scoped_note_url($workspace, $note->slug));
 });
 
 test('show resolves notes by slug', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
     $note = $user->notes()->create([
         'type' => 'note',
         'title' => 'My Project Note',
@@ -34,7 +45,7 @@ test('show resolves notes by slug', function () {
         ->get('/notes/my-project-note')
         ->assertInertia(fn (Assert $page) => $page
             ->where('noteId', $note->id)
-            ->where('noteUpdateUrl', '/notes/'.$note->id),
+            ->where('noteUpdateUrl', scoped_note_url($workspace, $note->id)),
         );
 });
 
@@ -63,7 +74,7 @@ test('rename updates db title and rebuilds parent and child slugs', function () 
             'title' => 'Project X',
         ]);
 
-    $response->assertRedirect('/notes/project-x');
+    $response->assertRedirect(scoped_note_url($workspace, 'project-x'));
 
     $parent->refresh();
     $child->refresh();
@@ -107,7 +118,7 @@ test('rename also updates first heading level one when present', function () {
         ->patch("/notes/{$note->id}/rename", [
             'title' => 'Renamed',
         ])
-        ->assertRedirect('/notes/renamed');
+        ->assertRedirect(scoped_note_url($workspace, 'renamed'));
 
     $note->refresh();
     expect(data_get($note->content, 'content.0.content.0.text'))->toBe('Renamed');
@@ -141,7 +152,7 @@ test('rename does not modify content when no heading level one exists', function
         ->patch("/notes/{$note->id}/rename", [
             'title' => 'Renamed no h1',
         ])
-        ->assertRedirect('/notes/renamed-no-h1');
+        ->assertRedirect(scoped_note_url($workspace, 'renamed-no-h1'));
 
     $note->refresh();
     expect($note->content)->toBe($originalContent);
@@ -179,7 +190,7 @@ test('move updates parent and rebuilds slug for note and descendants', function 
         ->patch("/notes/{$moving->id}/move", [
             'parent_id' => $rootB->id,
         ])
-        ->assertRedirect('/notes/root-b/moving');
+        ->assertRedirect(scoped_note_url($workspace, 'root-b/moving'));
 
     $moving->refresh();
     $child->refresh();
@@ -210,7 +221,7 @@ test('move supports moving a note to root', function () {
         ->patch("/notes/{$child->id}/move", [
             'parent_id' => null,
         ])
-        ->assertRedirect('/notes/child');
+        ->assertRedirect(scoped_note_url($workspace, 'child'));
 
     $child->refresh();
     expect($child->parent_id)->toBeNull();
@@ -738,7 +749,7 @@ test('journal virtual period node shows metrics when backing note exists', funct
         ->assertJsonPath('nodes.0.id', 'journal:month:2026-03')
         ->assertJsonPath('nodes.0.is_virtual', true)
         ->assertJsonPath('nodes.0.has_note', true)
-        ->assertJsonPath('nodes.0.href', '/journal/monthly/2026-03')
+        ->assertJsonPath('nodes.0.href', scoped_journal_url($workspace, 'monthly', '2026-03'))
         ->assertJsonPath('nodes.0.tasks_total', 1)
         ->assertJsonPath('nodes.0.tasks_open', 1)
         ->assertJsonPath('nodes.0.word_count', 123);
@@ -763,7 +774,7 @@ test('journal virtual period node without backing note stays linkable for creati
         ->assertJsonPath('nodes.0.id', 'journal:year:2026')
         ->assertJsonPath('nodes.0.is_virtual', true)
         ->assertJsonPath('nodes.0.has_note', false)
-        ->assertJsonPath('nodes.0.href', '/journal/yearly/2026');
+        ->assertJsonPath('nodes.0.href', scoped_journal_url($workspace, 'yearly', '2026'));
 });
 
 test('notes list filters context and keeps ancestors visible', function () {
@@ -980,13 +991,13 @@ test('update uses the first h1 as note title', function () {
 
     $response = $this
         ->actingAs($user)
-        ->from(route('notes.show', ['note' => $note->id], absolute: false))
-        ->put(route('notes.update', ['note' => $note->id], absolute: false), [
+        ->from(route('notes.show.legacy', ['note' => $note->id], absolute: false))
+        ->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), [
             'content' => $content,
             'properties' => ['context' => 'test'],
         ]);
 
-    $response->assertRedirect(route('notes.show', ['note' => $note->id], absolute: false));
+    $response->assertRedirect(route('notes.show.legacy', ['note' => $note->id], absolute: false));
 
     $note->refresh();
 
@@ -1024,7 +1035,7 @@ test('update falls back to first text line when no h1 exists', function () {
 
     $this
         ->actingAs($user)
-        ->put(route('notes.update', ['note' => $note->id], absolute: false), [
+        ->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), [
             'content' => $content,
             'properties' => [],
         ])
@@ -1056,7 +1067,7 @@ test('property title overrides derived title through model accessor', function (
 
     $this
         ->actingAs($user)
-        ->put(route('notes.update', ['note' => $note->id], absolute: false), [
+        ->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), [
             'content' => $content,
             'properties' => [
                 'title' => 'Property Title',
@@ -1088,7 +1099,7 @@ test('start can create a child note when parent_id is provided', function () {
 
     expect($child)->not()->toBeNull();
     expect($child->slug)->not()->toBeNull();
-    $response->assertRedirect("/notes/{$child->slug}");
+    $response->assertRedirect(scoped_note_url($workspace, $child->slug));
 });
 
 test('start can create a note with a title and optional parent', function () {
@@ -1114,7 +1125,7 @@ test('start can create a note with a title and optional parent', function () {
     expect($created)->not()->toBeNull();
     expect($created?->title)->toBe('My New Note');
     expect($created?->slug)->toContain('my-new-note');
-    $response->assertRedirect("/notes/{$created?->slug}");
+    $response->assertRedirect(scoped_note_url($workspace, (string) $created?->slug));
 });
 
 test('store creates a regular note with h1 content and redirects to note id', function () {
@@ -1143,7 +1154,7 @@ test('store creates a regular note with h1 content and redirects to note id', fu
     expect(data_get($created?->content, 'content.0.type'))->toBe('heading');
     expect(data_get($created?->content, 'content.0.attrs.level'))->toBe(1);
     expect(data_get($created?->content, 'content.0.content.0.text'))->toBe('My Document');
-    $response->assertRedirect("/notes/{$created?->id}");
+    $response->assertRedirect(scoped_note_url($workspace, (string) $created?->slug));
 });
 
 test('update can move a note under another note of the same user', function () {
@@ -1153,7 +1164,7 @@ test('update can move a note under another note of the same user', function () {
 
     $this
         ->actingAs($user)
-        ->put(route('notes.update', ['note' => $note->id], absolute: false), [
+        ->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), [
             'content' => [
                 'type' => 'doc',
                 'content' => [],
@@ -1177,8 +1188,8 @@ test('update rejects moving a note under its own descendant', function () {
 
     $response = $this
         ->actingAs($user)
-        ->from(route('notes.show', ['note' => $root->id], absolute: false))
-        ->put(route('notes.update', ['note' => $root->id], absolute: false), [
+        ->from(route('notes.show.legacy', ['note' => $root->id], absolute: false))
+        ->put(route('notes.update.legacy', ['note' => $root->id], absolute: false), [
             'content' => [
                 'type' => 'doc',
                 'content' => [],
@@ -1188,7 +1199,7 @@ test('update rejects moving a note under its own descendant', function () {
         ]);
 
     $response
-        ->assertRedirect(route('notes.show', ['note' => $root->id], absolute: false))
+        ->assertRedirect(route('notes.show.legacy', ['note' => $root->id], absolute: false))
         ->assertSessionHasErrors('parent_id');
 
     $root->refresh();
@@ -1228,7 +1239,7 @@ test('sidebar notes tree excludes journal notes and keeps hierarchy', function (
 
     $response = $this
         ->actingAs($user)
-        ->get(route('notes.show', ['note' => $leaf->id], absolute: false));
+        ->get(route('notes.show.legacy', ['note' => $leaf->id], absolute: false));
 
     $response->assertInertia(fn (Assert $page) => $page
         ->has('notesTree', 1)
@@ -1263,7 +1274,7 @@ test('notes trees show Untitled when note title is empty', function () {
 
     $this
         ->actingAs($user)
-        ->get(route('notes.show', ['note' => $note->id], absolute: false))
+        ->get(route('notes.show.legacy', ['note' => $note->id], absolute: false))
         ->assertInertia(fn (Assert $page) => $page
             ->where('notesTree.0.id', $note->id)
             ->where('notesTree.0.title', 'Untitled'),
@@ -1272,6 +1283,7 @@ test('notes trees show Untitled when note title is empty', function () {
 
 test('show returns breadcrumb path for the current note', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
 
     $root = $user->notes()->create([
         'title' => 'Acme',
@@ -1292,22 +1304,23 @@ test('show returns breadcrumb path for the current note', function () {
 
     $this
         ->actingAs($user)
-        ->get(route('notes.show', ['note' => $leaf->id], absolute: false))
+        ->get(route('notes.show.legacy', ['note' => $leaf->id], absolute: false))
         ->assertInertia(fn (Assert $page) => $page
             ->has('breadcrumbs', 4)
             ->where('breadcrumbs.0.title', 'Notes')
-            ->where('breadcrumbs.0.href', "/notes/{$root->id}")
+            ->where('breadcrumbs.0.href', scoped_note_url($workspace, $root->id))
             ->where('breadcrumbs.1.title', 'Acme')
-            ->where('breadcrumbs.1.href', "/notes/{$root->id}")
+            ->where('breadcrumbs.1.href', scoped_note_url($workspace, $root->id))
             ->where('breadcrumbs.2.title', 'Project 1')
-            ->where('breadcrumbs.2.href', "/notes/{$project->id}")
+            ->where('breadcrumbs.2.href', scoped_note_url($workspace, $project->id))
             ->where('breadcrumbs.3.title', 'Some note')
-            ->where('breadcrumbs.3.href', '/notes/acme/project-1/some-note'),
+            ->where('breadcrumbs.3.href', scoped_note_url($workspace, 'acme/project-1/some-note')),
         );
 });
 
 test('daily journal note shows year month week and day breadcrumbs', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
 
     $this
         ->actingAs($user)
@@ -1315,15 +1328,15 @@ test('daily journal note shows year month week and day breadcrumbs', function ()
         ->assertInertia(fn (Assert $page) => $page
             ->has('breadcrumbs', 5)
             ->where('breadcrumbs.0.title', 'Journal')
-            ->where('breadcrumbs.0.href', '/journal/daily/2026-03-07')
+            ->where('breadcrumbs.0.href', scoped_journal_url($workspace, 'daily', '2026-03-07'))
             ->where('breadcrumbs.1.title', '2026')
-            ->where('breadcrumbs.1.href', '/journal/yearly/2026')
+            ->where('breadcrumbs.1.href', scoped_journal_url($workspace, 'yearly', '2026'))
             ->where('breadcrumbs.2.title', 'Maart')
-            ->where('breadcrumbs.2.href', '/journal/monthly/2026-03')
+            ->where('breadcrumbs.2.href', scoped_journal_url($workspace, 'monthly', '2026-03'))
             ->where('breadcrumbs.3.title', 'Week 10')
-            ->where('breadcrumbs.3.href', '/journal/weekly/2026-W10')
+            ->where('breadcrumbs.3.href', scoped_journal_url($workspace, 'weekly', '2026-W10'))
             ->where('breadcrumbs.4.title', 'Zaterdag 7 maart 2026')
-            ->where('breadcrumbs.4.href', '/journal/daily/2026-03-07'),
+            ->where('breadcrumbs.4.href', scoped_journal_url($workspace, 'daily', '2026-03-07')),
         );
 });
 
@@ -1687,7 +1700,7 @@ test('regular note includes backlinks with snippet', function () {
             ->where('backlinks.0.render_fragments.1.text', 'Target note')
             ->where('backlinks.0.note.id', $source->id)
             ->where('backlinks.0.note.title', 'Source note')
-            ->where('backlinks.0.href', "/notes/{$source->id}#p-source"),
+            ->where('backlinks.0.href', scoped_note_url($workspace, $source->id).'#p-source'),
         );
 });
 
@@ -1809,7 +1822,7 @@ test('update preserves leading and trailing spaces in tiptap text nodes', functi
 
     $this
         ->actingAs($user)
-        ->put(route('notes.update', ['note' => $note->id], absolute: false), [
+        ->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), [
             'content' => $content,
             'properties' => [],
         ])
@@ -1844,8 +1857,8 @@ test('manual save always creates a note revision', function () {
         'save_mode' => 'manual',
     ];
 
-    $this->actingAs($user)->put(route('notes.update', ['note' => $note->id], absolute: false), $payload);
-    $this->actingAs($user)->put(route('notes.update', ['note' => $note->id], absolute: false), $payload);
+    $this->actingAs($user)->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), $payload);
+    $this->actingAs($user)->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), $payload);
 
     expect(NoteRevision::query()->where('note_id', $note->id)->count())->toBe(2);
 });
@@ -1878,15 +1891,15 @@ test('autosave revisions respect user configured interval', function () {
         'save_mode' => 'auto',
     ];
 
-    $this->actingAs($user)->put(route('notes.update', ['note' => $note->id], absolute: false), $payload);
+    $this->actingAs($user)->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), $payload);
     expect(NoteRevision::query()->where('note_id', $note->id)->count())->toBe(1);
 
     $this->travel(4)->minutes();
-    $this->actingAs($user)->put(route('notes.update', ['note' => $note->id], absolute: false), $payload);
+    $this->actingAs($user)->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), $payload);
     expect(NoteRevision::query()->where('note_id', $note->id)->count())->toBe(1);
 
     $this->travel(2)->minutes();
-    $this->actingAs($user)->put(route('notes.update', ['note' => $note->id], absolute: false), $payload);
+    $this->actingAs($user)->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), $payload);
     expect(NoteRevision::query()->where('note_id', $note->id)->count())->toBe(2);
 });
 

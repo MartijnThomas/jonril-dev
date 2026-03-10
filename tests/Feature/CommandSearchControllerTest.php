@@ -5,6 +5,7 @@ use App\Models\User;
 
 test('command search returns note results and excludes journal by default', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
 
     $note = $user->notes()->create([
         'type' => Note::TYPE_NOTE,
@@ -47,12 +48,13 @@ test('command search returns note results and excludes journal by default', func
         ->assertOk()
         ->assertJsonPath('mode', 'notes')
         ->assertJsonPath('items.0.id', $journal->id)
-        ->assertJsonPath('items.0.icon', 'calendar_days')
-        ->assertJsonPath('items.0.icon_color', 'black');
+        ->assertJsonPath('items.0.icon', 'calendar')
+        ->assertJsonPath('items.0.icon_color', 'default');
 });
 
 test('command search returns heading results with anchor links', function () {
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
 
     $note = $user->notes()->create([
         'type' => Note::TYPE_NOTE,
@@ -84,6 +86,6 @@ test('command search returns heading results with anchor links', function () {
         ->assertJsonPath('mode', 'headings')
         ->assertJsonPath('items.0.note_id', $note->id)
         ->assertJsonPath('items.0.heading_id', 'heading-123')
-        ->assertJsonPath('items.0.href', '/notes/specs#heading-123')
+        ->assertJsonPath('items.0.href', "/w/{$workspace?->slug}/notes/specs#heading-123")
         ->assertJsonPath('items.0.path', 'Specs');
 });

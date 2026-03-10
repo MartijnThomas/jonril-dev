@@ -87,7 +87,7 @@ type CommandDefinition = {
 export function AppCommandPalette() {
     const page = usePage().props as {
         noteActions?: NoteActionsContext;
-        currentWorkspace?: { id: string } | null;
+        currentWorkspace?: { id: string; slug?: string | null } | null;
     };
     const { t } = useI18n();
     const [open, setOpen] = useState(false);
@@ -349,7 +349,14 @@ export function AppCommandPalette() {
         const href =
             typeof window !== 'undefined'
                 ? window.location.pathname
-                : `/notes/${noteActions.id}`;
+                : (() => {
+                      const workspaceSlug =
+                          page.currentWorkspace?.slug?.trim() ?? '';
+
+                      return workspaceSlug !== ''
+                          ? `/w/${workspaceSlug}/notes/${noteActions.id}`
+                          : `/notes/${noteActions.id}`;
+                  })();
 
         upsertRecentItem({
             id: noteActions.id,
@@ -359,7 +366,7 @@ export function AppCommandPalette() {
             path: null,
             type:
                 noteActions.type ??
-                (href.startsWith('/journal/') ? 'journal' : 'note'),
+                (href.includes('/journal/') ? 'journal' : 'note'),
             journal_granularity: noteActions.journal_granularity ?? null,
             icon: noteActions.icon ?? null,
             icon_color: noteActions.icon_color ?? null,
@@ -440,7 +447,7 @@ export function AppCommandPalette() {
     const renderNoteIcon = (item: Pick<NoteSearchItem, 'type' | 'icon' | 'icon_color'>) => {
         const fallback = item.type === 'journal' ? CalendarDays : FileText;
         const IconComponent = getLucideIconComponent(item.icon ?? null, fallback);
-        const colorClass = getColorTextClass(item.icon_color ?? 'black');
+        const colorClass = getColorTextClass(item.icon_color ?? 'default');
 
         return <IconComponent className={cn('h-4 w-4', colorClass)} />;
     };

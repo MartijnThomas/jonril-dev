@@ -10,6 +10,8 @@ type PriorityTokenMatch = {
     tokenEnd: number;
 };
 
+const PRIORITY_SYNC_INIT_META = 'priority-sync-init';
+
 const PRIORITY_TOKEN_REGEX = /^(\s*)(!{1,3})(?=\s|$)/;
 
 function priorityFromToken(token: string): Exclude<TaskPriority, null> {
@@ -47,30 +49,6 @@ function tokenMatchForText(text: string): PriorityTokenMatch | null {
     };
 }
 
-function priorityRangeClass(priority: Exclude<TaskPriority, null>): string {
-    if (priority === 'high') {
-        return 'md-priority-range md-priority-range--high';
-    }
-
-    if (priority === 'medium') {
-        return 'md-priority-range md-priority-range--medium';
-    }
-
-    return 'md-priority-range md-priority-range--normal';
-}
-
-function priorityTokenClass(priority: Exclude<TaskPriority, null>): string {
-    if (priority === 'high') {
-        return 'md-priority-token md-priority-token--high';
-    }
-
-    if (priority === 'medium') {
-        return 'md-priority-token md-priority-token--medium';
-    }
-
-    return 'md-priority-token md-priority-token--normal';
-}
-
 function extractPriorityFromListItem(node: any): TaskPriority {
     let result: TaskPriority = null;
     let done = false;
@@ -102,109 +80,115 @@ function extractPriorityFromListItem(node: any): TaskPriority {
     return result;
 }
 
-function buildPriorityDecorations(doc: any): DecorationSet {
-    const decorations: Decoration[] = [];
+function priorityColor(priority: Exclude<TaskPriority, null>): string {
+    if (priority === 'high') {
+        return 'rgba(248, 113, 113, 0.16)';
+    }
 
-    doc.descendants((node: any, pos: number) => {
-        if (node.type.name !== 'listItem' && node.type.name !== 'taskItem') {
-            return;
-        }
+    if (priority === 'medium') {
+        return 'rgba(251, 146, 60, 0.16)';
+    }
 
-        const nodePriority = (node.attrs.priority ?? null) as TaskPriority;
-        if (!nodePriority) {
-            return;
-        }
+    return 'rgba(250, 204, 21, 0.18)';
+}
 
-        let paragraphNode: any | null = null;
-        let paragraphPos = -1;
+function findFirstParagraph(node: any): { node: any; pos: number } | null {
+    let paragraphNode: any | null = null;
+    let paragraphPos = -1;
 
-        node.descendants((child: any, childPos: number) => {
-            if (
-                child.type?.name === 'taskList' ||
-                child.type?.name === 'bulletList' ||
-                child.type?.name === 'orderedList'
-            ) {
-                return false;
-            }
-
-            if (child.type?.name === 'paragraph') {
-                paragraphNode = child;
-                paragraphPos = childPos;
-
-                return false;
-            }
-        });
-
-        if (!paragraphNode || paragraphPos < 0) {
-            return;
-        }
-
-        let tokenStartAbsolute = -1;
-        let tokenEndAbsolute = -1;
-        let tokenPriority: Exclude<TaskPriority, null> | null = null;
-        let separatorStartAbsolute = -1;
-        let separatorEndAbsolute = -1;
-
-        paragraphNode.descendants((child: any, childPos: number) => {
-            if (tokenStartAbsolute >= 0 || !child.isText || !child.text) {
-                return;
-            }
-
-            const match = tokenMatchForText(child.text as string);
-            if (!match) {
-                return false;
-            }
-
-            tokenStartAbsolute =
-                pos + 1 + paragraphPos + 1 + childPos + match.tokenStart;
-            tokenEndAbsolute =
-                pos + 1 + paragraphPos + 1 + childPos + match.tokenEnd;
-            tokenPriority = match.priority;
-            const separatorChar = (child.text as string).charAt(match.tokenEnd);
-            if (separatorChar === ' ') {
-                separatorStartAbsolute = tokenEndAbsolute;
-                separatorEndAbsolute = tokenEndAbsolute + 1;
-            }
-
-            return false;
-        });
-
-        if (tokenStartAbsolute < 0) {
-            return;
-        }
-
-        if (tokenEndAbsolute > tokenStartAbsolute && tokenPriority) {
-            decorations.push(
-                Decoration.inline(tokenStartAbsolute, tokenEndAbsolute, {
-                    class: priorityTokenClass(tokenPriority),
-                }),
-            );
-        }
-
+    node.descendants((child: any, childPos: number) => {
         if (
-            separatorStartAbsolute >= 0 &&
-            separatorEndAbsolute > separatorStartAbsolute
+            child.type?.name === 'taskList' ||
+            child.type?.name === 'bulletList' ||
+            child.type?.name === 'orderedList'
         ) {
-            decorations.push(
-                Decoration.inline(separatorStartAbsolute, separatorEndAbsolute, {
-                    class: 'md-task-marker-separator md-priority-separator',
-                }),
-            );
+            return false;
         }
 
-        const paragraphContentEnd = pos + 1 + paragraphPos + paragraphNode.nodeSize - 1;
-        if (paragraphContentEnd <= tokenStartAbsolute) {
-            return;
+        if (child.type?.name === 'paragraph') {
+            paragraphNode = child;
+            paragraphPos = childPos;
+            return false;
         }
-
-        decorations.push(
-            Decoration.inline(tokenStartAbsolute, paragraphContentEnd, {
-                class: priorityRangeClass(nodePriority),
-            }),
-        );
     });
 
-    return DecorationSet.create(doc, decorations);
+    if (!paragraphNode || paragraphPos < 0) {
+        return null;
+    }
+
+    return { node: paragraphNode, pos: paragraphPos };
+}
+
+function findPriorityTextRange(
+    listItemPos: number,
+    paragraphNode: any,
+    paragraphPos: number,
+): {
+    priority: Exclude<TaskPriority, null>;
+    textFrom: number;
+    textTo: number;
+} | null {
+    let result: {
+        priority: Exclude<TaskPriority, null>;
+        textFrom: number;
+        textTo: number;
+    } | null = null;
+
+    paragraphNode.descendants((child: any, childPos: number) => {
+        if (result || !child.isText || !child.text) {
+            return;
+        }
+
+        const match = tokenMatchForText(child.text as string);
+        if (!match) {
+            return false;
+        }
+
+        const textStartBase = listItemPos + 1 + paragraphPos + 1 + childPos;
+        const tokenStartAbsolute = textStartBase + match.tokenStart;
+        let localTextOffset = match.tokenEnd;
+        const text = child.text as string;
+        while (text.charAt(localTextOffset) === ' ') {
+            localTextOffset += 1;
+        }
+        const textFrom = textStartBase + localTextOffset;
+
+        const paragraphContentEnd =
+            listItemPos + 1 + paragraphPos + paragraphNode.nodeSize - 1;
+
+        if (paragraphContentEnd > tokenStartAbsolute && paragraphContentEnd >= textFrom) {
+            result = {
+                priority: match.priority,
+                textFrom,
+                textTo: paragraphContentEnd,
+            };
+        }
+
+        return false;
+    });
+
+    return result;
+}
+
+function clearPriorityHighlightMarks(
+    tr: any,
+    from: number,
+    to: number,
+    highlightType: any,
+) {
+    if (to <= from) {
+        return;
+    }
+
+    const colors = [
+        priorityColor('normal'),
+        priorityColor('medium'),
+        priorityColor('high'),
+    ];
+
+    for (const color of colors) {
+        tr.removeMark(from, to, highlightType.create({ color }));
+    }
 }
 
 function buildActiveMarkerNodeDecorations(
@@ -232,6 +216,75 @@ function buildActiveMarkerNodeDecorations(
     return DecorationSet.create(doc, decorations);
 }
 
+function buildPriorityTokenDecorations(doc: any): DecorationSet {
+    const decorations: Decoration[] = [];
+
+    doc.descendants((node: any, pos: number) => {
+        if (node.type.name !== 'listItem' && node.type.name !== 'taskItem') {
+            return;
+        }
+
+        let applied = false;
+
+        node.descendants((child: any, childPos: number) => {
+            if (applied) {
+                return false;
+            }
+
+            if (
+                child.type?.name === 'taskList' ||
+                child.type?.name === 'bulletList' ||
+                child.type?.name === 'orderedList'
+            ) {
+                return false;
+            }
+
+            if (!child.isText || !child.text) {
+                return;
+            }
+
+            const match = tokenMatchForText(child.text as string);
+            if (!match) {
+                applied = true;
+                return false;
+            }
+
+            const absoluteStart = pos + 1 + childPos + match.tokenStart;
+            let absoluteEnd = pos + 1 + childPos + match.tokenEnd;
+
+            decorations.push(
+                Decoration.inline(absoluteStart, absoluteEnd, {
+                    class: `md-priority-token md-priority-token--${match.priority}`,
+                }),
+            );
+
+            const text = child.text as string;
+            let separatorOffset = match.tokenEnd;
+            while (text.charAt(separatorOffset) === ' ') {
+                absoluteEnd += 1;
+                separatorOffset += 1;
+            }
+
+            if (absoluteEnd > pos + 1 + childPos + match.tokenEnd) {
+                decorations.push(
+                    Decoration.inline(
+                        pos + 1 + childPos + match.tokenEnd,
+                        absoluteEnd,
+                        {
+                            class: 'md-task-marker-separator md-priority-separator',
+                        },
+                    ),
+                );
+            }
+
+            applied = true;
+            return false;
+        });
+    });
+
+    return DecorationSet.create(doc, decorations);
+}
+
 export const ListItemPriorityExtension = Extension.create({
     name: 'listItemPriorityExtension',
 
@@ -239,13 +292,13 @@ export const ListItemPriorityExtension = Extension.create({
         return [
             new Plugin({
                 state: {
-                    init: (_, state) => buildPriorityDecorations(state.doc),
+                    init: (_, state) => buildPriorityTokenDecorations(state.doc),
                     apply: (tr, decorationSet) => {
                         if (!tr.docChanged) {
                             return decorationSet.map(tr.mapping, tr.doc);
                         }
 
-                        return buildPriorityDecorations(tr.doc);
+                        return buildPriorityTokenDecorations(tr.doc);
                     },
                 },
                 props: {
@@ -280,16 +333,28 @@ export const ListItemPriorityExtension = Extension.create({
             }),
             new Plugin({
                 appendTransaction: (transactions, oldState, newState) => {
-                    if (!transactions.some((transaction) => transaction.docChanged)) {
+                    if (
+                        !transactions.some(
+                            (transaction) =>
+                                transaction.docChanged ||
+                                transaction.getMeta(PRIORITY_SYNC_INIT_META),
+                        )
+                    ) {
                         return null;
                     }
 
-                    if (oldState.doc.eq(newState.doc)) {
+                    if (
+                        oldState.doc.eq(newState.doc) &&
+                        !transactions.some((transaction) =>
+                            transaction.getMeta(PRIORITY_SYNC_INIT_META),
+                        )
+                    ) {
                         return null;
                     }
 
                     const { tr } = newState;
                     let changed = false;
+                    const highlightType = newState.schema.marks.highlight;
 
                     newState.doc.descendants((node, pos) => {
                         if (
@@ -301,6 +366,42 @@ export const ListItemPriorityExtension = Extension.create({
 
                         const nextPriority = extractPriorityFromListItem(node);
                         const currentPriority = (node.attrs.priority ?? null) as TaskPriority;
+                        const firstParagraph = findFirstParagraph(node);
+
+                        if (highlightType && firstParagraph) {
+                            const paragraphFrom = pos + 1 + firstParagraph.pos + 1;
+                            const paragraphTo =
+                                pos + 1 + firstParagraph.pos + firstParagraph.node.nodeSize - 1;
+
+                            clearPriorityHighlightMarks(
+                                tr,
+                                paragraphFrom,
+                                paragraphTo,
+                                highlightType,
+                            );
+
+                            if (nextPriority) {
+                                const priorityRange = findPriorityTextRange(
+                                    pos,
+                                    firstParagraph.node,
+                                    firstParagraph.pos,
+                                );
+
+                                if (
+                                    priorityRange &&
+                                    priorityRange.textTo > priorityRange.textFrom
+                                ) {
+                                    tr.addMark(
+                                        priorityRange.textFrom,
+                                        priorityRange.textTo,
+                                        highlightType.create({
+                                            color: priorityColor(nextPriority),
+                                        }),
+                                    );
+                                    changed = true;
+                                }
+                            }
+                        }
 
                         if (currentPriority === nextPriority) {
                             return;
@@ -314,6 +415,22 @@ export const ListItemPriorityExtension = Extension.create({
                     });
 
                     return changed ? tr : null;
+                },
+
+                view: (view) => {
+                    const trigger = () => {
+                        if (view.isDestroyed) {
+                            return;
+                        }
+
+                        view.dispatch(
+                            view.state.tr.setMeta(PRIORITY_SYNC_INIT_META, true),
+                        );
+                    };
+
+                    queueMicrotask(trigger);
+
+                    return {};
                 },
             }),
         ];

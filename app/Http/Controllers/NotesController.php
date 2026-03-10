@@ -112,7 +112,7 @@ class NotesController extends Controller
             return $created->fresh();
         });
 
-        return redirect("/notes/{$note->id}");
+        return redirect($this->noteSlugService->urlFor($note));
     }
 
     public function index(Request $request)
@@ -151,11 +151,45 @@ class NotesController extends Controller
         return $this->renderNotePage($resolved);
     }
 
+    public function showScoped(Workspace $workspace, string $note)
+    {
+        $this->assertWorkspaceMembership($workspace);
+        $resolved = $this->resolveNoteOrFailInWorkspace($workspace, $note);
+
+        return $this->renderNotePage($resolved);
+    }
+
     public function showJournal(Request $request, string $granularity, string $period)
     {
+        return $this->showJournalForWorkspace(
+            request: $request,
+            workspace: $this->currentWorkspace(),
+            granularity: $granularity,
+            period: $period,
+        );
+    }
+
+    public function showJournalScoped(Request $request, Workspace $workspace, string $granularity, string $period)
+    {
+        $this->assertWorkspaceMembership($workspace);
+
+        return $this->showJournalForWorkspace(
+            request: $request,
+            workspace: $workspace,
+            granularity: $granularity,
+            period: $period,
+        );
+    }
+
+    private function showJournalForWorkspace(
+        Request $request,
+        Workspace $workspace,
+        string $granularity,
+        string $period,
+    ) {
         try {
             $note = $this->journalNoteService->resolveOrCreate(
-                $this->currentWorkspace(),
+                $workspace,
                 $granularity,
                 $period,
                 $this->userLanguage(),
@@ -169,7 +203,19 @@ class NotesController extends Controller
 
     public function update(Request $request, string $note)
     {
-        $resolved = $this->resolveNoteOrFail($note);
+        return $this->updateForWorkspace($request, $this->currentWorkspace(), $note);
+    }
+
+    public function updateScoped(Request $request, Workspace $workspace, string $note)
+    {
+        $this->assertWorkspaceMembership($workspace);
+
+        return $this->updateForWorkspace($request, $workspace, $note);
+    }
+
+    private function updateForWorkspace(Request $request, Workspace $workspace, string $note)
+    {
+        $resolved = $this->resolveNoteOrFailInWorkspace($workspace, $note);
 
         $data = $request->validate([
             'content' => 'required',
@@ -180,7 +226,7 @@ class NotesController extends Controller
                 'nullable',
                 'uuid',
                 Rule::exists('notes', 'id')->where(
-                    fn ($query) => $query->where('workspace_id', $this->currentWorkspace()->id),
+                    fn ($query) => $query->where('workspace_id', $workspace->id),
                 ),
             ],
         ]);
@@ -330,6 +376,7 @@ class NotesController extends Controller
             ->orderBy('created_at')
             ->get([
                 'id',
+                'workspace_id',
                 'slug',
                 'title',
                 'properties',
@@ -438,7 +485,7 @@ class NotesController extends Controller
             ]];
         }
 
-        $breadcrumbs = $this->buildBreadcrumbs($note, $noteTrail, $noteById);
+        $breadcrumbs = $this->buildBreadcrumbs($note, $noteTrail, $noteById, $this->currentWorkspace());
         $relatedPanel = $this->noteRelatedPanelBuilder->build($note);
 
         [$noteActionIcon, $noteActionIconColor] = $this->resolveNoteActionIconPayload($note);
@@ -447,7 +494,7 @@ class NotesController extends Controller
             'content' => $this->normalizeContentForEditor($note->content),
             'noteId' => $note->id,
             'noteUrl' => $this->noteSlugService->urlFor($note),
-            'noteUpdateUrl' => '/notes/'.$note->id,
+            'noteUpdateUrl' => $this->noteSlugService->updateUrlFor($note),
             'noteType' => $note->type,
             'journalGranularity' => $note->journal_granularity,
             'journalPeriod' => ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date)
@@ -510,7 +557,7 @@ class NotesController extends Controller
     /**
      * @param  array<int, array{id: string, title: string}>  $noteTrail
      */
-    private function buildBreadcrumbs(Note $note, array $noteTrail, mixed $noteById): array
+    private function buildBreadcrumbs(Note $note, array $noteTrail, mixed $noteById, Workspace $workspace): array
     {
         if ($note->type === Note::TYPE_JOURNAL) {
             if ($note->journal_granularity && $note->journal_date) {
@@ -522,34 +569,34 @@ class NotesController extends Controller
 
                 $breadcrumbs = [[
                     'title' => 'Journal',
-                    'href' => "/journal/daily/{$dayPeriod}",
+                    'href' => $this->noteSlugService->journalUrlFor($workspace, Note::JOURNAL_DAILY, $dayPeriod),
                 ]];
 
                 if (in_array($note->journal_granularity, [Note::JOURNAL_YEARLY, Note::JOURNAL_MONTHLY, Note::JOURNAL_WEEKLY, Note::JOURNAL_DAILY], true)) {
                     $breadcrumbs[] = [
                         'title' => $date->format('Y'),
-                        'href' => "/journal/yearly/{$yearPeriod}",
+                        'href' => $this->noteSlugService->journalUrlFor($workspace, Note::JOURNAL_YEARLY, $yearPeriod),
                     ];
                 }
 
                 if (in_array($note->journal_granularity, [Note::JOURNAL_MONTHLY, Note::JOURNAL_WEEKLY, Note::JOURNAL_DAILY], true)) {
                     $breadcrumbs[] = [
                         'title' => ucfirst($date->isoFormat('MMMM')),
-                        'href' => "/journal/monthly/{$monthPeriod}",
+                        'href' => $this->noteSlugService->journalUrlFor($workspace, Note::JOURNAL_MONTHLY, $monthPeriod),
                     ];
                 }
 
                 if (in_array($note->journal_granularity, [Note::JOURNAL_WEEKLY, Note::JOURNAL_DAILY], true)) {
                     $breadcrumbs[] = [
                         'title' => "Week {$date->isoWeek()}",
-                        'href' => "/journal/weekly/{$weekPeriod}",
+                        'href' => $this->noteSlugService->journalUrlFor($workspace, Note::JOURNAL_WEEKLY, $weekPeriod),
                     ];
                 }
 
                 if ($note->journal_granularity === Note::JOURNAL_DAILY) {
                     $breadcrumbs[] = [
                         'title' => $note->title ?? 'Untitled',
-                        'href' => "/journal/daily/{$dayPeriod}",
+                        'href' => $this->noteSlugService->journalUrlFor($workspace, Note::JOURNAL_DAILY, $dayPeriod),
                     ];
                 }
 
@@ -559,7 +606,7 @@ class NotesController extends Controller
             return [
                 [
                     'title' => 'Journal',
-                    'href' => '/journal/daily/'.now()->toDateString(),
+                    'href' => $this->noteSlugService->journalUrlFor($workspace, Note::JOURNAL_DAILY, now()->toDateString()),
                 ],
                 [
                     'title' => $note->title ?? 'Untitled',
@@ -574,7 +621,9 @@ class NotesController extends Controller
         $breadcrumbs = [
             [
                 'title' => 'Notes',
-                'href' => $rootNote ? $this->noteSlugService->urlFor($rootNote) : '/notes',
+                'href' => $rootNote
+                    ? $this->noteSlugService->urlFor($rootNote)
+                    : $this->noteSlugService->journalUrlFor($workspace, Note::JOURNAL_DAILY, now()->toDateString()),
             ],
         ];
 
@@ -582,7 +631,7 @@ class NotesController extends Controller
             $trailNote = $noteById->get($trailItem['id']);
             $breadcrumbs[] = [
                 'title' => $trailItem['title'],
-                'href' => $trailNote ? $this->noteSlugService->urlFor($trailNote) : "/notes/{$trailItem['id']}",
+                'href' => $trailNote ? $this->noteSlugService->urlFor($trailNote) : $this->noteSlugService->updateUrlFor($note),
             ];
         }
 
@@ -669,7 +718,11 @@ class NotesController extends Controller
 
     private function resolveNoteOrFail(string $reference): Note
     {
-        $workspace = $this->currentWorkspace();
+        return $this->resolveNoteOrFailInWorkspace($this->currentWorkspace(), $reference);
+    }
+
+    private function resolveNoteOrFailInWorkspace(Workspace $workspace, string $reference): Note
+    {
         $note = $this->noteSlugService->findByReference($workspace, $reference);
 
         if (! $note) {
@@ -727,6 +780,10 @@ class NotesController extends Controller
      */
     private function buildNotesTreeLevel(string $workspaceId, ?string $parentId, array $filters): array
     {
+        $workspaceSlug = (string) (Workspace::query()
+            ->where('id', $workspaceId)
+            ->value('slug') ?: 'workspace');
+
         $notes = Note::query()
             ->where('workspace_id', $workspaceId)
             ->when(
@@ -742,6 +799,7 @@ class NotesController extends Controller
             ->orderBy('created_at')
             ->get([
                 'id',
+                'workspace_id',
                 'parent_id',
                 'slug',
                 'type',
@@ -982,6 +1040,7 @@ class NotesController extends Controller
             $visibleJournalNotes,
             $buildJournalVirtual,
             $buildNotePayload,
+            $workspaceSlug,
         ): array {
             if ($levelParentId === 'journal') {
                 $years = $visibleJournalNotes
@@ -991,7 +1050,7 @@ class NotesController extends Controller
                     ->sort()
                     ->values();
 
-                return $years->map(function (string $year) use ($visibleJournalNotes, $buildJournalVirtual) {
+                return $years->map(function (string $year) use ($visibleJournalNotes, $buildJournalVirtual, $workspaceSlug) {
                     $yearNotes = $visibleJournalNotes->filter(
                         fn (Note $note) => $note->journal_date?->format('Y') === $year,
                     );
@@ -1010,7 +1069,7 @@ class NotesController extends Controller
                         "journal:year:{$year}",
                         $year,
                         $hasChildren,
-                        "/journal/yearly/{$year}",
+                        $this->noteSlugService->journalUrlFor($workspaceSlug, Note::JOURNAL_YEARLY, $year),
                         $backing,
                     );
                 })->all();
@@ -1035,7 +1094,7 @@ class NotesController extends Controller
                     ->sort()
                     ->values();
 
-                return $months->map(function (string $month) use ($yearNotes, $buildJournalVirtual) {
+                return $months->map(function (string $month) use ($yearNotes, $buildJournalVirtual, $workspaceSlug) {
                     $monthNotes = $yearNotes->filter(
                         fn (Note $note) => $note->journal_date?->format('Y-m') === $month,
                     );
@@ -1054,7 +1113,7 @@ class NotesController extends Controller
                         "journal:month:{$month}",
                         $title,
                         $hasChildren,
-                        "/journal/monthly/{$month}",
+                        $this->noteSlugService->journalUrlFor($workspaceSlug, Note::JOURNAL_MONTHLY, $month),
                         $backing,
                     );
                 })->all();
@@ -1078,7 +1137,7 @@ class NotesController extends Controller
                     ->sort()
                     ->values();
 
-                return $weeks->map(function (string $weekPeriod) use ($monthNotes, $buildJournalVirtual) {
+                return $weeks->map(function (string $weekPeriod) use ($monthNotes, $buildJournalVirtual, $workspaceSlug) {
                     [$weekYear, $weekNumRaw] = explode('-W', $weekPeriod);
                     $weekNum = ltrim($weekNumRaw, '0');
                     $weekNotes = $monthNotes->filter(
@@ -1095,7 +1154,7 @@ class NotesController extends Controller
                         "journal:week:{$weekPeriod}",
                         "Week {$weekNum} {$weekYear}",
                         $hasChildren,
-                        "/journal/weekly/{$weekPeriod}",
+                        $this->noteSlugService->journalUrlFor($workspaceSlug, Note::JOURNAL_WEEKLY, $weekPeriod),
                         $backing,
                     );
                 })->all();
@@ -1184,12 +1243,49 @@ class NotesController extends Controller
 
     private function currentWorkspace(): Workspace
     {
-        $workspace = Auth::user()?->currentWorkspace();
+        $user = Auth::user();
+        if (! $user) {
+            abort(403, 'No workspace available.');
+        }
+
+        $routeWorkspace = request()->route('workspace');
+        if ($routeWorkspace instanceof Workspace) {
+            $isMember = $user->workspaces()
+                ->where('workspaces.id', $routeWorkspace->id)
+                ->exists();
+            abort_unless($isMember, 403);
+
+            return $routeWorkspace;
+        }
+        if (is_string($routeWorkspace) && trim($routeWorkspace) !== '') {
+            $resolved = $user->workspaces()
+                ->where('workspaces.slug', trim($routeWorkspace))
+                ->first();
+            abort_unless($resolved !== null, 403);
+
+            return $resolved;
+        }
+
+        $workspace = $user->currentWorkspace();
         if (! $workspace) {
             abort(403, 'No workspace available.');
         }
 
         return $workspace;
+    }
+
+    private function assertWorkspaceMembership(Workspace $workspace): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            abort(403, 'No workspace available.');
+        }
+
+        $isMember = $user->workspaces()
+            ->where('workspaces.id', $workspace->id)
+            ->exists();
+
+        abort_unless($isMember, 403);
     }
 
     private function normalizeContentForEditor(mixed $content): mixed

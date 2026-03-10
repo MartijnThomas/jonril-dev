@@ -11,7 +11,16 @@ class NoteTaskIndexer
 {
     public function reindexWorkspace(Workspace $workspace): void
     {
-        $notes = $workspace->notes()->get(['id', 'workspace_id', 'title', 'parent_id', 'content']);
+        $notes = $workspace->notes()->get([
+            'id',
+            'workspace_id',
+            'title',
+            'parent_id',
+            'type',
+            'journal_granularity',
+            'journal_date',
+            'content',
+        ]);
 
         foreach ($notes as $note) {
             $this->reindexNote($note);
@@ -63,6 +72,9 @@ class NoteTaskIndexer
                     'render_fragments' => json_encode($fragments),
                     'due_date' => Arr::get($attrs, 'dueDate') ?? $fallbackDates['due_date'],
                     'deadline_date' => Arr::get($attrs, 'deadlineDate') ?? $fallbackDates['deadline_date'],
+                    'journal_date' => $note->type === Note::TYPE_JOURNAL && $note->journal_granularity === Note::JOURNAL_DAILY
+                        ? $note->journal_date
+                        : null,
                     'mentions' => json_encode(array_values(array_unique($mentions))),
                     'hashtags' => json_encode(array_values(array_unique($hashtags))),
                     'created_at' => now(),

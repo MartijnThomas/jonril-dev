@@ -211,10 +211,12 @@ export function SimpleEditor({
         open: boolean;
         blockId: string | null;
         position: number | null;
+        anchorPoint: { x: number; y: number } | null;
     }>({
         open: false,
         blockId: null,
         position: null,
+        anchorPoint: null,
     });
 
     const [documentProperties, setDocumentProperties] =
@@ -371,7 +373,16 @@ export function SimpleEditor({
             const customEvent = event as CustomEvent<{
                 blockId?: string | null;
                 position?: number | null;
+                anchorPoint?: { x?: number; y?: number } | null;
             }>;
+
+            const detailAnchor = customEvent.detail?.anchorPoint;
+            const anchorPoint =
+                detailAnchor &&
+                typeof detailAnchor.x === 'number' &&
+                typeof detailAnchor.y === 'number'
+                    ? { x: detailAnchor.x, y: detailAnchor.y }
+                    : null;
 
             setTaskMigratePicker({
                 open: true,
@@ -383,6 +394,7 @@ export function SimpleEditor({
                     typeof customEvent.detail?.position === 'number'
                         ? customEvent.detail.position
                         : null,
+                anchorPoint,
             });
         };
 
@@ -577,12 +589,14 @@ export function SimpleEditor({
                     sourceNoteId={id}
                     blockId={taskMigratePicker.blockId}
                     position={taskMigratePicker.position}
+                    anchorPoint={taskMigratePicker.anchorPoint}
                     language={language}
                     onClose={() =>
                         setTaskMigratePicker({
                             open: false,
                             blockId: null,
                             position: null,
+                            anchorPoint: null,
                         })
                     }
                     onMigrated={() => {

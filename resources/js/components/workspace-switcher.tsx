@@ -2,7 +2,7 @@ import { router, useForm, usePage } from '@inertiajs/react';
 import { Check, ChevronsUpDown, Cog, Plus } from 'lucide-react';
 import { useState } from 'react';
 import {
-    COLOR_SWATCH_BG_CLASS,
+    getColorThemeBgClass,
 } from '@/components/color-swatch-picker';
 import {
     DEFAULT_WORKSPACE_ICON,
@@ -77,6 +77,9 @@ export function WorkspaceSwitcher() {
         return null;
     }
 
+    const workspaceIconTextClass = (color: string | null | undefined) =>
+        color === 'black' ? 'text-white dark:text-zinc-900' : 'text-white';
+
     return (
         <>
             <SidebarMenu>
@@ -88,16 +91,13 @@ export function WorkspaceSwitcher() {
                                 className="h-12 rounded-lg px-2 text-sidebar-foreground hover:bg-sidebar-accent/60 data-[state=open]:bg-sidebar-accent"
                                 >
                                     <div
-                                        className={`flex aspect-square size-8 items-center justify-center rounded-md text-white ${
-                                        COLOR_SWATCH_BG_CLASS[
-                                            (currentWorkspace.color as keyof typeof COLOR_SWATCH_BG_CLASS) ??
-                                                'slate'
-                                        ] ?? COLOR_SWATCH_BG_CLASS.slate
-                                    }`}
+                                        className={`flex aspect-square size-8 items-center justify-center rounded-md ${getColorThemeBgClass(
+                                            currentWorkspace.color,
+                                        )}`}
                                 >
                                     <Icon
                                         iconNode={getWorkspaceIconComponent(currentWorkspace.icon)}
-                                        className="size-5 text-white"
+                                        className={`size-5 ${workspaceIconTextClass(currentWorkspace.color)}`}
                                     />
                                 </div>
                                 <div className="ml-1 grid flex-1 text-left text-sm leading-tight">
@@ -127,16 +127,13 @@ export function WorkspaceSwitcher() {
                                         >
                                             <div className="flex min-w-0 flex-1 items-center gap-2">
                                                 <div
-                                                    className={`flex h-8 w-8 items-center justify-center rounded-md text-white ${
-                                                        COLOR_SWATCH_BG_CLASS[
-                                                            (workspace.color as keyof typeof COLOR_SWATCH_BG_CLASS) ??
-                                                                'slate'
-                                                        ] ?? COLOR_SWATCH_BG_CLASS.slate
-                                                    }`}
+                                                    className={`flex h-8 w-8 items-center justify-center rounded-md ${getColorThemeBgClass(
+                                                        workspace.color,
+                                                    )}`}
                                                 >
                                                     <Icon
                                                         iconNode={getWorkspaceIconComponent(workspace.icon)}
-                                                        className="size-4 text-white"
+                                                        className={`size-4 ${workspaceIconTextClass(workspace.color)}`}
                                                     />
                                                 </div>
                                                 <div className="min-w-0 flex-1">
@@ -161,7 +158,7 @@ export function WorkspaceSwitcher() {
                             <div className="p-1">
                                 <DropdownMenuItem
                                     onClick={() => {
-                                        router.get('/workspaces/settings');
+                                        router.get(`/settings/workspaces/${currentWorkspace.id}`);
                                     }}
                                     className="cursor-pointer rounded-md px-2 py-2"
                                 >

@@ -14,6 +14,26 @@ type WikiLinkNote = {
 
 const wikiLinkPluginKey = new PluginKey('wikiLinkSuggestion');
 
+function workspaceSlugFromPathname(pathname: string): string | null {
+    const match = pathname.match(/^\/w\/([^/]+)\//);
+    if (!match) {
+        return null;
+    }
+
+    return decodeURIComponent(match[1] ?? '').trim() || null;
+}
+
+function fallbackWikiHref(noteId: string): string {
+    if (typeof window !== 'undefined') {
+        const slug = workspaceSlugFromPathname(window.location.pathname);
+        if (slug) {
+            return `/w/${slug}/notes/${noteId}`;
+        }
+    }
+
+    return `/notes/${noteId}`;
+}
+
 const updatePosition = (editor: any, element: HTMLElement) => {
     const virtualElement = {
         getBoundingClientRect: () =>
@@ -85,7 +105,9 @@ export const WikiLinkSuggestion = Extension.create<{
                                                 noteId: props.id,
                                                 href:
                                                     props.href ??
-                                                    `/notes/${props.id}`,
+                                                    fallbackWikiHref(
+                                                        props.id,
+                                                    ),
                                             },
                                         },
                                     ],

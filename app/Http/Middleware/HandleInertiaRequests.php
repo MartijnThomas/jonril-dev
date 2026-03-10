@@ -3,6 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Models\Note;
+use App\Models\Workspace;
+use App\Support\Notes\NoteSlugService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Lang;
@@ -11,6 +13,10 @@ use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    public function __construct(
+        private readonly NoteSlugService $noteSlugService,
+    ) {}
+
     /**
      * The root template that's loaded on the first page visit.
      *
@@ -103,7 +109,7 @@ class HandleInertiaRequests extends Middleware
         if (! $user) {
             return [];
         }
-        $workspace = $user->currentWorkspace();
+        $workspace = $this->resolvedWorkspace($request);
         if (! $workspace) {
             return [];
         }
@@ -116,14 +122,14 @@ class HandleInertiaRequests extends Middleware
                     ->orWhere('type', '!=', 'journal');
             })
             ->orderBy('created_at')
-            ->get(['id', 'slug', 'title', 'properties', 'parent_id', 'type']);
+            ->get(['id', 'workspace_id', 'slug', 'title', 'properties', 'parent_id', 'type']);
 
         $nodes = [];
         foreach ($notes as $note) {
             $nodes[$note->id] = [
                 'id' => $note->id,
                 'title' => $note->display_title,
-                'href' => '/notes/'.($note->slug ?: $note->id),
+                'href' => $this->noteSlugService->urlFor($note),
                 'icon' => $note->icon,
                 'icon_color' => $note->icon_color,
                 'icon_bg' => $note->icon_bg,
@@ -177,7 +183,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array<int, array{id: string, name: string, role: string}>
+     * @return array<int, array{id: string, name: string, slug: string, role: string}>
      */
     private function workspaceSummary(Request $request): array
     {
@@ -187,13 +193,14 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $user->workspaces()
-            ->select('workspaces.id', 'workspaces.name', 'workspaces.color', 'workspaces.icon', 'workspace_user.role')
+            ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.icon', 'workspace_user.role')
             ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
             ->orderBy('workspaces.name')
             ->get()
             ->map(fn ($workspace) => [
                 'id' => $workspace->id,
                 'name' => $workspace->name,
+                'slug' => $workspace->slug,
                 'color' => $workspace->color,
                 'icon' => $workspace->icon,
                 'role' => (string) ($workspace->pivot->role ?? 'member'),
@@ -203,7 +210,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array{id: string, name: string, color: string, icon: string, role: string}|null
+     * @return array{id: string, name: string, slug: string, color: string, icon: string, role: string}|null
      */
     private function currentWorkspaceSummary(Request $request): ?array
     {
@@ -212,7 +219,7 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
-        $workspace = $user->currentWorkspace();
+        $workspace = $this->resolvedWorkspace($request);
         if (! $workspace) {
             return null;
         }
@@ -225,9 +232,34 @@ class HandleInertiaRequests extends Middleware
         return [
             'id' => $workspace->id,
             'name' => $workspace->name,
+            'slug' => $workspace->slug,
             'color' => $workspace->color,
             'icon' => $workspace->icon,
             'role' => (string) ($membership?->pivot->role ?? 'member'),
         ];
+    }
+
+    private function resolvedWorkspace(Request $request): ?Workspace
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+
+        $routeWorkspace = $request->route('workspace');
+        if ($routeWorkspace instanceof Workspace) {
+            $isMember = $user->workspaces()
+                ->where('workspaces.id', $routeWorkspace->id)
+                ->exists();
+
+            return $isMember ? $routeWorkspace : null;
+        }
+        if (is_string($routeWorkspace) && trim($routeWorkspace) !== '') {
+            return $user->workspaces()
+                ->where('workspaces.slug', trim($routeWorkspace))
+                ->first();
+        }
+
+        return $user->currentWorkspace();
     }
 }

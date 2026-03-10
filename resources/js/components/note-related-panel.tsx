@@ -72,6 +72,7 @@ export function NoteRelatedPanel({
     const [backlinksOpen, setBacklinksOpen] = useState(false);
     const [onlyOpenTasks, setOnlyOpenTasks] = useState(true);
     const [taskItems, setTaskItems] = useState(relatedTasks);
+    const [stickyVisibleTaskIds, setStickyVisibleTaskIds] = useState<number[]>([]);
     const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
     const [openTaskGroups, setOpenTaskGroups] = useState<Record<string, boolean>>({});
     const [openBacklinkGroups, setOpenBacklinkGroups] = useState<
@@ -96,9 +97,13 @@ export function NoteRelatedPanel({
     const visibleTaskItems = useMemo(
         () =>
             onlyOpenTasks
-                ? taskItems.filter((task) => isOpenTask(task))
+                ? taskItems.filter(
+                      (task) =>
+                          isOpenTask(task) ||
+                          stickyVisibleTaskIds.includes(task.id),
+                  )
                 : taskItems,
-        [onlyOpenTasks, taskItems],
+        [onlyOpenTasks, stickyVisibleTaskIds, taskItems],
     );
 
     const visibleGroupedTaskItems = useMemo(() => {
@@ -185,6 +190,9 @@ export function NoteRelatedPanel({
                                 : item,
                         ),
                     );
+                    setStickyVisibleTaskIds((current) =>
+                        current.includes(task.id) ? current : [...current, task.id],
+                    );
                 },
                 onError: () => {
                     toast.error(
@@ -268,7 +276,7 @@ export function NoteRelatedPanel({
     return (
         <section
             className={cn(
-                'mb-2 rounded-md px-2 py-2 transition-colors duration-200',
+                'editor-ui-font mb-2 rounded-md px-2 py-2 transition-colors duration-200',
                 panelOpen ? 'bg-muted/30' : 'bg-transparent',
             )}
         >
@@ -382,31 +390,47 @@ export function NoteRelatedPanel({
                                                         >
                                                             <div className="flex items-start gap-4">
                                                                 <TaskToggleCheckbox
-                                                                    className="mt-0.5"
+                                                                    className="mt-1.5"
                                                                     checked={task.checked}
+                                                                    status={
+                                                                        task.task_status === 'canceled'
+                                                                            ? 'canceled'
+                                                                            : task.task_status === 'migrated'
+                                                                              ? 'migrated'
+                                                                              : task.checked
+                                                                                ? 'completed'
+                                                                                : 'open'
+                                                                    }
                                                                     disabled={
                                                                         pendingTaskIds.includes(
                                                                             task.id,
                                                                         ) ||
                                                                         task.task_status ===
-                                                                            'canceled'
+                                                                            'canceled' ||
+                                                                        task.task_status ===
+                                                                            'migrated'
                                                                     }
                                                                     ariaLabel={`Toggle task ${task.content || task.id}`}
                                                                     onCheckedChange={() =>
                                                                         toggleTask(task)
                                                                     }
                                                                 />
-                                                                <div className="min-w-0 flex-1">
+                                                                <div className="min-w-0 flex-1 pt-[1px]">
                                                                     <p
                                                                         className={cn(
-                                                                            'text-sm leading-5',
+                                                                            'text-base leading-[1.62]',
                                                                             task.task_status ===
                                                                                 'canceled' &&
-                                                                                'line-through task-canceled-strike',
+                                                                                'line-through opacity-70',
+                                                                            task.task_status ===
+                                                                                'migrated' &&
+                                                                                'opacity-70',
                                                                             task.task_status !==
                                                                                 'canceled' &&
+                                                                                task.task_status !==
+                                                                                    'migrated' &&
                                                                                 task.checked &&
-                                                                                'line-through opacity-72',
+                                                                                'line-through opacity-70',
                                                                         )}
                                                                     >
                                                                         <TaskInlineContent
@@ -428,11 +452,22 @@ export function NoteRelatedPanel({
                                                                                       ]
                                                                             }
                                                                             language={language}
-                                                                            priorityStyle="range"
                                                                             canceled={
                                                                                 task.task_status ===
                                                                                 'canceled'
                                                                             }
+                                                                            className={cn(
+                                                                                'text-base leading-[1.62] font-normal tracking-[-0.01em]',
+                                                                                (task.task_status ===
+                                                                                    'canceled' ||
+                                                                                    task.task_status ===
+                                                                                        'migrated' ||
+                                                                                    task.checked) &&
+                                                                                    'task-inline--faded',
+                                                                            )}
+                                                                            priorityStyle="range"
+                                                                            hideStatusTokens
+                                                                            hidePriorityTokens
                                                                         />
                                                                     </p>
                                                                 </div>
@@ -527,7 +562,7 @@ export function NoteRelatedPanel({
                                                                             aria-hidden="true"
                                                                         />
                                                                     </span>
-                                                                    <p className="min-w-0 flex-1 text-sm leading-5">
+                                                                    <p className="min-w-0 flex-1 text-base leading-[1.62]">
                                                                         <TaskInlineContent
                                                                             fragments={
                                                                                 item

@@ -155,12 +155,12 @@
     .tiptap.ProseMirror.simple-editor
     ul:not([data-type='taskList'])
     li::marker {
-    color: rgba(0, 0, 0, 0.5);
+    color: color-mix(in srgb, currentColor 58%, transparent);
     font-size: 0.82em;
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor ol li::marker {
-    color: rgba(0, 0, 0, 0.58);
+    color: color-mix(in srgb, currentColor 64%, transparent);
     font-size: 0.8em;
     font-weight: 600;
 }
@@ -221,9 +221,19 @@
     width: 1.125rem;
     height: 1.125rem;
     border-radius: 9999px;
-    background-color: white;
+    background-color: rgb(255 255 255);
     border-width: 2px;
     border-color: rgb(251 191 36);
+}
+
+.dark
+    .simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li
+    > label
+    > span {
+    background-color: rgb(39 39 42);
 }
 
 .simple-editor-content
@@ -255,6 +265,16 @@
     pointer-events: none;
 }
 
+.dark
+    .simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > label
+    > span::after {
+    background-color: rgb(161 161 170);
+}
+
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
@@ -268,6 +288,23 @@
     > label
     > span {
     border-color: rgb(209 213 219);
+}
+
+.dark
+    .simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > label
+    > span,
+.dark
+    .simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated']
+    > label
+    > span {
+    border-color: rgb(113 113 122);
 }
 
 .simple-editor-content
@@ -299,6 +336,16 @@
     pointer-events: none;
 }
 
+.dark
+    .simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated'][data-migrated-to-note-id]
+    > label
+    > span::after {
+    background-color: rgb(161 161 170);
+}
+
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
@@ -324,21 +371,6 @@
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
     li[data-task-status='question']
-    > label::before,
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-priority='normal']:not([data-task-status])
-    > label::before,
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-priority='medium']:not([data-task-status])
-    > label::before,
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-priority='high']:not([data-task-status])
     > label::before {
     position: absolute;
     left: -1.46rem;
@@ -348,6 +380,7 @@
     align-items: center;
     justify-content: center;
     line-height: 1;
+    transform: translateY(0.12rem);
 }
 
 .simple-editor-content
@@ -418,72 +451,12 @@
 
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-priority='normal']:not([data-task-status])
-    > label::before {
-    content: '';
-    color: rgb(234 179 8);
-    width: 0.95rem;
-    height: 0.95rem;
-    background-color: currentColor;
-    -webkit-mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-    mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-priority='medium']:not([data-task-status])
-    > label::before {
-    content: '';
-    color: rgb(249 115 22);
-    width: 0.95rem;
-    height: 0.95rem;
-    background-color: currentColor;
-    -webkit-mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-    mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-priority='high']:not([data-task-status])
-    > label::before {
-    content: '';
-    color: rgb(185 28 28);
-    width: 0.95rem;
-    height: 0.95rem;
-    background-color: currentColor;
-    -webkit-mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-    mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
     :is(ul:not([data-type='taskList']), ol)
     li[data-task-status='starred']::before,
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     :is(ul:not([data-type='taskList']), ol)
-    li[data-task-status='question']::before,
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    :is(ul:not([data-type='taskList']), ol)
-    li[data-priority='normal']:not([data-task-status])::before,
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    :is(ul:not([data-type='taskList']), ol)
-    li[data-priority='medium']:not([data-task-status])::before,
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    :is(ul:not([data-type='taskList']), ol)
-    li[data-priority='high']:not([data-task-status])::before {
+    li[data-task-status='question']::before {
     content: '';
     position: absolute;
     left: -2.7rem;
@@ -491,39 +464,6 @@
     width: 0.9rem;
     height: 0.9rem;
     background-color: currentColor;
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    :is(ul:not([data-type='taskList']), ol)
-    li[data-priority='normal']:not([data-task-status])::before {
-    color: rgb(234 179 8);
-    -webkit-mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-    mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    :is(ul:not([data-type='taskList']), ol)
-    li[data-priority='medium']:not([data-task-status])::before {
-    color: rgb(249 115 22);
-    -webkit-mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-    mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    :is(ul:not([data-type='taskList']), ol)
-    li[data-priority='high']:not([data-task-status])::before {
-    color: rgb(185 28 28);
-    -webkit-mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
-    mask: center / contain no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 22V2l10 5-10 5'/%3E%3C/svg%3E");
 }
 
 .simple-editor-content
@@ -579,58 +519,6 @@
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
     li[data-task-status='canceled']
-    > div
-    > p {
-    opacity: 1 !important;
-    text-decoration-line: line-through !important;
-    text-decoration-thickness: 2px !important;
-    text-decoration-color: color-mix(
-        in srgb,
-        currentColor 62%,
-        transparent
-    ) !important;
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-task-status='canceled']
-    > div
-    > p
-    :is(
-        .mention,
-        .hashtag,
-        .md-wikilink,
-        .md-task-due-token,
-        .md-task-deadline-token,
-        .md-task-date-display,
-        .md-task-status-token--assigned,
-        .md-task-status-token--deferred,
-        .md-priority,
-        .md-priority-range
-    ) {
-    color: inherit !important;
-    background: transparent !important;
-    text-decoration: inherit !important;
-    font-weight: inherit !important;
-    border-radius: 0 !important;
-    opacity: 1 !important;
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-task-status='canceled']
-    > div
-    > p
-    .md-wikilink {
-    text-decoration: inherit !important;
-}
-
-.simple-editor-content
-    .tiptap.ProseMirror.simple-editor
-    ul[data-type='taskList']
-    li[data-task-status='canceled']
     > label {
     opacity: 0.6;
 }
@@ -662,11 +550,68 @@
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > div
+    > p,
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
     li[data-checked='true']
+    > div
+    > p
+    span,
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
     > div
     > p
     span {
     opacity: 0.72;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > div
+    > p,
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > div
+    > p
+    span {
+    text-decoration-line: line-through;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > div
+    > p
+    .md-wikilink {
+    background: transparent !important;
+    color: inherit !important;
+    text-decoration: inherit !important;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-checked='true']
+    > div
+    > p
+    .md-wikilink {
+    color: inherit !important;
+    opacity: 1 !important;
+    background: transparent !important;
+    text-decoration-line: underline !important;
+    text-decoration-color: rgb(234 179 8) !important;
+    text-decoration-thickness: 2px !important;
+    text-underline-offset: 2px !important;
 }
 
 .simple-editor-content
@@ -805,25 +750,41 @@
     background: transparent !important;
 }
 
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    mark[data-color='rgba(250, 204, 21, 0.18)'],
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    mark[data-color='rgba(251, 146, 60, 0.16)'],
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    mark[data-color='rgba(248, 113, 113, 0.16)'] {
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    line-height: inherit;
+    padding-block: 0.03em;
+    border-radius: 0.18em;
+}
+
 .mention {
-    @apply bg-purple-400/10 text-[0.92em] text-purple-600 [font-variant-caps:small-caps];
+    @apply bg-purple-400/10 text-purple-600 dark:bg-purple-400/20 dark:text-purple-300;
 }
 
 .hashtag {
-    @apply bg-blue-400/10 text-[0.92em] text-blue-600 [font-variant-caps:small-caps];
+    @apply bg-blue-400/10 text-blue-600 dark:bg-blue-400/20 dark:text-blue-300;
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor .md-highlight,
 .simple-editor-content .tiptap.ProseMirror.simple-editor mark {
-    @apply bg-green-400/10 text-green-600;
+    @apply bg-green-400/10 text-green-600 dark:bg-green-400/20 dark:text-green-300;
 }
 
 .md-task-due-token {
-    @apply text-sm font-normal text-orange-600/70;
+    @apply text-sm font-normal text-orange-600/70 dark:text-orange-300/80;
 }
 
 .md-task-deadline-token {
-    @apply text-sm font-normal text-red-700/70;
+    @apply text-sm font-normal text-red-700/70 dark:text-red-300/80;
 }
 
 .md-task-token-hidden {
@@ -843,17 +804,17 @@
 }
 
 .md-task-status-token--assigned {
-    @apply font-semibold text-blue-600;
+    @apply font-semibold text-blue-600 dark:text-blue-300;
 }
 
 .md-task-status-token--deferred {
-    @apply font-semibold text-blue-600;
+    @apply font-semibold text-blue-600 dark:text-blue-300;
 }
 
 .md-task-status-token--starred {
-    @apply text-amber-600;
+    @apply text-amber-600 dark:text-amber-300;
 }
 
 .md-task-status-token--question {
-    @apply text-blue-600;
+    @apply text-blue-600 dark:text-blue-300;
 }

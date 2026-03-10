@@ -9,6 +9,7 @@ use App\Support\Notes\NoteSlugService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Illuminate\Support\Str;
@@ -46,31 +47,113 @@ class TasksController extends Controller
         $filters = $request->validate([
             'q' => ['nullable', 'string', 'max:200'],
             'workspace_id' => ['nullable', Rule::in($workspaceIds)],
+            'workspace_ids' => ['nullable', 'array'],
+            'workspace_ids.*' => [Rule::in($workspaceIds)],
             'note_scope_id' => [
                 'nullable',
                 'uuid',
                 Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
             ],
+            'note_scope_ids' => ['nullable', 'array'],
+            'note_scope_ids.*' => [
+                'uuid',
+                Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
+            ],
             'mention' => ['nullable', 'string', 'max:120'],
             'hashtag' => ['nullable', 'string', 'max:120'],
+            'date_preset' => ['nullable', Rule::in(['today', 'this_week', 'this_month', 'today_plus_7'])],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
+            'status' => ['nullable', 'array'],
+            'status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'starred', 'question'])],
             'show_completed' => ['nullable', 'boolean'],
+            'group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
             'sort' => ['nullable', Rule::in(['updated', 'due', 'deadline', 'note', 'position'])],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
         ]);
 
+        $selectedWorkspaceIds = collect($filters['workspace_ids'] ?? [])
+            ->map(fn ($id) => is_string($id) ? trim($id) : '')
+            ->filter(fn (string $id) => $id !== '')
+            ->unique()
+            ->values();
+
+        if ($selectedWorkspaceIds->isEmpty() && is_string($filters['workspace_id'] ?? null) && $filters['workspace_id'] !== '') {
+            $selectedWorkspaceIds = collect([(string) $filters['workspace_id']]);
+        }
+
+        $hasWorkspaceFilterInput = $request->has('workspace_ids') || $request->has('workspace_id');
+        if (! $hasWorkspaceFilterInput && $selectedWorkspaceIds->isEmpty()) {
+            $currentWorkspaceId = (string) ($user->currentWorkspace()?->id ?? '');
+            if ($currentWorkspaceId !== '' && in_array($currentWorkspaceId, $workspaceIds, true)) {
+                $selectedWorkspaceIds = collect([$currentWorkspaceId]);
+            }
+        }
+
+        $selectedNoteScopeIds = collect($filters['note_scope_ids'] ?? [])
+            ->map(fn ($id) => is_string($id) ? trim($id) : '')
+            ->filter(fn (string $id) => $id !== '')
+            ->unique()
+            ->values();
+
+        if ($selectedNoteScopeIds->isEmpty() && is_string($filters['note_scope_id'] ?? null) && $filters['note_scope_id'] !== '') {
+            $selectedNoteScopeIds = collect([(string) $filters['note_scope_id']]);
+        }
+
         $query = NoteTask::query()
             ->whereIn('workspace_id', $workspaceIds)
-            ->with('note:id,title,slug,type,journal_granularity,journal_date');
+            ->with([
+                'note:id,title,slug,type,journal_granularity,journal_date,workspace_id',
+                'note.workspace:id,name',
+            ]);
 
-        if ($filters['workspace_id'] ?? null) {
-            $query->where('workspace_id', $filters['workspace_id']);
+        if (! $selectedWorkspaceIds->isEmpty()) {
+            $query->whereIn('workspace_id', $selectedWorkspaceIds->all());
         }
 
-        if (! ($filters['show_completed'] ?? false)) {
-            $query->where('checked', false);
+        $selectedStatuses = collect($filters['status'] ?? [])
+            ->map(fn ($status) => is_string($status) ? trim(strtolower($status)) : '')
+            ->filter(fn (string $status) => $status !== '')
+            ->unique()
+            ->values();
+
+        // Backward compatibility for older URLs using show_completed only.
+        if ($selectedStatuses->isEmpty()) {
+            if ((bool) ($filters['show_completed'] ?? false)) {
+                $selectedStatuses = collect([
+                    'open',
+                    'completed',
+                    'canceled',
+                    'migrated',
+                    'assigned',
+                    'starred',
+                    'question',
+                ]);
+            } else {
+                $selectedStatuses = collect(['open']);
+            }
         }
+
+        $query->where(function (Builder $statusQuery) use ($selectedStatuses): void {
+            foreach ($selectedStatuses as $status) {
+                $statusQuery->orWhere(function (Builder $inner) use ($status): void {
+                    match ($status) {
+                        'open' => $inner->where('checked', false)
+                            ->where(function (Builder $sub): void {
+                                $sub->whereNull('task_status')
+                                    ->orWhereNotIn('task_status', ['canceled', 'migrated']);
+                            }),
+                        'completed' => $inner->where('checked', true),
+                        'canceled' => $inner->where('task_status', 'canceled'),
+                        'migrated' => $inner->where('task_status', 'migrated'),
+                        'assigned' => $inner->where('task_status', 'assigned'),
+                        'starred' => $inner->where('task_status', 'starred'),
+                        'question' => $inner->where('task_status', 'question'),
+                        default => $inner->whereRaw('1 = 0'),
+                    };
+                });
+            }
+        });
 
         if (($filters['q'] ?? null) !== null && trim($filters['q']) !== '') {
             $needle = trim((string) $filters['q']);
@@ -81,11 +164,11 @@ class TasksController extends Controller
             });
         }
 
-        if ($filters['note_scope_id'] ?? null) {
-            $scopeNoteId = $filters['note_scope_id'];
-            $query->where(function ($inner) use ($scopeNoteId) {
-                $inner->where('note_id', $scopeNoteId)
-                    ->orWhere('parent_note_id', $scopeNoteId);
+        if (! $selectedNoteScopeIds->isEmpty()) {
+            $scopeIds = $selectedNoteScopeIds->all();
+            $query->where(function ($inner) use ($scopeIds) {
+                $inner->whereIn('note_id', $scopeIds)
+                    ->orWhereIn('parent_note_id', $scopeIds);
             });
         }
 
@@ -99,9 +182,18 @@ class TasksController extends Controller
             $query->whereRaw('LOWER(hashtags) LIKE ?', ["%\"{$hashtag}\"%"]);
         }
 
-        if (($filters['date_from'] ?? null) || ($filters['date_to'] ?? null)) {
-            $dateFrom = $filters['date_from'] ?? $filters['date_to'] ?? null;
-            $dateTo = $filters['date_to'] ?? $filters['date_from'] ?? null;
+        $datePreset = is_string($filters['date_preset'] ?? null)
+            ? trim((string) $filters['date_preset'])
+            : '';
+
+        $dateFrom = $filters['date_from'] ?? $filters['date_to'] ?? null;
+        $dateTo = $filters['date_to'] ?? $filters['date_from'] ?? null;
+
+        if ($datePreset !== '') {
+            [$dateFrom, $dateTo] = $this->resolveDatePreset($datePreset);
+        }
+
+        if ($dateFrom || $dateTo) {
 
             $query->where(function ($inner) use ($dateFrom, $dateTo) {
                 $inner->where(function ($sub) use ($dateFrom, $dateTo) {
@@ -117,6 +209,17 @@ class TasksController extends Controller
                     }
                     if ($dateTo) {
                         $sub->whereDate('deadline_date', '<=', $dateTo);
+                    }
+                })->orWhere(function ($sub) use ($dateFrom, $dateTo) {
+                    $sub->whereNull('due_date')
+                        ->whereNull('deadline_date')
+                        ->whereNotNull('journal_date');
+
+                    if ($dateFrom) {
+                        $sub->whereDate('journal_date', '>=', $dateFrom);
+                    }
+                    if ($dateTo) {
+                        $sub->whereDate('journal_date', '<=', $dateTo);
                     }
                 });
             });
@@ -144,18 +247,21 @@ class TasksController extends Controller
                     'render_fragments' => $task->render_fragments ?? [],
                     'due_date' => $task->due_date?->toDateString(),
                     'deadline_date' => $task->deadline_date?->toDateString(),
+                    'journal_date' => $task->journal_date?->toDateString(),
                     'mentions' => $task->mentions ?? [],
                     'hashtags' => $task->hashtags ?? [],
                     'note' => [
                         'id' => $task->note_id,
                         'title' => $task->note_title ?? 'Untitled',
-                        'href' => $note ? $this->noteSlugService->urlFor($note) : "/notes/{$task->note_id}",
+                        'href' => $note ? $this->noteSlugService->urlFor($note) : null,
                         'workspace_id' => $task->workspace_id,
-                        'workspace_name' => $workspaceNamesById[$task->workspace_id] ?? null,
+                        'workspace_name' => $note?->workspace?->name
+                            ?? ($workspaceNamesById[(string) $task->workspace_id] ?? null),
                         'parent_id' => $task->parent_note_id,
                         'parent_title' => $task->parent_note_title,
                     ],
                     'updated_at' => $task->updated_at?->toIso8601String(),
+                    'created_at' => $task->created_at?->toIso8601String(),
                 ];
             });
 
@@ -164,10 +270,7 @@ class TasksController extends Controller
             ->where(function ($query) {
                 $query->whereNull('type')->orWhere('type', '!=', Note::TYPE_JOURNAL);
             })
-            ->when(
-                $filters['workspace_id'] ?? null,
-                fn ($query, string $workspaceId) => $query->where('workspace_id', $workspaceId)
-            )
+            ->when(! $selectedWorkspaceIds->isEmpty(), fn ($query) => $query->whereIn('workspace_id', $selectedWorkspaceIds->all()))
             ->orderBy('title')
             ->get(['id', 'title', 'workspace_id'])
             ->map(fn (Note $note) => [
@@ -178,24 +281,31 @@ class TasksController extends Controller
             ])
             ->values();
 
+        $showWorkspacePrefixForNoteTree = $selectedWorkspaceIds->isEmpty()
+            ? count($workspaceIds) > 1
+            : $selectedWorkspaceIds->count() > 1;
+
         $noteTreeOptions = $this->buildNoteTreeOptions(
             $workspaceNamesById,
             $notes->toArray(),
-            $filters['workspace_id'] ?? '',
-            count($workspaceIds) > 1,
+            $selectedWorkspaceIds->all(),
+            $showWorkspacePrefixForNoteTree,
         );
 
         return Inertia::render('tasks/index', [
             'tasks' => $tasks,
             'filters' => [
                 'q' => $filters['q'] ?? '',
-                'workspace_id' => $filters['workspace_id'] ?? '',
-                'note_scope_id' => $filters['note_scope_id'] ?? '',
+                'workspace_ids' => $selectedWorkspaceIds->values()->all(),
+                'note_scope_ids' => $selectedNoteScopeIds->values()->all(),
                 'mention' => $filters['mention'] ?? '',
                 'hashtag' => $filters['hashtag'] ?? '',
-                'date_from' => $filters['date_from'] ?? '',
-                'date_to' => $filters['date_to'] ?? '',
+                'date_preset' => $datePreset !== '' ? $datePreset : '',
+                'date_from' => $dateFrom ?? '',
+                'date_to' => $dateTo ?? '',
                 'show_completed' => (bool) ($filters['show_completed'] ?? false),
+                'group_by' => $filters['group_by'] ?? 'none',
+                'status' => $selectedStatuses->values()->all(),
                 'sort' => $sort,
                 'direction' => $direction,
             ],
@@ -398,7 +508,7 @@ class TasksController extends Controller
             $items[] = [
                 'key' => "journal:{$granularity}:{$period}",
                 'title' => $title,
-                'path' => "/journal/{$granularity}/{$period}",
+                'path' => $this->noteSlugService->journalUrlFor($sourceNote->workspace, $granularity, $period),
                 'target_note_id' => $existing?->id,
                 'target_journal_granularity' => $granularity,
                 'target_journal_period' => $period,
@@ -560,12 +670,13 @@ class TasksController extends Controller
     /**
      * @param  array<string, string>  $workspaceNamesById
      * @param  array<int, array{id: string, title: string, workspace_id: string, workspace_name: string|null}>  $notes
-     * @return array<int, array{id: string, title: string}>
+     * @param  array<int, string>  $workspaceIds
+     * @return array<int, array{id: string, title: string, depth: int, workspace_id: string, workspace_name: string|null}>
      */
     private function buildNoteTreeOptions(
         array $workspaceNamesById,
         array $notes,
-        string $workspaceId,
+        array $workspaceIds,
         bool $showWorkspacePrefix,
     ): array {
         $items = Note::query()
@@ -591,45 +702,87 @@ class TasksController extends Controller
             $nodeById[$item->id]['parent_id'] = $item->parent_id;
         }
 
-        $resolvePath = function (string $noteId) use (&$resolvePath, &$nodeById): string {
-            $node = $nodeById[$noteId] ?? null;
-            if (! $node) {
-                return '';
-            }
-
-            $title = (string) $node['title'];
-            $parentId = $node['parent_id'];
-            if (! is_string($parentId) || $parentId === '' || ! isset($nodeById[$parentId])) {
-                return $title;
-            }
-
-            $parentPath = $resolvePath($parentId);
-
-            return $parentPath !== '' ? "{$parentPath} / {$title}" : $title;
-        };
-
-        return collect($notes)
-            ->filter(function (array $note) use ($workspaceId): bool {
-                if ($workspaceId === '') {
+        $filteredNodes = collect($notes)
+            ->filter(function (array $note) use ($workspaceIds): bool {
+                if ($workspaceIds === []) {
                     return true;
                 }
 
-                return $note['workspace_id'] === $workspaceId;
+                return in_array($note['workspace_id'], $workspaceIds, true);
             })
-            ->map(function (array $note) use ($resolvePath, $showWorkspacePrefix, $workspaceNamesById) {
-                $path = $resolvePath($note['id']);
-                $workspaceName = $workspaceNamesById[$note['workspace_id']] ?? 'Workspace';
+            ->values();
 
-                return [
-                    'id' => $note['id'],
-                    'title' => $showWorkspacePrefix
-                        ? "{$workspaceName} / {$path}"
-                        : $path,
-                ];
-            })
-            ->sortBy('title')
-            ->values()
-            ->all();
+        $filteredNodeIds = $filteredNodes->pluck('id')->flip()->all();
+
+        /** @var array<string, array<int, string>> $childrenByParent */
+        $childrenByParent = [];
+        /** @var array<string, array<int, string>> $rootIdsByWorkspace */
+        $rootIdsByWorkspace = [];
+
+        foreach ($filteredNodes as $note) {
+            $id = (string) $note['id'];
+            $parentId = $nodeById[$id]['parent_id'] ?? null;
+            $workspaceId = (string) $note['workspace_id'];
+
+            if (is_string($parentId) && $parentId !== '' && isset($filteredNodeIds[$parentId])) {
+                $childrenByParent[$parentId] ??= [];
+                $childrenByParent[$parentId][] = $id;
+            } else {
+                $rootIdsByWorkspace[$workspaceId] ??= [];
+                $rootIdsByWorkspace[$workspaceId][] = $id;
+            }
+        }
+
+        $sortIdsByTitle = function (array $ids) use ($nodeById): array {
+            usort(
+                $ids,
+                fn (string $a, string $b) => strcasecmp(
+                    (string) ($nodeById[$a]['title'] ?? ''),
+                    (string) ($nodeById[$b]['title'] ?? ''),
+                )
+            );
+
+            return $ids;
+        };
+
+        foreach ($rootIdsByWorkspace as $workspaceId => $ids) {
+            $rootIdsByWorkspace[$workspaceId] = $sortIdsByTitle($ids);
+        }
+        foreach ($childrenByParent as $parentId => $ids) {
+            $childrenByParent[$parentId] = $sortIdsByTitle($ids);
+        }
+
+        $workspaceOrder = array_keys($rootIdsByWorkspace);
+        usort(
+            $workspaceOrder,
+            fn (string $a, string $b) => strcasecmp(
+                (string) ($workspaceNamesById[$a] ?? ''),
+                (string) ($workspaceNamesById[$b] ?? ''),
+            )
+        );
+
+        $rows = [];
+        $appendNode = function (string $id, int $depth, string $workspaceId) use (&$appendNode, &$rows, $nodeById, $childrenByParent, $workspaceNamesById, $showWorkspacePrefix): void {
+            $rows[] = [
+                'id' => $id,
+                'title' => (string) ($nodeById[$id]['title'] ?? 'Untitled'),
+                'depth' => $depth,
+                'workspace_id' => $workspaceId,
+                'workspace_name' => $showWorkspacePrefix ? ($workspaceNamesById[$workspaceId] ?? 'Workspace') : null,
+            ];
+
+            foreach ($childrenByParent[$id] ?? [] as $childId) {
+                $appendNode($childId, $depth + 1, $workspaceId);
+            }
+        };
+
+        foreach ($workspaceOrder as $workspaceId) {
+            foreach ($rootIdsByWorkspace[$workspaceId] ?? [] as $rootId) {
+                $appendNode($rootId, 0, $workspaceId);
+            }
+        }
+
+        return $rows;
     }
 
     private function applySorting(Builder $query, string $sort, string $direction): void
@@ -774,6 +927,37 @@ class TasksController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function resolveDatePreset(string $preset): array
+    {
+        $today = CarbonImmutable::instance(Carbon::now())->startOfDay();
+
+        return match ($preset) {
+            'today' => [
+                $today->toDateString(),
+                $today->toDateString(),
+            ],
+            'this_week' => [
+                $today->startOfWeek()->toDateString(),
+                $today->endOfWeek()->toDateString(),
+            ],
+            'this_month' => [
+                $today->startOfMonth()->toDateString(),
+                $today->endOfMonth()->toDateString(),
+            ],
+            'today_plus_7' => [
+                $today->toDateString(),
+                $today->addDays(7)->toDateString(),
+            ],
+            default => [
+                $today->toDateString(),
+                $today->toDateString(),
+            ],
+        };
     }
 
     /**

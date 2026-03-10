@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Note;
 use App\Models\NoteHeading;
-use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\NoteHeadingIndexer;
+use App\Support\Notes\NoteSlugService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,6 +14,7 @@ class CommandSearchController extends Controller
 {
     public function __construct(
         private readonly NoteHeadingIndexer $noteHeadingIndexer,
+        private readonly NoteSlugService $noteSlugService,
     ) {}
 
     public function __invoke(Request $request)
@@ -113,6 +114,7 @@ class CommandSearchController extends Controller
             ->limit($limit)
             ->get([
                 'id',
+                'workspace_id',
                 'title',
                 'slug',
                 'type',
@@ -126,16 +128,8 @@ class CommandSearchController extends Controller
 
         return $notes
             ->map(function (Note $note) use ($journalIconSettings): array {
-                $href = '/notes/'.($note->slug ?: $note->id);
+                $href = $this->noteSlugService->urlFor($note);
                 [$icon, $iconColor] = $this->resolveNoteIconPayload($note, $journalIconSettings);
-
-                if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date) {
-                    $period = app(JournalNoteService::class)->periodFor(
-                        $note->journal_granularity,
-                        $note->journal_date,
-                    );
-                    $href = "/journal/{$note->journal_granularity}/{$period}";
-                }
 
                 return [
                     'id' => $note->id,
@@ -177,7 +171,7 @@ class CommandSearchController extends Controller
                 });
             })
             ->with([
-                'note:id,title,slug,type,properties,journal_granularity,journal_date,parent_id',
+                'note:id,workspace_id,title,slug,type,properties,journal_granularity,journal_date,parent_id',
             ])
             ->orderByDesc('updated_at')
             ->limit($limit)
@@ -192,16 +186,8 @@ class CommandSearchController extends Controller
                     return null;
                 }
 
-                $href = '/notes/'.($note->slug ?: $note->id);
+                $href = $this->noteSlugService->urlFor($note);
                 [$icon, $iconColor] = $this->resolveNoteIconPayload($note, $journalIconSettings);
-
-                if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date) {
-                    $period = app(JournalNoteService::class)->periodFor(
-                        $note->journal_granularity,
-                        $note->journal_date,
-                    );
-                    $href = "/journal/{$note->journal_granularity}/{$period}";
-                }
 
                 $blockId = (string) $heading->block_id;
 

@@ -94,7 +94,7 @@ export const InlineCommands = Extension.create({
             const command = inlineCommands.find(c => c.name === match.commandName)
             if (!command) return false
 
-            if (event.key === "Tab") {
+            if (event.key === "Tab" || event.key === "Enter") {
               event.preventDefault()
 
               return command.run(editor, {
@@ -103,7 +103,7 @@ export const InlineCommands = Extension.create({
               })
             }
 
-            if (event.key === "Enter" && match.isExact) {
+            if (event.key === " " && match.isExact) {
               event.preventDefault()
 
               return command.run(editor, {

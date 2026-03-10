@@ -28,6 +28,9 @@ type JournalPageProps = {
         canClear?: boolean;
     } | null;
     moveParentOptions?: Array<{ id: string; title: string; path: string }>;
+    currentWorkspace?: {
+        slug?: string | null;
+    };
 };
 
 function parseWeekly(period: string): Date | null {
@@ -129,6 +132,26 @@ function shiftDate(granularity: string, date: Date, direction: -1 | 1): Date {
     return addYears(date, direction);
 }
 
+function isValidJournalPeriod(granularity: string, period: string): boolean {
+    if (granularity === 'daily') {
+        return /^\d{4}-\d{2}-\d{2}$/.test(period);
+    }
+
+    if (granularity === 'weekly') {
+        return /^\d{4}-W\d{2}$/.test(period);
+    }
+
+    if (granularity === 'monthly') {
+        return /^\d{4}-\d{2}$/.test(period);
+    }
+
+    if (granularity === 'yearly') {
+        return /^\d{4}$/.test(period);
+    }
+
+    return false;
+}
+
 export function AppSidebarHeader({
     breadcrumbs = [],
     rightSidebarEnabled = false,
@@ -145,6 +168,7 @@ export function AppSidebarHeader({
         pageProps.noteType === 'journal' &&
         Boolean(pageProps.journalGranularity) &&
         Boolean(pageProps.journalPeriod);
+    const workspaceSlug = pageProps.currentWorkspace?.slug?.trim() ?? '';
 
     const navigateJournal = (direction: -1 | 1) => {
         if (
@@ -169,12 +193,16 @@ export function AppSidebarHeader({
             direction,
         );
         const nextPeriod = periodFor(pageProps.journalGranularity, nextDate);
+        if (!isValidJournalPeriod(pageProps.journalGranularity, nextPeriod)) {
+            return;
+        }
 
-        router.get(
-            `/journal/${pageProps.journalGranularity}/${nextPeriod}`,
-            {},
-            { preserveState: false, preserveScroll: true },
-        );
+        const path =
+            workspaceSlug !== ''
+                ? `/w/${workspaceSlug}/journal/${pageProps.journalGranularity}/${nextPeriod}`
+                : `/journal/${pageProps.journalGranularity}/${nextPeriod}`;
+
+        router.get(path, {}, { preserveState: false, preserveScroll: true });
     };
 
     return (

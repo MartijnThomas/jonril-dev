@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 type TaskToggleCheckboxProps = {
     checked: boolean;
     disabled?: boolean;
+    status?: 'open' | 'completed' | 'canceled' | 'migrated';
     onCheckedChange: (checked: boolean) => void;
     ariaLabel: string;
     className?: string;
@@ -12,6 +13,7 @@ type TaskToggleCheckboxProps = {
 export function TaskToggleCheckbox({
     checked,
     disabled = false,
+    status,
     onCheckedChange,
     ariaLabel,
     className,
@@ -21,7 +23,10 @@ export function TaskToggleCheckbox({
     };
 
     return (
-        <label className={cn('task-toggle-checkbox', className)}>
+        <label
+            className={cn('task-toggle-checkbox', className)}
+            data-status={status ?? (checked ? 'completed' : 'open')}
+        >
             <input
                 type="checkbox"
                 checked={checked}

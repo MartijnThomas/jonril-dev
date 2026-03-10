@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Workspace extends Model
 {
@@ -21,11 +22,73 @@ class Workspace extends Model
     protected $fillable = [
         'owner_id',
         'name',
+        'slug',
         'color',
         'icon',
         'mention_suggestions',
         'hashtag_suggestions',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Workspace $workspace): void {
+            $rawColor = $workspace->getAttributeFromArray('color');
+            if (! is_string($rawColor) || trim($rawColor) === '') {
+                $workspace->color = self::DEFAULT_COLOR;
+            }
+            $rawIcon = $workspace->getAttributeFromArray('icon');
+            if (! is_string($rawIcon) || trim($rawIcon) === '') {
+                $workspace->icon = self::DEFAULT_ICON;
+            }
+
+            $workspace->slug = self::buildUniqueSlug(
+                (string) ($workspace->name ?: 'workspace'),
+            );
+        });
+
+        static::updating(function (Workspace $workspace): void {
+            $rawColor = $workspace->getAttributeFromArray('color');
+            if (! is_string($rawColor) || trim($rawColor) === '') {
+                $workspace->color = self::DEFAULT_COLOR;
+            }
+            $rawIcon = $workspace->getAttributeFromArray('icon');
+            if (! is_string($rawIcon) || trim($rawIcon) === '') {
+                $workspace->icon = self::DEFAULT_ICON;
+            }
+
+            if (! $workspace->isDirty('name') && filled($workspace->slug)) {
+                return;
+            }
+
+            $workspace->slug = self::buildUniqueSlug(
+                (string) ($workspace->name ?: 'workspace'),
+                $workspace->id,
+            );
+        });
+    }
+
+    private static function buildUniqueSlug(string $name, ?string $ignoreId = null): string
+    {
+        $base = Str::slug(trim($name));
+        if ($base === '') {
+            $base = 'workspace';
+        }
+
+        $candidate = $base;
+        $suffix = 2;
+
+        while (
+            static::query()
+                ->where('slug', $candidate)
+                ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
+                ->exists()
+        ) {
+            $candidate = "{$base}-{$suffix}";
+            $suffix++;
+        }
+
+        return $candidate;
+    }
 
     protected function color(): Attribute
     {

@@ -854,7 +854,7 @@ export function DocumentProperties({
     };
 
     return (
-        <div className="mb-4">
+        <div className="editor-ui-font mb-4">
             <div
                 className={cn(
                     'rounded-md px-2 py-2 transition-colors duration-200',

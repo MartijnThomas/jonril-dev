@@ -27,13 +27,13 @@ class Note extends Model
     public const JOURNAL_YEARLY = 'yearly';
 
     public const JOURNAL_ICON_DEFAULTS = [
-        self::JOURNAL_DAILY => 'calendar_days',
-        self::JOURNAL_WEEKLY => 'calendar_range',
-        self::JOURNAL_MONTHLY => 'calendar_sync',
-        self::JOURNAL_YEARLY => 'calendar_1',
+        self::JOURNAL_DAILY => 'calendar',
+        self::JOURNAL_WEEKLY => 'calendar',
+        self::JOURNAL_MONTHLY => 'calendar_days',
+        self::JOURNAL_YEARLY => 'calendar',
     ];
 
-    public const JOURNAL_ICON_COLOR_DEFAULT = 'black';
+    public const JOURNAL_ICON_COLOR_DEFAULT = 'default';
 
     protected function title(): Attribute
     {

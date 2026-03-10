@@ -152,7 +152,7 @@ export function DailyNoteTasksPanel({
             open={open}
             onOpenChange={setOpen}
             className={cn(
-                'mb-4 rounded-md px-2 py-1 transition-colors duration-200',
+                'editor-ui-font mb-4 rounded-md px-2 py-1 transition-colors duration-200',
                 open ? 'bg-muted/30' : 'bg-transparent',
             )}
         >
@@ -187,11 +187,21 @@ export function DailyNoteTasksPanel({
                             >
                                 <div className="flex items-start gap-4">
                                     <TaskToggleCheckbox
-                                        className="mt-0.5"
+                                        className="mt-1"
                                         checked={task.checked}
+                                        status={
+                                            task.task_status === 'canceled'
+                                                ? 'canceled'
+                                                : task.task_status === 'migrated'
+                                                  ? 'migrated'
+                                                  : task.checked
+                                                    ? 'completed'
+                                                    : 'open'
+                                        }
                                         disabled={
                                             pendingTaskIds.includes(task.id) ||
-                                            task.task_status === 'canceled'
+                                            task.task_status === 'canceled' ||
+                                            task.task_status === 'migrated'
                                         }
                                         ariaLabel={`Toggle task ${task.content || task.id}`}
                                         onCheckedChange={() => toggleTask(task)}
@@ -199,12 +209,17 @@ export function DailyNoteTasksPanel({
                                     <div className="min-w-0 flex-1">
                                         <p
                                             className={cn(
-                                                'text-sm leading-5',
+                                                'text-base leading-[1.62]',
                                                 task.task_status ===
                                                     'canceled' &&
-                                                    'line-through task-canceled-strike',
+                                                    'line-through opacity-72',
+                                                task.task_status ===
+                                                    'migrated' &&
+                                                    'opacity-72',
                                                 task.task_status !==
                                                     'canceled' &&
+                                                    task.task_status !==
+                                                        'migrated' &&
                                                     task.checked &&
                                                     'text-muted-foreground line-through',
                                             )}
@@ -227,10 +242,9 @@ export function DailyNoteTasksPanel({
                                                           ]
                                                 }
                                                 language={language}
-                                                canceled={
-                                                    task.task_status ===
-                                                    'canceled'
-                                                }
+                                                hideStatusTokens
+                                                priorityStyle="range"
+                                                hidePriorityTokens
                                             />
                                         </p>
                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

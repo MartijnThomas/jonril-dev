@@ -1,16 +1,22 @@
-import { Head, useForm } from '@inertiajs/react';
-import { Check, Copy, Settings2, Shield, Users } from 'lucide-react';
+import { Head, useForm, usePage } from '@inertiajs/react';
+import { Check, Copy, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
-import { COLOR_SWATCH_OPTIONS, ColorSwatchPicker } from '@/components/color-swatch-picker';
+import {
+    COLOR_SWATCH_OPTIONS,
+    ColorSwatchPicker,
+    getColorSwatchPreviewClasses,
+} from '@/components/color-swatch-picker';
 import Heading from '@/components/heading';
 import { DEFAULT_WORKSPACE_ICON, IconPicker } from '@/components/icon-picker';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
+import SettingsLayout from '@/layouts/settings/layout';
 import { useI18n } from '@/lib/i18n';
 import type { BreadcrumbItem } from '@/types';
 
@@ -35,8 +41,15 @@ type Props = {
 
 export default function WorkspaceSettings({ workspace, members, status }: Props) {
     const { t } = useI18n();
-    const [section, setSection] = useState<'general' | 'members' | 'advanced'>('general');
+    const page = usePage();
+    const url = useMemo(() => new URL(page.url, window.location.origin), [page.url]);
+    const sectionParam = url.searchParams.get('section');
+    const section: 'general' | 'members' | 'advanced' =
+        sectionParam === 'members' || sectionParam === 'advanced'
+            ? sectionParam
+            : 'general';
     const [workspaceIdCopied, setWorkspaceIdCopied] = useState(false);
+    const [openColorPicker, setOpenColorPicker] = useState(false);
 
     useEffect(() => {
         if (!workspaceIdCopied) {
@@ -56,10 +69,10 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
         () => [
             {
                 title: t('workspace_settings.title', 'Workspace settings'),
-                href: '/workspaces/settings',
+                href: `/settings/workspaces/${workspace.id}`,
             },
         ],
-        [t],
+        [t, workspace.id],
     );
 
     const nameForm = useForm({
@@ -67,6 +80,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
         color: workspace.color || 'slate',
         icon: workspace.icon || DEFAULT_WORKSPACE_ICON,
     });
+    const colorSwatchPreview = getColorSwatchPreviewClasses(nameForm.data.color);
 
     const addMemberForm = useForm({
         email: '',
@@ -84,86 +98,24 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={t('workspace_settings.title', 'Workspace settings')} />
+            <h1 className="sr-only">{t('workspace_settings.title', 'Workspace settings')}</h1>
 
-            <div className="px-4 py-6">
-                <Heading
-                    title={t('workspace_settings.title', 'Workspace settings')}
-                    description={t(
-                        'workspace_settings.description',
-                        'Manage general settings and members for this workspace.',
-                    )}
-                />
-
-                <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:space-x-12">
-                    <aside className="hidden w-full max-w-xl lg:block lg:w-56">
-                        <nav
-                            className="flex flex-col space-y-1"
-                            aria-label={t('workspace_settings.title', 'Workspace settings')}
-                        >
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className={`w-full justify-start ${section === 'general' ? 'bg-muted' : ''}`}
-                                onClick={() => setSection('general')}
-                            >
-                                <Settings2 className="size-4" />
-                                {t('workspace_settings.general', 'General')}
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className={`w-full justify-start ${section === 'members' ? 'bg-muted' : ''}`}
-                                onClick={() => setSection('members')}
-                            >
-                                <Users className="size-4" />
-                                {t('workspace_settings.members', 'Members')}
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className={`w-full justify-start ${section === 'advanced' ? 'bg-muted' : ''}`}
-                                onClick={() => setSection('advanced')}
-                            >
-                                <Shield className="size-4" />
-                                {t('workspace_settings.advanced', 'Advanced')}
-                            </Button>
-                        </nav>
-                    </aside>
-
-                    <div className="flex-1 md:max-w-3xl">
-                        <Tabs
-                            value={section}
-                            onValueChange={(value) =>
-                                setSection(value as 'general' | 'members' | 'advanced')
-                            }
-                            className="space-y-6"
-                        >
-                            <TabsList className="w-full lg:hidden">
-                                <TabsTrigger value="general" className="flex-1">
-                                    <Settings2 className="size-4" />
-                                    {t('workspace_settings.general', 'General')}
-                                </TabsTrigger>
-                                <TabsTrigger value="members" className="flex-1">
-                                    <Users className="size-4" />
-                                    {t('workspace_settings.members', 'Members')}
-                                </TabsTrigger>
-                                <TabsTrigger value="advanced" className="flex-1">
-                                    <Shield className="size-4" />
-                                    {t('workspace_settings.advanced', 'Advanced')}
-                                </TabsTrigger>
-                            </TabsList>
-                        </Tabs>
-
-                        {section === 'general' ? (
-                            <section className="max-w-xl space-y-6">
+            <SettingsLayout>
+                {section === 'general' ? (
+                    <section className="max-w-xl space-y-6">
+                                <Heading
+                                    variant="small"
+                                    title={t('workspace_settings.general', 'General')}
+                                    description={t(
+                                        'workspace_settings.general_description',
+                                        'Update the name, icon and color for this workspace.',
+                                    )}
+                                />
                                 <form
                                     className="space-y-6"
                                     onSubmit={(event) => {
                                         event.preventDefault();
-                                        nameForm.patch('/workspaces/settings', {
+                                        nameForm.patch(`/settings/workspaces/${workspace.id}`, {
                                             preserveScroll: true,
                                         });
                                     }}
@@ -182,24 +134,88 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                         <InputError message={nameForm.errors.name} />
                                     </div>
 
-                                    <div className="grid gap-2">
-                                        <Label>{t('workspace_settings.icon_label', 'Workspace icon')}</Label>
-                                        <IconPicker
-                                            value={nameForm.data.icon}
-                                            fallbackValue={DEFAULT_WORKSPACE_ICON}
-                                            onValueChange={(icon) => nameForm.setData('icon', icon)}
-                                            disabled={nameForm.processing}
-                                        />
-                                        <InputError message={nameForm.errors.icon} />
-                                    </div>
+                                    <div className="grid gap-3">
+                                        <div className="grid items-center gap-3 sm:grid-cols-[140px_minmax(0,1fr)_auto_auto]">
+                                            <Label>{t('workspace_settings.icon_label', 'Workspace icon')}</Label>
 
-                                    <div className="grid gap-2">
-                                        <Label>{t('workspace_settings.color_label', 'Workspace color')}</Label>
-                                        <ColorSwatchPicker
-                                            value={nameForm.data.color}
-                                            onValueChange={(color) => nameForm.setData('color', color)}
-                                            options={COLOR_SWATCH_OPTIONS}
-                                        />
+                                            <div className="min-w-0">
+                                                <IconPicker
+                                                    value={nameForm.data.icon}
+                                                    fallbackValue={DEFAULT_WORKSPACE_ICON}
+                                                    onValueChange={(icon) => nameForm.setData('icon', icon)}
+                                                    disabled={nameForm.processing}
+                                                />
+                                            </div>
+
+                                            <Popover
+                                                open={openColorPicker}
+                                                onOpenChange={setOpenColorPicker}
+                                            >
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <PopoverTrigger asChild>
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center p-0"
+                                                                aria-label={t('workspace_settings.color_label', 'Workspace color')}
+                                                            >
+                                                                <span
+                                                                    className="relative h-7 w-7 rounded-full border border-border/70"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <span className="absolute inset-[2px] grid grid-cols-2 overflow-hidden rounded-full">
+                                                                        <span className={colorSwatchPreview.light} />
+                                                                        <span className={colorSwatchPreview.dark} />
+                                                                    </span>
+                                                                </span>
+                                                            </button>
+                                                        </PopoverTrigger>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top">
+                                                        {t('workspace_settings.color_label', 'Workspace color')}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                                <PopoverContent
+                                                    align="end"
+                                                    className="w-64 space-y-2 p-3"
+                                                    onCloseAutoFocus={(event) =>
+                                                        event.preventDefault()
+                                                    }
+                                                >
+                                                    <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                        {t('workspace_settings.color_label', 'Workspace color')}
+                                                    </p>
+                                                    <ColorSwatchPicker
+                                                        value={nameForm.data.color}
+                                                        onValueChange={(color) => {
+                                                            nameForm.setData('color', color);
+                                                            setOpenColorPicker(false);
+                                                        }}
+                                                        options={COLOR_SWATCH_OPTIONS}
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
+
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                                        aria-label={t('workspace_settings.back_to_default_icon', 'Reset icon to default')}
+                                                        onClick={() => {
+                                                            nameForm.setData('icon', DEFAULT_WORKSPACE_ICON);
+                                                        }}
+                                                    >
+                                                        <RotateCcw className="h-4 w-4" />
+                                                    </button>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="top">
+                                                    {t('workspace_settings.back_to_default_icon', 'Reset icon to default')}
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </div>
+
+                                        <InputError message={nameForm.errors.icon} />
                                         <InputError message={nameForm.errors.color} />
                                     </div>
 
@@ -214,16 +230,24 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                         ) : null}
                                     </div>
                                 </form>
-                            </section>
-                        ) : null}
+                    </section>
+                ) : null}
 
-                        {section === 'members' ? (
-                            <section className="max-w-2xl space-y-6">
+                {section === 'members' ? (
+                    <section className="max-w-2xl space-y-6">
+                                <Heading
+                                    variant="small"
+                                    title={t('workspace_settings.members', 'Members')}
+                                    description={t(
+                                        'workspace_settings.members_description',
+                                        'Manage who has access to this workspace and their roles.',
+                                    )}
+                                />
                                 <form
                                     className="flex flex-col gap-3 sm:flex-row"
                                     onSubmit={(event) => {
                                         event.preventDefault();
-                                        addMemberForm.post('/workspaces/settings/members', {
+                                        addMemberForm.post(`/settings/workspaces/${workspace.id}/members`, {
                                             preserveScroll: true,
                                             onSuccess: () => addMemberForm.reset('email'),
                                         });
@@ -281,7 +305,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                             });
 
                                                             roleForm.patch(
-                                                                '/workspaces/settings/members/role',
+                                                                `/settings/workspaces/${workspace.id}/members/role`,
                                                                 {
                                                                     preserveScroll: true,
                                                                 },
@@ -307,7 +331,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                         onClick={() => {
                                                             removeMemberForm.setData('user_id', member.id);
                                                             removeMemberForm.delete(
-                                                                '/workspaces/settings/members',
+                                                                `/settings/workspaces/${workspace.id}/members`,
                                                                 {
                                                                     preserveScroll: true,
                                                                 },
@@ -333,24 +357,20 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                         {t('workspace_settings.changes_saved', 'Changes saved.')}
                                     </p>
                                 ) : null}
-                            </section>
-                        ) : null}
+                    </section>
+                ) : null}
 
-                        {section === 'advanced' ? (
-                            <section className="max-w-2xl space-y-6">
+                {section === 'advanced' ? (
+                    <section className="max-w-2xl space-y-6">
+                                <Heading
+                                    variant="small"
+                                    title={t('workspace_settings.advanced', 'Advanced')}
+                                    description={t(
+                                        'workspace_settings.advanced_description',
+                                        'Technical and read-only workspace values.',
+                                    )}
+                                />
                                 <div className="rounded-xl border bg-card p-5">
-                                    <div className="mb-4 space-y-1">
-                                        <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">
-                                            {t('workspace_settings.advanced', 'Advanced')}
-                                        </h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            {t(
-                                                'workspace_settings.advanced_description',
-                                                'Technical and read-only workspace values.',
-                                            )}
-                                        </p>
-                                    </div>
-
                                     <div className="space-y-2">
                                         <Label>
                                             {t('workspace_settings.workspace_id_label', 'Workspace ID')}
@@ -397,11 +417,9 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                         </div>
                                     </div>
                                 </div>
-                            </section>
-                        ) : null}
-                    </div>
-                </div>
-            </div>
+                    </section>
+                ) : null}
+            </SettingsLayout>
         </AppLayout>
     );
 }

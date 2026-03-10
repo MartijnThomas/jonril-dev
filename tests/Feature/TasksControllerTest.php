@@ -4,6 +4,7 @@ use App\Models\Note;
 use App\Models\NoteTask;
 use App\Models\User;
 use App\Models\Workspace;
+use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('tasks index extracts tasks and hides completed items by default', function () {
@@ -276,7 +277,7 @@ test('tasks index exposes in-place due and deadline token fragments', function (
         );
 });
 
-test('tasks index date range filter matches due or deadline dates', function () {
+test('tasks index date range filter matches due deadline or journal_date', function () {
     $user = User::factory()->create();
 
     $user->notes()->create([
@@ -328,6 +329,54 @@ test('tasks index date range filter matches due or deadline dates', function () 
         ],
     ]);
 
+    $user->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-11',
+        'title' => 'Woensdag 11 maart 2026',
+        'slug' => 'journal/daily/2026-03-11',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Journal in range']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $user->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-04-10',
+        'title' => 'Vrijdag 10 april 2026',
+        'slug' => 'journal/daily/2026-04-10',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Journal outside range']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
     $this
         ->actingAs($user)
         ->get('/tasks?date_from=2026-03-09&date_to=2026-03-15')
@@ -335,7 +384,7 @@ test('tasks index date range filter matches due or deadline dates', function () 
             ->component('tasks/index')
             ->where('filters.date_from', '2026-03-09')
             ->where('filters.date_to', '2026-03-15')
-            ->has('tasks.data', 2),
+            ->has('tasks.data', 3),
         );
 });
 
@@ -397,6 +446,110 @@ test('tasks index single day date filter includes tasks due or deadline on that 
             ->component('tasks/index')
             ->where('filters.date_from', '2026-03-07')
             ->has('tasks.data', 2),
+        );
+});
+
+test('tasks index supports date preset filters from url', function () {
+    Carbon::setTestNow('2026-03-10 10:00:00');
+
+    $user = User::factory()->create();
+
+    $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Preset date filter note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'taskList',
+                    'content' => [
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'checked' => false,
+                                'dueDate' => '2026-03-10',
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [['type' => 'text', 'text' => 'Today task']],
+                            ]],
+                        ],
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'checked' => false,
+                                'deadlineDate' => '2026-03-17',
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [['type' => 'text', 'text' => 'In 7 days task']],
+                            ]],
+                        ],
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'checked' => false,
+                                'dueDate' => '2026-03-18',
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [['type' => 'text', 'text' => 'Outside preset task']],
+                            ]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks?date_preset=today_plus_7')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/index')
+            ->where('filters.date_preset', 'today_plus_7')
+            ->where('filters.date_from', '2026-03-10')
+            ->where('filters.date_to', '2026-03-17')
+            ->has('tasks.data', 2),
+        );
+
+    Carbon::setTestNow();
+});
+
+test('tasks index exposes journal_date for tasks in daily journal notes', function () {
+    $user = User::factory()->create();
+
+    $dailyNote = $user->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-10',
+        'title' => 'Dinsdag 10 maart 2026',
+        'slug' => 'journal/daily/2026-03-10',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => ['checked' => false],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Daily journal task']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/index')
+            ->where('tasks.data.0.note.id', $dailyNote->id)
+            ->where('tasks.data.0.journal_date', '2026-03-10')
+            ->where('tasks.data.0.due_date', null)
+            ->where('tasks.data.0.deadline_date', null),
         );
 });
 
@@ -480,7 +633,7 @@ test('note model events keep task index in sync', function () {
         );
 });
 
-test('tasks index includes tasks across all user workspaces and can filter by workspace', function () {
+test('tasks index defaults to current workspace and can filter by workspace', function () {
     $user = User::factory()->create();
     $primaryWorkspace = $user->currentWorkspace();
 
@@ -546,18 +699,18 @@ test('tasks index includes tasks across all user workspaces and can filter by wo
         ->assertInertia(fn (Assert $page) => $page
             ->component('tasks/index')
             ->has('workspaces', 2)
-            ->where('filters.workspace_id', '')
-            ->has('tasks.data', 2)
-            ->where('tasks.data.0.note.workspace_id', fn ($id) => in_array($id, [$primaryWorkspace?->id, $secondaryWorkspace->id], true))
-            ->where('tasks.data.1.note.workspace_id', fn ($id) => in_array($id, [$primaryWorkspace?->id, $secondaryWorkspace->id], true)),
+            ->where('filters.workspace_ids', [$primaryWorkspace?->id])
+            ->has('tasks.data', 1)
+            ->where('tasks.data.0.note.id', $primaryNote->id)
+            ->where('tasks.data.0.content', 'Primary workspace task'),
         );
 
     $this
         ->actingAs($user)
-        ->get('/tasks?workspace_id='.$secondaryWorkspace->id)
+        ->get('/tasks?workspace_ids[]='.$secondaryWorkspace->id)
         ->assertInertia(fn (Assert $page) => $page
             ->component('tasks/index')
-            ->where('filters.workspace_id', $secondaryWorkspace->id)
+            ->where('filters.workspace_ids', [$secondaryWorkspace->id])
             ->has('tasks.data', 1)
             ->where('tasks.data.0.note.id', $secondaryNote->id)
             ->where('tasks.data.0.content', 'Secondary workspace task'),
@@ -627,10 +780,10 @@ test('tasks index note tree filter matches selected note and its direct children
 
     $this
         ->actingAs($user)
-        ->get('/tasks?note_scope_id='.$parent->id)
+        ->get('/tasks?note_scope_ids[]='.$parent->id)
         ->assertInertia(fn (Assert $page) => $page
             ->component('tasks/index')
-            ->where('filters.note_scope_id', $parent->id)
+            ->where('filters.note_scope_ids', [$parent->id])
             ->has('tasks.data', 2),
         );
 });

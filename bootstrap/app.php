@@ -25,11 +25,19 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+        $shouldSkipNoteContentSanitization = static function (Request $request): bool {
+            if (! $request->isMethod('put')) {
+                return false;
+            }
+
+            return $request->is('notes/*') || $request->is('w/*/notes/*');
+        };
+
         $middleware->trimStrings([
-            fn (Request $request) => $request->isMethod('put') && $request->is('notes/*'),
+            $shouldSkipNoteContentSanitization,
         ]);
         $middleware->convertEmptyStringsToNull([
-            fn (Request $request) => $request->isMethod('put') && $request->is('notes/*'),
+            $shouldSkipNoteContentSanitization,
         ]);
 
         $middleware->web(append: [

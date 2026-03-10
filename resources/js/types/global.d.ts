@@ -9,6 +9,7 @@ declare module '@inertiajs/core' {
             workspaces: Array<{
                 id: string;
                 name: string;
+                slug: string;
                 color: string;
                 icon: string;
                 role: string;
@@ -16,6 +17,7 @@ declare module '@inertiajs/core' {
             currentWorkspace: {
                 id: string;
                 name: string;
+                slug: string;
                 color: string;
                 icon: string;
                 role: string;

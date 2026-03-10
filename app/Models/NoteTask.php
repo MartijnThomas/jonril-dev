@@ -22,6 +22,7 @@ class NoteTask extends Model
         'render_fragments',
         'due_date',
         'deadline_date',
+        'journal_date',
         'mentions',
         'hashtags',
     ];
@@ -35,6 +36,7 @@ class NoteTask extends Model
             'checked' => 'boolean',
             'due_date' => 'date',
             'deadline_date' => 'date',
+            'journal_date' => 'date',
             'render_fragments' => 'array',
             'mentions' => 'array',
             'hashtags' => 'array',

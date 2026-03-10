@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
 import { Loader2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
     Command,
@@ -25,6 +25,7 @@ type TaskMigratePickerProps = {
     sourceNoteId: string;
     blockId: string | null;
     position: number | null;
+    anchorPoint?: { x: number; y: number } | null;
     language: 'nl' | 'en';
     onClose: () => void;
     onMigrated: () => void;
@@ -35,6 +36,7 @@ export function TaskMigratePicker({
     sourceNoteId,
     blockId,
     position,
+    anchorPoint = null,
     language,
     onClose,
     onMigrated,
@@ -43,6 +45,7 @@ export function TaskMigratePicker({
     const [items, setItems] = useState<MigrateTarget[]>([]);
     const [loading, setLoading] = useState(false);
     const [submittingKey, setSubmittingKey] = useState<string | null>(null);
+    const inputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         if (!open) {
@@ -105,31 +108,12 @@ export function TaskMigratePicker({
         }
     }, [open]);
 
-    useEffect(() => {
-        if (!open) {
-            return;
-        }
-
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                onClose();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [onClose, open]);
-
     const canSubmit = useMemo(
         () => Boolean(blockId && blockId.trim() !== '') || (position ?? 0) > 0,
         [blockId, position],
     );
 
-    const migrateTask = (item: MigrateTarget) => {
+    const migrateTask = useCallback((item: MigrateTarget) => {
         if (!canSubmit || submittingKey) {
             return;
         }
@@ -169,7 +153,53 @@ export function TaskMigratePicker({
                 setSubmittingKey(null);
             },
         });
-    };
+    }, [blockId, canSubmit, language, onClose, onMigrated, position, sourceNoteId, submittingKey]);
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+
+        const raf = requestAnimationFrame(() => {
+            inputRef.current?.focus();
+        });
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
+
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
+        };
+    }, [onClose, open]);
+
+    const panelStyle = useMemo(() => {
+        if (!open || !anchorPoint) {
+            return {
+                left: '50%',
+                top: '6rem',
+                transform: 'translateX(-50%)',
+            } as const;
+        }
+
+        const panelWidth = Math.min(544, window.innerWidth - 32);
+        const left = Math.min(
+            Math.max(16, anchorPoint.x - panelWidth / 2),
+            window.innerWidth - panelWidth - 16,
+        );
+        const top = Math.min(
+            Math.max(16, anchorPoint.y + 10),
+            window.innerHeight - 420,
+        );
+
+        return { left: `${left}px`, top: `${top}px` } as const;
+    }, [anchorPoint, open]);
 
     if (!open) {
         return null;
@@ -183,14 +213,20 @@ export function TaskMigratePicker({
                 className="fixed inset-0 z-50 bg-transparent"
                 onClick={onClose}
             />
-            <div className="fixed top-24 left-1/2 z-[60] w-[34rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-xl">
+            <div
+                className="fixed z-[60] w-[34rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-xl"
+                style={panelStyle}
+            >
                 <Command
                     shouldFilter={false}
                     className="max-h-[24rem]"
                 >
                     <CommandInput
+                        ref={inputRef}
                         value={query}
-                        onValueChange={setQuery}
+                        onValueChange={(value) => {
+                            setQuery(value);
+                        }}
                         placeholder={
                             language === 'en'
                                 ? 'Migrate task to note...'

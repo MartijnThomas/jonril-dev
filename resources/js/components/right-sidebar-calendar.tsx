@@ -26,6 +26,7 @@ type JournalPageProps = {
         };
     };
     currentWorkspace?: {
+        slug?: string | null;
         color?: string | null;
     };
 };
@@ -136,8 +137,29 @@ function parseJournalPeriod(
     return null;
 }
 
+function isValidJournalPeriod(granularity: string, period: string): boolean {
+    if (granularity === 'daily') {
+        return /^\d{4}-\d{2}-\d{2}$/.test(period);
+    }
+
+    if (granularity === 'weekly') {
+        return /^\d{4}-W\d{2}$/.test(period);
+    }
+
+    if (granularity === 'monthly') {
+        return /^\d{4}-\d{2}$/.test(period);
+    }
+
+    if (granularity === 'yearly') {
+        return /^\d{4}$/.test(period);
+    }
+
+    return false;
+}
+
 export function RightSidebarCalendar() {
     const pageProps = usePage().props as JournalPageProps;
+    const workspaceSlug = pageProps.currentWorkspace?.slug?.trim() ?? '';
     const language = pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
     const workspaceColor = pageProps.currentWorkspace?.color ?? 'slate';
     const selectedDayClass =
@@ -151,7 +173,7 @@ export function RightSidebarCalendar() {
         pageProps.noteType === 'journal' &&
         pageProps.journalGranularity === 'daily' &&
         pageProps.journalPeriod
-            ? parseJournalPeriod('daily', pageProps.journalPeriod)
+            ? (parseJournalPeriod('daily', pageProps.journalPeriod) ?? undefined)
             : undefined;
     const anchorDate = useMemo(
         () =>
@@ -179,7 +201,24 @@ export function RightSidebarCalendar() {
         [dateLocale, pickerYear],
     );
 
-    const visitJournal = (path: string) => {
+    const visitJournal = (granularity: string, period: unknown) => {
+        if (typeof period !== 'string') {
+            return;
+        }
+
+        const normalizedPeriod = period.trim();
+        if (
+            normalizedPeriod === '' ||
+            !isValidJournalPeriod(granularity, normalizedPeriod)
+        ) {
+            return;
+        }
+
+        const path =
+            workspaceSlug !== ''
+                ? `/w/${workspaceSlug}/journal/${granularity}/${normalizedPeriod}`
+                : `/journal/${granularity}/${normalizedPeriod}`;
+
         router.get(path, {}, { preserveScroll: true, preserveState: false });
     };
 
@@ -332,7 +371,7 @@ export function RightSidebarCalendar() {
                 }}
                 selected={activeDailyDate}
                 onDayClick={(day) =>
-                    visitJournal(`/journal/daily/${format(day, 'yyyy-MM-dd')}`)
+                    visitJournal('daily', format(day, 'yyyy-MM-dd'))
                 }
                 components={{
                     WeekNumber: ({ week, ...props }) => {
@@ -371,9 +410,7 @@ export function RightSidebarCalendar() {
                                         const isoWeek = String(
                                             getISOWeek(anchor),
                                         ).padStart(2, '0');
-                                        visitJournal(
-                                            `/journal/weekly/${isoYear}-W${isoWeek}`,
-                                        );
+                                        visitJournal('weekly', `${isoYear}-W${isoWeek}`);
                                     }}
                                     aria-label={`Open weekly note for week ${weekNumber}`}
                                 >

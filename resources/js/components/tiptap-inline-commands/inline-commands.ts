@@ -121,11 +121,28 @@ export const inlineCommands: InlineCommand[] = [
             }
 
             if (typeof window !== 'undefined') {
+                let anchorPoint: { x: number; y: number } | null = null;
+                try {
+                    const coords = editor.view.coordsAtPos(range.from);
+                    if (
+                        typeof coords?.left === 'number' &&
+                        typeof coords?.bottom === 'number'
+                    ) {
+                        anchorPoint = {
+                            x: coords.left,
+                            y: coords.bottom,
+                        };
+                    }
+                } catch {
+                    anchorPoint = null;
+                }
+
                 window.dispatchEvent(
                     new CustomEvent('task-migrate:open', {
                         detail: {
                             blockId,
                             position: taskPosition,
+                            anchorPoint,
                         },
                     }),
                 );

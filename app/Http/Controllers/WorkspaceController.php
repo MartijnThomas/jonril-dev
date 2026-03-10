@@ -69,9 +69,8 @@ class WorkspaceController extends Controller
         return redirect()->route('journal.landing');
     }
 
-    public function edit(Request $request): Response
+    public function edit(Request $request, Workspace $workspace): Response
     {
-        $workspace = $this->currentWorkspace($request);
         $this->assertOwner($request, $workspace);
 
         $payload = $this->workspaceSettingsPayload($workspace);
@@ -82,17 +81,15 @@ class WorkspaceController extends Controller
         ]);
     }
 
-    public function data(Request $request): JsonResponse
+    public function data(Request $request, Workspace $workspace): JsonResponse
     {
-        $workspace = $this->currentWorkspace($request);
         $this->assertOwner($request, $workspace);
 
         return response()->json($this->workspaceSettingsPayload($workspace));
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request, Workspace $workspace): RedirectResponse
     {
-        $workspace = $this->currentWorkspace($request);
         $this->assertOwner($request, $workspace);
 
         $data = $request->validate([
@@ -113,9 +110,8 @@ class WorkspaceController extends Controller
         return back()->with('status', 'workspace-updated');
     }
 
-    public function addMember(Request $request): RedirectResponse
+    public function addMember(Request $request, Workspace $workspace): RedirectResponse
     {
-        $workspace = $this->currentWorkspace($request);
         $this->assertOwner($request, $workspace);
 
         $data = $request->validate([
@@ -141,9 +137,8 @@ class WorkspaceController extends Controller
         return back()->with('status', 'member-added');
     }
 
-    public function removeMember(Request $request): RedirectResponse
+    public function removeMember(Request $request, Workspace $workspace): RedirectResponse
     {
-        $workspace = $this->currentWorkspace($request);
         $this->assertOwner($request, $workspace);
 
         $data = $request->validate([
@@ -167,9 +162,8 @@ class WorkspaceController extends Controller
         return back()->with('status', 'member-removed');
     }
 
-    public function updateMemberRole(Request $request): RedirectResponse
+    public function updateMemberRole(Request $request, Workspace $workspace): RedirectResponse
     {
-        $workspace = $this->currentWorkspace($request);
         $this->assertOwner($request, $workspace);
 
         $data = $request->validate([
@@ -219,17 +213,6 @@ class WorkspaceController extends Controller
             ]);
 
         return back()->with('status', 'member-role-updated');
-    }
-
-    private function currentWorkspace(Request $request): Workspace
-    {
-        $workspace = $request->user()?->currentWorkspace();
-
-        if (! $workspace) {
-            abort(403, 'No workspace available.');
-        }
-
-        return $workspace;
     }
 
     private function assertOwner(Request $request, Workspace $workspace): void

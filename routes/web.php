@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\CommandSearchController;
+use App\Http\Controllers\DocumentationController;
 use App\Http\Controllers\NotesController;
 use App\Http\Controllers\TasksController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceSuggestionController;
 use App\Http\Controllers\WorkspaceSwitchController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
@@ -14,15 +16,23 @@ Route::inertia('/', 'welcome', [
 ])->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('journal', function () {
+    Route::get('journal', function (Request $request) {
+        $workspace = $request->user()?->currentWorkspace();
+        abort_if(! $workspace, 403, 'No workspace available.');
+
         return redirect()->route('journal.show', [
+            'workspace' => $workspace->slug,
             'granularity' => 'daily',
             'period' => now()->toDateString(),
         ]);
     })->name('journal.landing');
 
-    Route::get('notes', function () {
+    Route::get('notes', function (Request $request) {
+        $workspace = $request->user()?->currentWorkspace();
+        abort_if(! $workspace, 403, 'No workspace available.');
+
         return redirect()->route('journal.show', [
+            'workspace' => $workspace->slug,
             'granularity' => 'daily',
             'period' => now()->toDateString(),
         ]);
@@ -38,7 +48,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('notes', [NotesController::class, 'store'])
         ->name('notes.store');
 
-    Route::get('journal/{granularity}/{period}', [NotesController::class, 'showJournal'])
+    Route::get('w/{workspace:slug}/journal/{granularity}/{period}', [NotesController::class, 'showJournalScoped'])
         ->name('journal.show');
 
     Route::patch('notes/{noteId}/rename', [NotesController::class, 'rename'])
@@ -54,16 +64,31 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->whereUuid('noteId')
         ->name('notes.destroy');
 
-    Route::get('notes/{note}', [NotesController::class, 'show'])
+    Route::get('w/{workspace:slug}/notes/{note}', [NotesController::class, 'showScoped'])
         ->where('note', '.*')
         ->name('notes.show');
 
-    Route::put('notes/{note}', [NotesController::class, 'update'])
+    Route::put('w/{workspace:slug}/notes/{note}', [NotesController::class, 'updateScoped'])
         ->where('note', '.*')
         ->name('notes.update');
 
+    // Legacy non-workspace-scoped URLs (kept for backward compatibility).
+    Route::get('journal/{granularity}/{period}', [NotesController::class, 'showJournal'])
+        ->name('journal.show.legacy');
+    Route::get('notes/{note}', [NotesController::class, 'show'])
+        ->where('note', '.*')
+        ->name('notes.show.legacy');
+    Route::put('notes/{note}', [NotesController::class, 'update'])
+        ->where('note', '.*')
+        ->name('notes.update.legacy');
+
     Route::get('tasks', [TasksController::class, 'index'])
         ->name('tasks.index');
+    Route::get('docs', [DocumentationController::class, 'index'])
+        ->name('docs.index');
+    Route::get('docs/{slug}', [DocumentationController::class, 'show'])
+        ->where('slug', '.*')
+        ->name('docs.show');
     Route::get('search/command', CommandSearchController::class)
         ->name('search.command');
     Route::patch('tasks/checked', [TasksController::class, 'updateCheckedByReference'])
@@ -81,18 +106,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('workspaces.store');
     Route::post('workspaces/suggestions', WorkspaceSuggestionController::class)
         ->name('workspaces.suggestions.store');
-    Route::get('workspaces/settings', [WorkspaceController::class, 'edit'])
-        ->name('workspaces.settings.edit');
-    Route::get('workspaces/settings/data', [WorkspaceController::class, 'data'])
-        ->name('workspaces.settings.data');
-    Route::patch('workspaces/settings', [WorkspaceController::class, 'update'])
-        ->name('workspaces.settings.update');
-    Route::post('workspaces/settings/members', [WorkspaceController::class, 'addMember'])
-        ->name('workspaces.settings.members.add');
-    Route::delete('workspaces/settings/members', [WorkspaceController::class, 'removeMember'])
-        ->name('workspaces.settings.members.remove');
-    Route::patch('workspaces/settings/members/role', [WorkspaceController::class, 'updateMemberRole'])
-        ->name('workspaces.settings.members.role');
+    Route::get('workspaces/settings', function (Request $request) {
+        $workspace = $request->user()?->currentWorkspace();
+        abort_if(! $workspace, 403, 'No workspace available.');
+
+        return redirect()->route('workspaces.settings.edit', [
+            'workspace' => $workspace->id,
+        ]);
+    })->name('workspaces.settings.legacy');
 });
 
 require __DIR__.'/settings.php';

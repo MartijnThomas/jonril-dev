@@ -1,7 +1,7 @@
-import type { LucideIcon } from 'lucide-react';
+import type { ComponentType } from 'react';
 
 interface IconProps {
-    iconNode?: LucideIcon | null;
+    iconNode?: ComponentType<{ className?: string }> | null;
     className?: string;
 }
 

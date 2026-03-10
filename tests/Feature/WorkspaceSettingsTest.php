@@ -9,7 +9,7 @@ test('workspace owner can view workspace settings page', function () {
 
     $this
         ->actingAs($owner)
-        ->get('/workspaces/settings')
+        ->get(route('workspaces.settings.edit', ['workspace' => $workspace?->id], absolute: false))
         ->assertInertia(fn (Assert $page) => $page
             ->component('workspaces/settings')
             ->where('workspace.id', $workspace?->id),
@@ -22,7 +22,7 @@ test('workspace owner can update workspace name', function () {
 
     $this
         ->actingAs($owner)
-        ->patch('/workspaces/settings', [
+        ->patch(route('workspaces.settings.update', ['workspace' => $workspace?->id], absolute: false), [
             'name' => 'Product Team',
         ])
         ->assertRedirect();
@@ -37,7 +37,7 @@ test('workspace owner can add and remove members', function () {
 
     $this
         ->actingAs($owner)
-        ->post('/workspaces/settings/members', [
+        ->post(route('workspaces.settings.members.add', ['workspace' => $workspace?->id], absolute: false), [
             'email' => $member->email,
         ])
         ->assertRedirect();
@@ -46,7 +46,7 @@ test('workspace owner can add and remove members', function () {
 
     $this
         ->actingAs($owner)
-        ->delete('/workspaces/settings/members', [
+        ->delete(route('workspaces.settings.members.remove', ['workspace' => $workspace?->id], absolute: false), [
             'user_id' => $member->id,
         ])
         ->assertRedirect();
@@ -69,10 +69,10 @@ test('non-owner cannot manage workspace settings', function () {
         ],
     ])->save();
 
-    $this->actingAs($member)->get('/workspaces/settings')->assertForbidden();
-    $this->actingAs($member)->patch('/workspaces/settings', ['name' => 'X'])->assertForbidden();
-    $this->actingAs($member)->post('/workspaces/settings/members', ['email' => $owner->email])->assertForbidden();
-    $this->actingAs($member)->delete('/workspaces/settings/members', ['user_id' => $owner->id])->assertForbidden();
+    $this->actingAs($member)->get(route('workspaces.settings.edit', ['workspace' => $workspace?->id], absolute: false))->assertForbidden();
+    $this->actingAs($member)->patch(route('workspaces.settings.update', ['workspace' => $workspace?->id], absolute: false), ['name' => 'X'])->assertForbidden();
+    $this->actingAs($member)->post(route('workspaces.settings.members.add', ['workspace' => $workspace?->id], absolute: false), ['email' => $owner->email])->assertForbidden();
+    $this->actingAs($member)->delete(route('workspaces.settings.members.remove', ['workspace' => $workspace?->id], absolute: false), ['user_id' => $owner->id])->assertForbidden();
 });
 
 test('workspace owner can transfer ownership by setting a member role to owner', function () {
@@ -86,7 +86,7 @@ test('workspace owner can transfer ownership by setting a member role to owner',
 
     $this
         ->actingAs($owner)
-        ->patch('/workspaces/settings/members/role', [
+        ->patch(route('workspaces.settings.members.role', ['workspace' => $workspace?->id], absolute: false), [
             'user_id' => $member->id,
             'role' => 'owner',
         ])

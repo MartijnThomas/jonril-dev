@@ -56,7 +56,7 @@ class NoteRelatedPanelBuilder
         return NoteTask::query()
             ->where('workspace_id', $note->workspace_id)
             ->where('note_id', '!=', $note->id)
-            ->with('note:id,slug,type,journal_granularity,journal_date,title')
+            ->with('note:id,workspace_id,slug,type,journal_granularity,journal_date,title')
             ->orderBy('checked')
             ->orderByRaw('case when due_date is null then 1 else 0 end')
             ->orderBy('due_date')
@@ -85,7 +85,7 @@ class NoteRelatedPanelBuilder
         return NoteTask::query()
             ->where('workspace_id', $note->workspace_id)
             ->where('note_id', '!=', $note->id)
-            ->with('note:id,slug,type,journal_granularity,journal_date,title')
+            ->with('note:id,workspace_id,slug,type,journal_granularity,journal_date,title')
             ->orderBy('checked')
             ->orderBy('updated_at', 'desc')
             ->get()
@@ -117,7 +117,7 @@ class NoteRelatedPanelBuilder
             'note' => [
                 'id' => $task->note_id,
                 'title' => $task->note_title ?? 'Untitled',
-                'href' => $taskNote ? $this->noteSlugService->urlFor($taskNote) : "/notes/{$task->note_id}",
+                'href' => $taskNote ? $this->noteSlugService->urlFor($taskNote) : null,
             ],
         ];
     }
@@ -156,7 +156,7 @@ class NoteRelatedPanelBuilder
             ->where('id', '!=', $note->id)
             ->whereNotNull('content')
             ->orderByDesc('updated_at')
-            ->get(['id', 'title', 'slug', 'type', 'journal_granularity', 'journal_date', 'content']);
+            ->get(['id', 'workspace_id', 'title', 'slug', 'type', 'journal_granularity', 'journal_date', 'content']);
 
         $rows = [];
         foreach ($sourceNotes as $sourceNote) {

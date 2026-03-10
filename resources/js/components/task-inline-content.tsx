@@ -29,6 +29,8 @@ type TaskInlineContentProps = {
     className?: string;
     priorityStyle?: 'token' | 'range';
     canceled?: boolean;
+    hideStatusTokens?: boolean;
+    hidePriorityTokens?: boolean;
 };
 
 export function TaskInlineContent({
@@ -37,6 +39,8 @@ export function TaskInlineContent({
     className = '',
     priorityStyle = 'token',
     canceled = false,
+    hideStatusTokens = false,
+    hidePriorityTokens = false,
 }: TaskInlineContentProps) {
     const dateLocale = language === 'en' ? enUS : nl;
     const formatReadableDate = (value: string) => {
@@ -49,14 +53,14 @@ export function TaskInlineContent({
 
     const classForPriority = (priority: TaskRenderFragment['priority']) => {
         if (priority === 'high') {
-            return 'md-priority-range md-priority-range--high';
+            return 'md-priority md-priority--critical';
         }
 
         if (priority === 'medium') {
-            return 'md-priority-range md-priority-range--medium';
+            return 'md-priority md-priority--medium';
         }
 
-        return 'md-priority-range md-priority-range--normal';
+        return 'md-priority md-priority--low';
     };
 
     let activePriority: TaskRenderFragment['priority'] = null;
@@ -70,6 +74,10 @@ export function TaskInlineContent({
                     const value = fragment.value ?? '';
                     const priority = fragment.priority ?? 'normal';
                     activePriority = priority;
+
+                    if (hidePriorityTokens) {
+                        return null;
+                    }
 
                     return (
                         <span
@@ -276,6 +284,10 @@ export function TaskInlineContent({
                 }
 
                 if (fragment.type === 'status_token') {
+                    if (hideStatusTokens) {
+                        return null;
+                    }
+
                     const value = (fragment.value ?? '').trim();
                     if (!value) {
                         return null;

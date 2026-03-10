@@ -40,14 +40,6 @@ type Props = {
     breadcrumbs?: BreadcrumbItem[];
 };
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Daily note',
-        href: `/journal/daily/${format(new Date(), 'yyyy-MM-dd')}`,
-        icon: CalendarDays,
-    },
-];
-
 const rightNavItems: NavItem[] = [
     {
         title: 'Repository',
@@ -67,6 +59,21 @@ const activeItemStyles =
 export function AppHeader({ breadcrumbs = [] }: Props) {
     const page = usePage();
     const { auth } = page.props;
+    const workspaceSlug =
+        ((page.props as { currentWorkspace?: { slug?: string | null } })
+            .currentWorkspace?.slug ?? ''
+        ).trim();
+    const dailyNoteHref =
+        workspaceSlug !== ''
+            ? `/w/${workspaceSlug}/journal/daily/${format(new Date(), 'yyyy-MM-dd')}`
+            : `/journal/daily/${format(new Date(), 'yyyy-MM-dd')}`;
+    const mainNavItems: NavItem[] = [
+        {
+            title: 'Daily note',
+            href: dailyNoteHref,
+            icon: CalendarDays,
+        },
+    ];
     const getInitials = useInitials();
     const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
     return (

@@ -5,6 +5,7 @@ import {
     BookOpen,
     Briefcase,
     Building2,
+    Calendar,
     Calendar1,
     CalendarDays,
     CalendarRange,
@@ -14,11 +15,14 @@ import {
     KanbanSquare,
     Layers,
     Lightbulb,
+    NotebookTabs,
+    CheckCheck,
     NotebookPen,
     Rocket,
     Star,
     Wrench,
 } from 'lucide-react';
+import type { ComponentType } from 'react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -31,6 +35,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export const WORKSPACE_ICON_OPTIONS = [
+    { value: 'calendar', label: 'Calendar', icon: Calendar },
     { value: 'calendar_days', label: 'Calendar Days', icon: CalendarDays },
     { value: 'calendar_range', label: 'Calendar Range', icon: CalendarRange },
     { value: 'calendar_sync', label: 'Calendar Sync', icon: CalendarSync },
@@ -41,6 +46,8 @@ export const WORKSPACE_ICON_OPTIONS = [
     { value: 'file', label: 'File', icon: FileText },
     { value: 'book', label: 'Book', icon: BookOpen },
     { value: 'notebook', label: 'Notebook', icon: NotebookPen },
+    { value: 'notebook_tabs', label: 'Notebook Tabs', icon: NotebookTabs },
+    { value: 'check_check', label: 'Check Check', icon: CheckCheck },
     { value: 'layers', label: 'Layers', icon: Layers },
     { value: 'kanban', label: 'Kanban', icon: KanbanSquare },
     { value: 'star', label: 'Star', icon: Star },
@@ -122,6 +129,11 @@ type IconPickerProps = {
     disabled?: boolean;
     className?: string;
     fallbackValue?: string;
+    prependOptions?: Array<{
+        value: string;
+        label: string;
+        icon: ComponentType<{ className?: string }>;
+    }>;
 };
 
 export function IconPicker({
@@ -130,6 +142,7 @@ export function IconPicker({
     disabled,
     className,
     fallbackValue,
+    prependOptions = [],
 }: IconPickerProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -138,8 +151,23 @@ export function IconPicker({
         ? value
         : (fallbackValue ?? DEFAULT_WORKSPACE_ICON);
 
+    const pickerOptions = useMemo(() => {
+        const merged = [...prependOptions, ...WORKSPACE_ICON_OPTIONS];
+        const seen = new Set<string>();
+
+        return merged.filter((option) => {
+            if (seen.has(option.value)) {
+                return false;
+            }
+
+            seen.add(option.value);
+
+            return true;
+        });
+    }, [prependOptions]);
+
     const selected = useMemo(() => {
-        const predefined = WORKSPACE_ICON_OPTIONS.find(
+        const predefined = pickerOptions.find(
             (option) => option.value === effectiveValue,
         );
         if (predefined) {
@@ -156,14 +184,14 @@ export function IconPicker({
             };
         }
 
-        return WORKSPACE_ICON_OPTIONS.find(
+        return pickerOptions.find(
             (option) => option.value === DEFAULT_WORKSPACE_ICON,
         )!;
-    }, [effectiveValue]);
+    }, [effectiveValue, pickerOptions]);
 
     const SelectedIcon = selected?.icon ?? getWorkspaceIconComponent(DEFAULT_WORKSPACE_ICON);
     const normalizedQuery = normalizeIconInput(query);
-    const filteredOptions = WORKSPACE_ICON_OPTIONS.filter((option) => {
+    const filteredOptions = pickerOptions.filter((option) => {
         const haystack = `${option.label} ${option.value}`.toLowerCase();
         return haystack.includes(normalizedQuery);
     });
@@ -171,7 +199,7 @@ export function IconPicker({
         normalizedQuery.length > 0 &&
         /^[a-z][a-z0-9_]*$/.test(normalizedQuery) &&
         Boolean(resolveLucideIconByRawName(normalizedQuery)) &&
-        !WORKSPACE_ICON_OPTIONS.some((option) => option.value === normalizedQuery);
+        !pickerOptions.some((option) => option.value === normalizedQuery);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -228,7 +256,7 @@ export function IconPicker({
 
                         return (
                             <button
-                                key={option.value}
+                                key={`${option.value}-${option.label}`}
                                 type="button"
                                 className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                                 onClick={() => {

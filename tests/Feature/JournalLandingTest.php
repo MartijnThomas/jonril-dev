@@ -12,11 +12,13 @@ test('journal landing redirects authenticated users to today daily note', functi
     CarbonImmutable::setTestNow('2026-03-07 10:00:00');
 
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
     $this->actingAs($user);
 
     $response = $this->get(route('journal.landing'));
 
     $response->assertRedirect(route('journal.show', [
+        'workspace' => $workspace?->slug,
         'granularity' => 'daily',
         'period' => '2026-03-07',
     ], absolute: false));
@@ -28,11 +30,13 @@ test('notes landing redirects authenticated users to today daily note', function
     CarbonImmutable::setTestNow('2026-03-07 10:00:00');
 
     $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
     $this->actingAs($user);
 
     $response = $this->get(route('notes.landing'));
 
     $response->assertRedirect(route('journal.show', [
+        'workspace' => $workspace?->slug,
         'granularity' => 'daily',
         'period' => '2026-03-07',
     ], absolute: false));

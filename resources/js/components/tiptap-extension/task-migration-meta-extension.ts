@@ -1,13 +1,33 @@
+import { router } from '@inertiajs/react';
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { router } from '@inertiajs/react';
 
 type LinkableNote = {
     id: string;
     title: string;
     href?: string;
 };
+
+function workspaceSlugFromPathname(pathname: string): string | null {
+    const match = pathname.match(/^\/w\/([^/]+)\//);
+    if (!match) {
+        return null;
+    }
+
+    return decodeURIComponent(match[1] ?? '').trim() || null;
+}
+
+function fallbackNoteHref(noteId: string): string {
+    if (typeof window !== 'undefined') {
+        const slug = workspaceSlugFromPathname(window.location.pathname);
+        if (slug) {
+            return `/w/${slug}/notes/${noteId}`;
+        }
+    }
+
+    return `/notes/${noteId}`;
+}
 
 function buildMigrationMetaDecorations(doc: any, notes: LinkableNote[]): DecorationSet {
     const decorations: Decoration[] = [];
@@ -56,7 +76,7 @@ function buildMigrationMetaDecorations(doc: any, notes: LinkableNote[]): Decorat
 
         const linkedNote = noteById.get(noteId);
         const noteTitle = linkedNote?.title?.trim() || 'Untitled';
-        const href = linkedNote?.href?.trim() || `/notes/${noteId}`;
+        const href = linkedNote?.href?.trim() || fallbackNoteHref(noteId);
 
         const contentEnd = pos + node.nodeSize - 1;
 

@@ -4,6 +4,7 @@ use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\EditorPreferencesController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
+use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->group(function () {
@@ -30,4 +31,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
+
+    Route::get('settings/workspaces/{workspace}', [WorkspaceController::class, 'edit'])
+        ->name('workspaces.settings.edit');
+    Route::get('settings/workspaces/{workspace}/data', [WorkspaceController::class, 'data'])
+        ->name('workspaces.settings.data');
+    Route::patch('settings/workspaces/{workspace}', [WorkspaceController::class, 'update'])
+        ->name('workspaces.settings.update');
+    Route::post('settings/workspaces/{workspace}/members', [WorkspaceController::class, 'addMember'])
+        ->name('workspaces.settings.members.add');
+    Route::delete('settings/workspaces/{workspace}/members', [WorkspaceController::class, 'removeMember'])
+        ->name('workspaces.settings.members.remove');
+    Route::patch('settings/workspaces/{workspace}/members/role', [WorkspaceController::class, 'updateMemberRole'])
+        ->name('workspaces.settings.members.role');
 });
