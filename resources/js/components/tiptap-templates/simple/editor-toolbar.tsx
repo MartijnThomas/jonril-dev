@@ -24,7 +24,7 @@ import {
 } from '@/components/tiptap-ui/link-popover';
 import { ListDropdownMenu } from '@/components/tiptap-ui/list-dropdown-menu';
 import { MarkButton } from '@/components/tiptap-ui/mark-button';
-import { TextAlignButton } from '@/components/tiptap-ui/text-align-button';
+import { TextAlignDropdownMenu } from '@/components/tiptap-ui/text-align-dropdown-menu';
 import { UndoRedoButton } from '@/components/tiptap-ui/undo-redo-button';
 
 import { Button } from '@/components/tiptap-ui-primitive/button';
@@ -124,10 +124,10 @@ export function MainToolbarContent({
             <ToolbarSeparator />
 
             <ToolbarGroup>
-                <TextAlignButton align="left" />
-                <TextAlignButton align="center" />
-                <TextAlignButton align="right" />
-                <TextAlignButton align="justify" />
+                <TextAlignDropdownMenu
+                    alignments={['left', 'center', 'right', 'justify']}
+                    portal={isMobile}
+                />
             </ToolbarGroup>
 
             {showAdvanced && <ToolbarSeparator />}
@@ -265,7 +265,7 @@ export function MobileEditorToolbar({
 
     const mobileToolbarStyle = useMemo<React.CSSProperties>(
         () => ({
-            bottom: `${keyboardInset}px`,
+            bottom: `${keyboardInset + 8}px`,
         }),
         [keyboardInset],
     );

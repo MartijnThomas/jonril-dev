@@ -827,11 +827,11 @@
 }
 
 .mention {
-    @apply bg-purple-400/10 text-purple-600 dark:bg-purple-400/20 dark:text-purple-300;
+    @apply bg-purple-400/10 text-purple-700 dark:bg-violet-500/20 dark:text-violet-400 dark:no-underline;
 }
 
 .hashtag {
-    @apply bg-blue-400/10 text-blue-600 dark:bg-blue-400/20 dark:text-blue-300;
+    @apply bg-blue-400/10 text-blue-700 dark:bg-sky-500/20 dark:text-sky-400 dark:no-underline;
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor .md-highlight,
@@ -877,4 +877,20 @@
 
 .md-task-status-token--question {
     @apply text-blue-600 dark:text-blue-300;
+}
+
+/* Force consistent inline token styling in dark mode. */
+.dark .simple-editor-content .mention,
+.dark .simple-editor-content .hashtag {
+    text-decoration: none !important;
+}
+
+.dark .simple-editor-content .mention {
+    background: rgb(139 92 246 / 0.2) !important;
+    color: rgb(167 139 250) !important; /* violet-400 */
+}
+
+.dark .simple-editor-content .hashtag {
+    background: rgb(14 165 233 / 0.2) !important;
+    color: rgb(56 189 248) !important; /* sky-400 */
 }

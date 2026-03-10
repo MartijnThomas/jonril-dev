@@ -147,11 +147,17 @@ export function createSimpleEditorExtensions({
         addKeyboardShortcuts() {
             const parentShortcuts = this.parent?.() ?? {};
             const {
+                'Mod-Shift-l': removedLeftShortcut,
                 'Mod-Shift-e': removedShortcut,
+                'Mod-Shift-r': removedRightShortcut,
+                'Mod-Shift-j': removedJustifyShortcut,
                 ...shortcuts
             } = parentShortcuts;
 
+            void removedLeftShortcut;
             void removedShortcut;
+            void removedRightShortcut;
+            void removedJustifyShortcut;
 
             return shortcuts;
         },

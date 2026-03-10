@@ -241,8 +241,8 @@ export function AppSidebarHeader({
     const showMobileBreadcrumbToggle = isMobile && breadcrumbs.length > 1;
 
     return (
-        <div ref={mobileHeaderRef} className="relative z-20">
-            <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 backdrop-blur-lg transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 supports-[backdrop-filter]:bg-background/90 md:px-4">
+        <div ref={mobileHeaderRef} className="sticky top-0 z-20">
+            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 backdrop-blur-lg transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 supports-[backdrop-filter]:bg-background/90 md:px-4">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                     <SidebarTrigger className="-ml-1" />
                     {showMobileBreadcrumbToggle ? (
