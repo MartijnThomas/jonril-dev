@@ -57,6 +57,7 @@ export function useEditorSave({
     const pendingForceRef = useRef(false);
     const isSavingRef = useRef(false);
     const [status, setStatus] = useState<EditorSaveStatus>('ready');
+    const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
     useEffect(() => {
         propertiesRef.current = properties;
@@ -102,9 +103,11 @@ export function useEditorSave({
                     preserveState: true,
                     preserveScroll: true,
                     replace: true,
+                    showProgress: false,
                     onSuccess: () => {
                         lastSavedContentRef.current = serialized;
                         lastSavedPropertiesRef.current = serializedProperties;
+                        setLastSavedAt(Date.now());
                         setStatus('ready');
                     },
                     onError: () => {
@@ -228,5 +231,6 @@ export function useEditorSave({
         saveEditor,
         queueSave,
         status,
+        lastSavedAt,
     };
 }

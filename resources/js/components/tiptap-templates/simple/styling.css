@@ -207,8 +207,8 @@
     li
     > label
     > input[type='checkbox'] {
-    width: 1rem;
-    height: 1rem;
+    width: 1.125rem;
+    height: 1.125rem;
     border-radius: 9999px;
 }
 
@@ -218,11 +218,56 @@
     li
     > label
     > span {
-    width: 1rem;
-    height: 1rem;
+    width: 1.125rem;
+    height: 1.125rem;
     border-radius: 9999px;
     background-color: white;
-    border-color: rgb(139 92 246);
+    border-width: 2px;
+    border-color: rgb(251 191 36);
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > label
+    > span {
+    position: relative;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > label
+    > span::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0.8rem;
+    height: 0.8rem;
+    background-color: rgb(107 114 128);
+    -webkit-mask: center / contain no-repeat
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E");
+    mask: center / contain no-repeat
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E");
+    pointer-events: none;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='canceled']
+    > label
+    > span,
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li[data-task-status='migrated']
+    > label
+    > span {
+    border-color: rgb(209 213 219);
 }
 
 .simple-editor-content
@@ -261,8 +306,8 @@
     > label
     > input[type='checkbox']:checked
     + span {
-    background-color: rgb(139 92 246);
-    border-color: rgb(139 92 246);
+    background-color: rgb(251 191 36);
+    border-color: rgb(251 191 36);
 }
 
 .simple-editor-content
@@ -588,7 +633,6 @@
     li[data-task-status='canceled']
     > label {
     opacity: 0.6;
-    pointer-events: none;
 }
 
 .simple-editor-content
@@ -597,7 +641,7 @@
     li[data-task-status='canceled']
     > label
     input {
-    cursor: not-allowed !important;
+    cursor: pointer !important;
 }
 
 .simple-editor-content
@@ -606,8 +650,7 @@
     li[data-task-status='canceled']
     > label
     span {
-    cursor: not-allowed !important;
-    pointer-events: none;
+    cursor: pointer !important;
 }
 
 .simple-editor-content

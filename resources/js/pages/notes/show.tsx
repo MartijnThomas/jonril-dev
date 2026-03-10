@@ -1,5 +1,6 @@
 import { Head, usePage } from '@inertiajs/react';
 import { useState } from 'react';
+import { StatusBarTaskCounter } from '@/components/status-bar-task-counter';
 import { SimpleEditor } from '@/components/tiptap-templates/simple/simple-editor';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem, EditorSaveStatus } from '@/types';
@@ -91,6 +92,7 @@ export default function Dashboard({
     const page = usePage();
     const isAdmin = page.props.auth?.user?.role === 'admin';
     const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('ready');
+    const [saveLastSavedAt, setSaveLastSavedAt] = useState<number | null>(null);
     const [editorJson, setEditorJson] = useState<string>('');
     const [jsonOpen, setJsonOpen] = useState(false);
     const [contentStats, setContentStats] = useState<{
@@ -98,11 +100,19 @@ export default function Dashboard({
         characters: number;
         tasksTotal: number;
         tasksClosed: number;
+        tasksCompleted: number;
+        tasksCanceled: number;
+        tasksMigrated: number;
+        tasksOpen: number;
     }>({
         words: 0,
         characters: 0,
         tasksTotal: 0,
         tasksClosed: 0,
+        tasksCompleted: 0,
+        tasksCanceled: 0,
+        tasksMigrated: 0,
+        tasksOpen: 0,
     });
     const pageTitle = breadcrumbs.at(-1)?.title ?? 'Note';
 
@@ -110,17 +120,27 @@ export default function Dashboard({
         <AppLayout
             breadcrumbs={breadcrumbs}
             saveStatus={saveStatus}
+            saveLastSavedAt={saveLastSavedAt}
             statusBarContent={
-                <div className="flex items-center gap-3">
-                    <span>Words {contentStats.words}</span>
-                    <span>Chars {contentStats.characters}</span>
-                    <span>
-                        Tasks {contentStats.tasksClosed}/{contentStats.tasksTotal}
-                    </span>
+                <div className="flex w-full items-center gap-3">
+                    <div className="flex items-center gap-3">
+                        <span>Words {contentStats.words}</span>
+                        <span>Chars {contentStats.characters}</span>
+                        <StatusBarTaskCounter
+                            stats={{
+                                total: contentStats.tasksTotal,
+                                closed: contentStats.tasksClosed,
+                                open: contentStats.tasksOpen,
+                                canceled: contentStats.tasksCanceled,
+                                migrated: contentStats.tasksMigrated,
+                                completed: contentStats.tasksCompleted,
+                            }}
+                        />
+                    </div>
                     {isAdmin ? (
                         <button
                             type="button"
-                            className="hover:text-foreground transition-colors"
+                            className="ml-auto hover:text-foreground transition-colors"
                             onClick={() => setJsonOpen((value) => !value)}
                         >
                             JSON
@@ -159,6 +179,7 @@ export default function Dashboard({
                 }
                 language={language}
                 onSaveStatusChange={setSaveStatus}
+                onLastSavedAtChange={setSaveLastSavedAt}
                 onDebugJsonChange={isAdmin ? setEditorJson : undefined}
                 onContentStatsChange={setContentStats}
             />

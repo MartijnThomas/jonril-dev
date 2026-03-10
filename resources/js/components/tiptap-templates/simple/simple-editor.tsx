@@ -1,8 +1,9 @@
 'use client';
 
+import { router } from '@inertiajs/react';
+import type { Editor } from '@tiptap/core';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { router } from '@inertiajs/react';
 
 import { NoteRelatedPanel } from '@/components/note-related-panel';
 import { TaskMigratePicker } from '@/components/task-migrate-picker';
@@ -47,6 +48,25 @@ function serializeEditorContent(content: SimpleEditorContent): string {
     }
 
     return '';
+}
+
+function hasEquivalentEditorDocument(
+    editor: Editor,
+    content: SimpleEditorContent,
+): boolean {
+    if (!content || typeof content !== 'object' || Array.isArray(content)) {
+        return false;
+    }
+
+    if (!('type' in content)) {
+        return false;
+    }
+
+    try {
+        return editor.schema.nodeFromJSON(content).eq(editor.state.doc);
+    } catch {
+        return false;
+    }
 }
 
 type SimpleEditorProps = {
@@ -149,12 +169,17 @@ type SimpleEditorProps = {
     showRelatedPanel?: boolean;
     language?: 'nl' | 'en';
     onSaveStatusChange?: (status: EditorSaveStatus) => void;
+    onLastSavedAtChange?: (timestamp: number | null) => void;
     onDebugJsonChange?: (json: string) => void;
     onContentStatsChange?: (stats: {
         words: number;
         characters: number;
         tasksTotal: number;
         tasksClosed: number;
+        tasksCompleted: number;
+        tasksCanceled: number;
+        tasksMigrated: number;
+        tasksOpen: number;
     }) => void;
 };
 
@@ -170,6 +195,7 @@ export function SimpleEditor({
     showRelatedPanel = false,
     language = 'nl',
     onSaveStatusChange,
+    onLastSavedAtChange,
     onDebugJsonChange,
     onContentStatsChange,
 }: SimpleEditorProps) {
@@ -203,7 +229,6 @@ export function SimpleEditor({
 
     const toolbarRef = useRef<HTMLDivElement>(null);
     const previousNoteIdRef = useRef<string | null>(null);
-    const previousLoadedContentRef = useRef<SimpleEditorContent | null>(null);
     const previousLoadedContentSerializedRef = useRef<string>('');
 
     const extensions = useMemo(
@@ -280,7 +305,6 @@ export function SimpleEditor({
 
         if (previousNoteIdRef.current === null) {
             previousNoteIdRef.current = id;
-            previousLoadedContentRef.current = initialContent;
             previousLoadedContentSerializedRef.current = incomingSerialized;
             return;
         }
@@ -291,7 +315,6 @@ export function SimpleEditor({
 
         if (noteChanged || contentChanged) {
             previousNoteIdRef.current = id;
-            previousLoadedContentRef.current = initialContent;
             previousLoadedContentSerializedRef.current = incomingSerialized;
 
             if (noteChanged) {
@@ -299,8 +322,14 @@ export function SimpleEditor({
                 return;
             }
 
-            const editorSerialized = JSON.stringify(editor.getJSON());
-            if (editorSerialized !== incomingSerialized) {
+            // Staging can normalize/reshape JSON on save responses.
+            // Never replace the current focused document for same-note updates,
+            // otherwise selection jumps to the end during autosave.
+            if (editor.isFocused) {
+                return;
+            }
+
+            if (!hasEquivalentEditorDocument(editor, initialContent)) {
                 editor.commands.setContent(initialContent, { emitUpdate: false });
             }
         }
@@ -411,7 +440,7 @@ export function SimpleEditor({
         }
     }, [isMobile, mobileView]);
 
-    const { status, saveEditor } = useEditorSave({
+    const { status, saveEditor, lastSavedAt } = useEditorSave({
         editor,
         noteId: id,
         noteUpdateUrl,
@@ -422,6 +451,10 @@ export function SimpleEditor({
     useEffect(() => {
         onSaveStatusChange?.(status);
     }, [onSaveStatusChange, status]);
+
+    useEffect(() => {
+        onLastSavedAtChange?.(lastSavedAt);
+    }, [lastSavedAt, onLastSavedAtChange]);
 
     useEffect(() => {
         if (!editor || !onDebugJsonChange) {
@@ -455,6 +488,10 @@ export function SimpleEditor({
 
             let tasksTotal = 0;
             let tasksClosed = 0;
+            let tasksCompleted = 0;
+            let tasksCanceled = 0;
+            let tasksMigrated = 0;
+            let tasksOpen = 0;
 
             editor.state.doc.descendants((node) => {
                 if (node.type.name !== 'taskItem') {
@@ -464,7 +501,19 @@ export function SimpleEditor({
                 tasksTotal += 1;
                 const isCanceled = node.attrs.taskStatus === 'canceled';
                 const isMigrated = node.attrs.taskStatus === 'migrated';
-                if (node.attrs.checked === true || isCanceled || isMigrated) {
+                const isCompleted = node.attrs.checked === true;
+
+                if (isCanceled) {
+                    tasksCanceled += 1;
+                } else if (isMigrated) {
+                    tasksMigrated += 1;
+                } else if (isCompleted) {
+                    tasksCompleted += 1;
+                } else {
+                    tasksOpen += 1;
+                }
+
+                if (isCompleted || isCanceled || isMigrated) {
                     tasksClosed += 1;
                 }
 
@@ -476,6 +525,10 @@ export function SimpleEditor({
                 characters,
                 tasksTotal,
                 tasksClosed,
+                tasksCompleted,
+                tasksCanceled,
+                tasksMigrated,
+                tasksOpen,
             });
         };
 

@@ -7,6 +7,7 @@ export type AppLayoutProps = {
     children: ReactNode;
     breadcrumbs?: BreadcrumbItem[];
     saveStatus?: EditorSaveStatus | null;
+    saveLastSavedAt?: number | null;
     rightSidebar?: ReactNode;
     statusBarContent?: ReactNode;
     bottomPane?: ReactNode;

@@ -86,6 +86,63 @@ function extractStatusFromTaskItem(node: any): TaskStatus {
     return result;
 }
 
+function findFirstStatusTokenRange(
+    node: any,
+    pos: number,
+): {
+    status: Exclude<TaskStatus, null>;
+    from: number;
+    to: number;
+} | null {
+    let result: {
+        status: Exclude<TaskStatus, null>;
+        from: number;
+        to: number;
+    } | null = null;
+
+    node.descendants((child: any, childPos: number) => {
+        if (result) {
+            return false;
+        }
+
+        if (
+            child.type?.name === 'taskList' ||
+            child.type?.name === 'bulletList' ||
+            child.type?.name === 'orderedList'
+        ) {
+            return false;
+        }
+
+        if (!child.isText || !child.text) {
+            return;
+        }
+
+        const match = tokenMatchForText(child.text as string);
+        if (!match) {
+            return false;
+        }
+
+        const absoluteStart = pos + 1 + childPos + match.tokenStart;
+        let absoluteEnd = pos + 1 + childPos + match.tokenEnd;
+        const text = child.text as string;
+        let separatorOffset = match.tokenEnd;
+        while (text.charAt(separatorOffset) === ' ') {
+            absoluteEnd += 1;
+            separatorOffset += 1;
+        }
+
+        result = {
+            status: match.status,
+            from: absoluteStart,
+            to: absoluteEnd,
+        };
+
+        return false;
+    });
+
+    return result;
+}
+
 function hasMeaningfulTaskText(node: any): boolean {
     let hasText = false;
 
@@ -232,6 +289,22 @@ export const TaskItemStatusExtension = Extension.create({
                                 resolvedStatus = 'migrated';
                                 resolvedChecked = false;
                             } else {
+                                resolvedStatus = null;
+                                resolvedChecked = false;
+                            }
+                        }
+
+                        // Clicking the checkbox on a canceled task should reopen it.
+                        // We treat checked=true as explicit reopen intent and remove
+                        // the leading canceled token (— + separator spaces).
+                        if (
+                            isTaskNode &&
+                            resolvedStatus === 'canceled' &&
+                            resolvedChecked
+                        ) {
+                            const tokenRange = findFirstStatusTokenRange(node, pos);
+                            if (tokenRange?.status === 'canceled') {
+                                tr.insertText('', tokenRange.from, tokenRange.to);
                                 resolvedStatus = null;
                                 resolvedChecked = false;
                             }

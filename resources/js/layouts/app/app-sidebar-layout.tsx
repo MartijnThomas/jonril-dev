@@ -98,6 +98,7 @@ export default function AppSidebarLayout({
     children,
     breadcrumbs = [],
     saveStatus = null,
+    saveLastSavedAt = null,
     rightSidebar,
     statusBarContent,
     bottomPane,
@@ -141,7 +142,10 @@ export default function AppSidebarLayout({
                         />
                         <div className="min-h-0 flex-1">{children}</div>
                         {bottomPane}
-                        <AppStatusBar saveStatus={saveStatus}>
+                        <AppStatusBar
+                            saveStatus={saveStatus}
+                            lastSavedAt={saveLastSavedAt}
+                        >
                             {statusBarContent}
                         </AppStatusBar>
                     </div>
