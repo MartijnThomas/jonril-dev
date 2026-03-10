@@ -582,7 +582,7 @@ export function SimpleEditor({
     ]);
 
     return (
-        <div className="mx-auto max-w-3xl px-8">
+        <div className="w-full">
             <EditorContext.Provider value={{ editor }}>
                 <TaskMigratePicker
                     open={taskMigratePicker.open}
@@ -608,7 +608,7 @@ export function SimpleEditor({
                     }}
                 />
                 {showRelatedPanel ? (
-                    <div className="mt-4">
+                    <div className="w-full md:mx-auto md:mt-4 md:max-w-3xl md:px-8">
                         <NoteRelatedPanel
                             key={id}
                             relatedTasks={relatedTasks}
@@ -618,44 +618,50 @@ export function SimpleEditor({
                     </div>
                 ) : null}
 
-                <div className="pt-1">
-                    <DocumentProperties
-                        value={documentProperties}
-                        onChange={setDocumentProperties}
-                        onPersistRequested={() => {
-                            requestAnimationFrame(() => {
-                                saveEditor(false);
-                            });
-                        }}
-                        workspaceSuggestions={{
-                            mentions: mentionSuggestions,
-                            hashtags: hashtagSuggestions,
-                        }}
-                    />
+                <div className="w-full md:mx-auto md:max-w-3xl md:px-8">
+                    <div className="pt-0 md:pt-1">
+                        <DocumentProperties
+                            value={documentProperties}
+                            onChange={setDocumentProperties}
+                            onPersistRequested={() => {
+                                requestAnimationFrame(() => {
+                                    saveEditor(false);
+                                });
+                            }}
+                            workspaceSuggestions={{
+                                mentions: mentionSuggestions,
+                                hashtags: hashtagSuggestions,
+                            }}
+                        />
+                    </div>
                 </div>
 
-                {editor && !isMobile && <EditorBubbleToolbar editor={editor} />}
+                <div className="mx-auto w-full max-w-3xl">
+                    {editor && !isMobile && <EditorBubbleToolbar editor={editor} />}
 
-                {isMobile && (
-                    <MobileEditorToolbar
-                        mobileView={mobileView}
-                        onBack={() => setMobileView('main')}
-                        onHighlighterClick={() => setMobileView('highlighter')}
-                        onLinkClick={() => setMobileView('link')}
-                        onCommandPaletteClick={() => {
-                            window.dispatchEvent(
-                                new Event('open-command-palette'),
-                            );
-                        }}
-                        toolbarRef={toolbarRef}
-                    />
-                )}
+                    {isMobile && (
+                        <MobileEditorToolbar
+                            mobileView={mobileView}
+                            onBack={() => setMobileView('main')}
+                            onHighlighterClick={() => setMobileView('highlighter')}
+                            onLinkClick={() => setMobileView('link')}
+                            onCommandPaletteClick={() => {
+                                window.dispatchEvent(
+                                    new Event('open-command-palette'),
+                                );
+                            }}
+                            toolbarRef={toolbarRef}
+                        />
+                    )}
 
-                <EditorContent
-                    editor={editor}
-                    role="presentation"
-                    className="simple-editor-content mt-8"
-                />
+                    <div className="px-8">
+                        <EditorContent
+                            editor={editor}
+                            role="presentation"
+                            className="simple-editor-content mt-4 md:mt-8"
+                        />
+                    </div>
+                </div>
             </EditorContext.Provider>
         </div>
     );

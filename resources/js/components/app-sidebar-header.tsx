@@ -1,15 +1,19 @@
 import { router, usePage } from '@inertiajs/react';
 import { addDays, addMonths, addWeeks, addYears, format } from 'date-fns';
 import {
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
+    ChevronUp,
     PanelRightClose,
     PanelRightOpen,
 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { NoteHeaderActions } from '@/components/note-header-actions';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
 
 type JournalPageProps = {
@@ -163,6 +167,9 @@ export function AppSidebarHeader({
     rightSidebarOpen?: boolean;
     onRightSidebarToggle?: () => void;
 }) {
+    const isMobile = useIsMobile();
+    const [mobileBreadcrumbsOpen, setMobileBreadcrumbsOpen] = useState(false);
+    const mobileHeaderRef = useRef<HTMLDivElement | null>(null);
     const pageProps = usePage().props as JournalPageProps;
     const isJournal =
         pageProps.noteType === 'journal' &&
@@ -205,68 +212,127 @@ export function AppSidebarHeader({
         router.get(path, {}, { preserveState: false, preserveScroll: true });
     };
 
+    useEffect(() => {
+        if (!isMobile || !mobileBreadcrumbsOpen) {
+            return;
+        }
+
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target as Node | null;
+            if (!target) {
+                return;
+            }
+
+            if (mobileHeaderRef.current?.contains(target)) {
+                return;
+            }
+
+            setMobileBreadcrumbsOpen(false);
+        };
+
+        document.addEventListener('pointerdown', handlePointerDown);
+
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+        };
+    }, [isMobile, mobileBreadcrumbsOpen]);
+
+    const mobileTitle = breadcrumbs.at(-1)?.title ?? '';
+    const showMobileBreadcrumbToggle = isMobile && breadcrumbs.length > 1;
+
     return (
-        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 backdrop-blur-lg transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 supports-[backdrop-filter]:bg-background/90 md:px-4">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-                <SidebarTrigger className="-ml-1" />
-                <Breadcrumbs breadcrumbs={breadcrumbs} />
-            </div>
-            <div className="flex items-center gap-2">
-                {isJournal && (
-                    <div className="flex items-center gap-1">
+        <div ref={mobileHeaderRef} className="relative z-20">
+            <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 backdrop-blur-lg transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 supports-[backdrop-filter]:bg-background/90 md:px-4">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <SidebarTrigger className="-ml-1" />
+                    {showMobileBreadcrumbToggle ? (
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setMobileBreadcrumbsOpen((current) => !current)
+                            }
+                            className="flex min-w-0 items-center gap-1 text-left text-sm font-medium text-foreground"
+                            aria-expanded={mobileBreadcrumbsOpen}
+                            aria-label="Toggle breadcrumbs"
+                        >
+                            <span className="truncate">{mobileTitle}</span>
+                            {mobileBreadcrumbsOpen ? (
+                                <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            ) : (
+                                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            )}
+                        </button>
+                    ) : (
+                        <Breadcrumbs breadcrumbs={breadcrumbs} />
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    {isJournal && (
+                        <div className="flex items-center gap-1">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => navigateJournal(-1)}
+                                aria-label="Previous journal note"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => navigateJournal(1)}
+                                aria-label="Next journal note"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    )}
+                    {pageProps.noteActions ? (
+                        <NoteHeaderActions
+                            noteId={pageProps.noteActions.id}
+                            title={pageProps.noteActions.title}
+                            currentLocation={pageProps.noteActions.parent_path ?? null}
+                            currentParentId={pageProps.noteActions.parent_id ?? null}
+                            moveParentOptions={pageProps.moveParentOptions ?? []}
+                            canMove={Boolean(pageProps.noteActions.canMove)}
+                            canRename={Boolean(pageProps.noteActions.canRename)}
+                            canDelete={Boolean(pageProps.noteActions.canDelete)}
+                            canClear={Boolean(pageProps.noteActions.canClear)}
+                            dropdownSide="left"
+                        />
+                    ) : null}
+                    {rightSidebarEnabled && (
                         <Button
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7"
-                            onClick={() => navigateJournal(-1)}
-                            aria-label="Previous journal note"
+                            className="h-7 w-7 -mr-1"
+                            onClick={onRightSidebarToggle}
+                            aria-label="Toggle right sidebar"
                         >
-                            <ChevronLeft className="h-4 w-4" />
+                            {rightSidebarOpen ? (
+                                <PanelRightClose className="h-4 w-4" />
+                            ) : (
+                                <PanelRightOpen className="h-4 w-4" />
+                            )}
                         </Button>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => navigateJournal(1)}
-                            aria-label="Next journal note"
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
+                    )}
+                </div>
+            </header>
+            {showMobileBreadcrumbToggle && mobileBreadcrumbsOpen ? (
+                <div className="absolute inset-x-0 top-full z-30 border-b border-sidebar-border/60 bg-background/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/90">
+                    <div className="overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <Breadcrumbs
+                            breadcrumbs={breadcrumbs}
+                            listClassName="flex-nowrap whitespace-nowrap"
+                        />
                     </div>
-                )}
-                {pageProps.noteActions ? (
-                    <NoteHeaderActions
-                        noteId={pageProps.noteActions.id}
-                        title={pageProps.noteActions.title}
-                        currentLocation={pageProps.noteActions.parent_path ?? null}
-                        currentParentId={pageProps.noteActions.parent_id ?? null}
-                        moveParentOptions={pageProps.moveParentOptions ?? []}
-                        canMove={Boolean(pageProps.noteActions.canMove)}
-                        canRename={Boolean(pageProps.noteActions.canRename)}
-                        canDelete={Boolean(pageProps.noteActions.canDelete)}
-                        canClear={Boolean(pageProps.noteActions.canClear)}
-                        dropdownSide="left"
-                    />
-                ) : null}
-                {rightSidebarEnabled && (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={onRightSidebarToggle}
-                        aria-label="Toggle right sidebar"
-                    >
-                        {rightSidebarOpen ? (
-                            <PanelRightClose className="h-4 w-4" />
-                        ) : (
-                            <PanelRightOpen className="h-4 w-4" />
-                        )}
-                    </Button>
-                )}
-            </div>
-        </header>
+                </div>
+            ) : null}
+        </div>
     );
 }

@@ -2,6 +2,7 @@ import type { useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { Search } from 'lucide-react';
 import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { ArrowLeftIcon } from '@/components/tiptap-icons/arrow-left-icon';
 import { HighlighterIcon } from '@/components/tiptap-icons/highlighter-icon';
@@ -233,12 +234,47 @@ export function MobileEditorToolbar({
     onCommandPaletteClick,
     toolbarRef,
 }: MobileEditorToolbarProps) {
+    const [keyboardInset, setKeyboardInset] = useState(0);
+
+    useEffect(() => {
+        const updateInset = () => {
+            const viewport = window.visualViewport;
+            if (!viewport) {
+                setKeyboardInset(0);
+                return;
+            }
+
+            const inset = Math.max(
+                0,
+                window.innerHeight - (viewport.height + viewport.offsetTop),
+            );
+            setKeyboardInset(inset);
+        };
+
+        updateInset();
+        window.visualViewport?.addEventListener('resize', updateInset);
+        window.visualViewport?.addEventListener('scroll', updateInset);
+        window.addEventListener('orientationchange', updateInset);
+
+        return () => {
+            window.visualViewport?.removeEventListener('resize', updateInset);
+            window.visualViewport?.removeEventListener('scroll', updateInset);
+            window.removeEventListener('orientationchange', updateInset);
+        };
+    }, []);
+
+    const mobileToolbarStyle = useMemo<React.CSSProperties>(
+        () => ({
+            bottom: `${keyboardInset}px`,
+        }),
+        [keyboardInset],
+    );
+
     return (
         <Toolbar
             ref={toolbarRef}
-            style={{
-                bottom: 0,
-            }}
+            className="mobile-editor-toolbar"
+            style={mobileToolbarStyle}
         >
             {mobileView === 'main' ? (
                 <MainToolbarContent

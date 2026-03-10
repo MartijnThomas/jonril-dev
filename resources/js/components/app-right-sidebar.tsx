@@ -23,42 +23,46 @@ export function AppRightSidebar({
 }: AppRightSidebarProps) {
     const isMobile = useIsMobile();
 
-    return (
-        <div className="group/right-sidebar text-sidebar-foreground" data-open={open}>
-            {isMobile ? (
-                <Sheet
-                    open={open}
-                    onOpenChange={(nextOpen) => {
-                        if (!nextOpen) {
-                            onClose?.();
-                        }
-                    }}
+    if (isMobile) {
+        return (
+            <Sheet
+                open={open}
+                onOpenChange={(nextOpen) => {
+                    if (!nextOpen) {
+                        onClose?.();
+                    }
+                }}
+            >
+                <SheetHeader className="sr-only">
+                    <SheetTitle>Right sidebar</SheetTitle>
+                    <SheetDescription>
+                        Displays the right sidebar.
+                    </SheetDescription>
+                </SheetHeader>
+                <SheetContent
+                    side="right"
+                    overlayClassName="bg-black/20"
+                    className="bg-sidebar text-sidebar-foreground w-[18rem] p-0 [&>button]:hidden"
                 >
-                    <SheetHeader className="sr-only">
-                        <SheetTitle>Right sidebar</SheetTitle>
-                        <SheetDescription>Displays the right sidebar.</SheetDescription>
-                    </SheetHeader>
-                    <SheetContent
-                        side="right"
-                        overlayClassName="bg-black/20"
-                        className="bg-sidebar text-sidebar-foreground w-[18rem] p-0 [&>button]:hidden"
-                    >
-                        <div className="flex h-full w-full flex-col">
-                            <div className="h-full min-w-0 overflow-y-auto">
-                                <div className="space-y-4 md:pr-2">
-                                    <RightSidebarCalendar />
-                                    {children ? (
-                                        <section className="rounded-lg border border-sidebar-border/50 bg-background/80 p-3">
-                                            {children}
-                                        </section>
-                                    ) : null}
-                                </div>
+                    <div className="flex h-full w-full flex-col">
+                        <div className="h-full min-w-0 overflow-y-auto">
+                            <div className="space-y-4 md:pr-2">
+                                <RightSidebarCalendar />
+                                {children ? (
+                                    <section className="rounded-lg border border-sidebar-border/50 bg-background/80 p-3">
+                                        {children}
+                                    </section>
+                                ) : null}
                             </div>
                         </div>
-                    </SheetContent>
-                </Sheet>
-            ) : null}
+                    </div>
+                </SheetContent>
+            </Sheet>
+        );
+    }
 
+    return (
+        <div className="group/right-sidebar text-sidebar-foreground" data-open={open}>
             <div
                 className={cn(
                     'relative hidden h-svh w-80 bg-transparent transition-[width] duration-200 ease-linear md:block',

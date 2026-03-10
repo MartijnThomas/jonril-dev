@@ -108,6 +108,13 @@
         BlinkMacSystemFont,
         'Segoe UI',
         sans-serif;
+    font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+    .editor-ui-font {
+        font-size: 0.95rem;
+    }
 }
 
 .dark {
@@ -157,6 +164,12 @@
 
 html {
     scroll-behavior: smooth;
+}
+
+@media (max-width: 768px) {
+    html {
+        font-size: 17px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

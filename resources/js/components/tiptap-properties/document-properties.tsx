@@ -235,7 +235,7 @@ function TokenPropertyInput({
             <PopoverTrigger asChild>
                 <div
                     className={cn(
-                        'flex h-8 w-full items-center gap-1 rounded-none border-0 bg-transparent px-2 text-left text-xs shadow-none focus-within:bg-white',
+                        'flex h-8 w-full items-center gap-1 rounded-none border-0 bg-transparent px-2 text-left text-sm shadow-none focus-within:bg-white md:text-xs',
                         className,
                     )}
                 >
@@ -312,7 +312,7 @@ function TokenPropertyInput({
                             onKeyDown?.(event);
                         }}
                         placeholder={selectedTokens.length === 0 ? placeholder : ''}
-                        className="min-w-[6rem] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                        className="min-w-[6rem] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground md:text-sm"
                     />
                 </div>
             </PopoverTrigger>
@@ -854,10 +854,10 @@ export function DocumentProperties({
     };
 
     return (
-        <div className="editor-ui-font mb-4">
+        <div className="editor-ui-font mb-0 md:mb-4">
             <div
                 className={cn(
-                    'rounded-md px-2 py-2 transition-colors duration-200',
+                    'rounded-md px-8 pt-4 pb-2 transition-colors duration-200 md:px-2 md:py-2',
                     collapsed ? 'bg-transparent' : 'bg-muted/30',
                 )}
             >
@@ -865,7 +865,7 @@ export function DocumentProperties({
                     <button
                         type="button"
                         onClick={() => setCollapsed((current) => !current)}
-                        className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                        className="flex items-center gap-1.5 text-[0.78em] font-bold tracking-wide text-muted-foreground uppercase md:font-semibold"
                     >
                         {collapsed ? (
                             <ChevronRight className="h-3.5 w-3.5" />
@@ -879,10 +879,10 @@ export function DocumentProperties({
                 </div>
 
                 {collapsed && visibleEntries.length > 0 ? (
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 px-5 pb-1 text-xs text-muted-foreground">
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 px-5 pb-1 text-[0.78em] text-muted-foreground">
                         {visibleEntries.map(([key, propertyValue]) => (
                             <span key={key} className="truncate">
-                                <span className="text-[10px] tracking-[0.08em] text-muted-foreground/75 uppercase">
+                                <span className="text-[0.66em] tracking-[0.08em] text-muted-foreground/75 uppercase">
                                     {key.replaceAll('-', ' ')}
                                 </span>{' '}
                                 <span className="font-normal text-muted-foreground">
@@ -896,7 +896,7 @@ export function DocumentProperties({
                 {!collapsed && (
                     <div className="pt-2">
                         {entries.length + draftRows.length > 0 && (
-                            <div className="grid grid-cols-[minmax(120px,180px)_minmax(0,1fr)_20px_20px] items-center gap-3 border-b border-muted-foreground/40 px-1 pb-1 text-xs tracking-wide text-muted-foreground uppercase">
+                            <div className="hidden grid-cols-[minmax(120px,180px)_minmax(0,1fr)_20px_20px] items-center gap-3 border-b border-muted-foreground/40 px-1 pb-1 text-[0.78em] tracking-wide text-muted-foreground uppercase md:grid">
                                 <div className="pr-2 text-right">Key</div>
                                 <div className="pl-2">Value</div>
                                 <div />
@@ -904,7 +904,7 @@ export function DocumentProperties({
                             </div>
                         )}
 
-                        <div className="[&>*+*]:border-t [&>*+*]:border-muted-foreground/45 [&>*+*]:[border-top-style:dashed]">
+                        <div className="[&>*+*]:border-t [&>*+*]:border-border/60 md:[&>*+*]:border-muted-foreground/45 md:[&>*+*]:[border-top-style:dashed]">
                             {entries.map(([key, propertyValue]) => {
                             const rowId = `existing:${key}`;
                             const keyDraft = existingKeyDrafts[key] ?? key;
@@ -913,7 +913,7 @@ export function DocumentProperties({
                             return (
                                 <div
                                     key={key}
-                                    className="group grid grid-cols-[minmax(120px,180px)_minmax(0,1fr)_20px_20px] items-center gap-3 px-1 py-1"
+                                    className="group grid grid-cols-[minmax(78px,112px)_minmax(0,1fr)_24px_24px] items-center gap-2 px-1 py-2 md:grid-cols-[minmax(120px,180px)_minmax(0,1fr)_20px_20px] md:gap-3 md:py-1"
                                 >
                                     <Popover
                                         open={openRowId === rowId}
@@ -981,7 +981,7 @@ export function DocumentProperties({
                                                         }
                                                     }}
                                                     placeholder="Key"
-                                                    className="h-8 rounded-none border-0 border-r border-muted-foreground/45 [border-right-style:dashed] bg-transparent px-2 text-right text-xs shadow-none focus:bg-white focus-visible:ring-0"
+                                                    className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-right md:text-xs"
                                                 />
                                             </div>
                                         </PopoverAnchor>
@@ -1020,7 +1020,7 @@ export function DocumentProperties({
                                                 onPersistRequested?.();
                                             }}
                                             placeholder="Value"
-                                            className="h-8 rounded-none border-0 border-r border-muted-foreground/45 [border-right-style:dashed] bg-transparent px-2 text-left text-xs shadow-none focus:bg-white focus-visible:ring-0"
+                                            className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-xs"
                                         />
                                     ) : fieldMode === 'icon' ? (
                                         <IconPicker
@@ -1032,7 +1032,7 @@ export function DocumentProperties({
                                                 );
                                                 onPersistRequested?.();
                                             }}
-                                            className="h-8 rounded-none border-0 border-r border-muted-foreground/45 [border-right-style:dashed] bg-transparent px-2 text-left text-xs shadow-none focus-within:bg-white focus-visible:ring-0"
+                                            className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus-within:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-xs"
                                         />
                                     ) : (
                                         <TokenPropertyInput
@@ -1075,7 +1075,7 @@ export function DocumentProperties({
                                             onBlur={() => {
                                                 onPersistRequested?.();
                                             }}
-                                            className="h-8 rounded-none border-0 border-r border-muted-foreground/45 [border-right-style:dashed] bg-transparent px-2 text-left text-xs shadow-none focus:bg-white focus-visible:ring-0"
+                                            className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-xs"
                                         />
                                     )}
 
@@ -1083,7 +1083,7 @@ export function DocumentProperties({
                                         type="button"
                                         variant="ghost"
                                         size="icon"
-                                        className="h-5 w-5 rounded-sm text-muted-foreground/80"
+                                        className="h-6 w-6 rounded-sm text-muted-foreground/80 md:h-5 md:w-5"
                                         onClick={() =>
                                             togglePropertyVisibility(key)
                                         }
@@ -1104,7 +1104,7 @@ export function DocumentProperties({
                                         type="button"
                                         variant="ghost"
                                         size="icon"
-                                        className="h-5 w-5 rounded-sm text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                                        className="h-6 w-6 rounded-sm text-muted-foreground opacity-100 transition-opacity md:h-5 md:w-5 md:opacity-0 md:group-hover:opacity-100"
                                         onClick={() => removeProperty(key)}
                                     >
                                         <Trash2 className="h-3 w-3" />
@@ -1119,7 +1119,7 @@ export function DocumentProperties({
                             return (
                             <div
                                 key={row.id}
-                                className="group grid grid-cols-[minmax(120px,180px)_minmax(0,1fr)_20px_20px] items-center gap-3 px-1 py-1"
+                                className="group grid grid-cols-[minmax(78px,112px)_minmax(0,1fr)_24px_24px] items-center gap-2 px-1 py-2 md:grid-cols-[minmax(120px,180px)_minmax(0,1fr)_20px_20px] md:gap-3 md:py-1"
                             >
                                 <Popover
                                     open={openRowId === `draft:${row.id}`}
@@ -1215,7 +1215,7 @@ export function DocumentProperties({
                                                 }
                                             }}
                                             placeholder="Key"
-                                            className="h-8 rounded-none border-0 border-r border-muted-foreground/45 [border-right-style:dashed] bg-transparent px-2 text-right text-xs shadow-none focus:bg-white focus-visible:ring-0"
+                                            className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-right md:text-xs"
                                         />
                                     </PopoverTrigger>
 
@@ -1320,7 +1320,7 @@ export function DocumentProperties({
                                                 }
                                             }}
                                             placeholder="Value"
-                                            className="h-8 rounded-none border-0 border-r border-muted-foreground/45 [border-right-style:dashed] bg-transparent px-2 text-left text-xs shadow-none focus:bg-white focus-visible:ring-0"
+                                            className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-xs"
                                         />
                                     ) : fieldMode === 'icon' ? (
                                         <IconPicker
@@ -1357,7 +1357,7 @@ export function DocumentProperties({
                                                     ),
                                                 );
                                             }}
-                                            className="h-8 rounded-none border-0 border-r border-muted-foreground/45 [border-right-style:dashed] bg-transparent px-2 text-left text-xs shadow-none focus-within:bg-white focus-visible:ring-0"
+                                            className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus-within:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-xs"
                                         />
                                     ) : (
                                         <TokenPropertyInput
@@ -1466,7 +1466,7 @@ export function DocumentProperties({
                                                     ? '@mention'
                                                     : '#tag1, #tag2'
                                             }
-                                            className="h-8 rounded-none border-0 border-r border-muted-foreground/45 [border-right-style:dashed] bg-transparent px-2 text-left text-xs shadow-none focus:bg-white focus-visible:ring-0"
+                                            className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-xs"
                                         />
                                     )}
                                 </div>
@@ -1477,7 +1477,7 @@ export function DocumentProperties({
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="h-5 w-5 rounded-sm text-muted-foreground opacity-100"
+                                    className="h-6 w-6 rounded-sm text-muted-foreground opacity-100 md:h-5 md:w-5"
                                     onClick={() =>
                                         setDraftRows((current) =>
                                             current.filter(

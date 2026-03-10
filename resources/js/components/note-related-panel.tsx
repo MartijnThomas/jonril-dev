@@ -80,7 +80,7 @@ export function NoteRelatedPanel({
     >({});
 
     const relatedTitle = language === 'en' ? 'Related' : 'Gerelateerd';
-    const relatedTasksTitle = language === 'en' ? 'Related tasks' : 'Gerelateerde taken';
+    const relatedTasksTitle = language === 'en' ? 'Tasks' : 'Taken';
     const backlinksTitle = language === 'en' ? 'Backlinks' : 'Backlinks';
     const tasksEmptyText =
         language === 'en'
@@ -276,7 +276,7 @@ export function NoteRelatedPanel({
     return (
         <section
             className={cn(
-                'editor-ui-font mb-2 rounded-md px-2 py-2 transition-colors duration-200',
+                'editor-ui-font mb-0 rounded-md px-8 pt-4 pb-2 transition-colors duration-200 md:mb-2 md:px-2 md:py-2',
                 panelOpen ? 'bg-muted/30' : 'bg-transparent',
             )}
         >
@@ -284,7 +284,7 @@ export function NoteRelatedPanel({
                 <div className="flex items-center justify-between gap-2">
                     <CollapsibleTrigger asChild>
                         <button type="button" className="flex flex-1 items-center text-left">
-                            <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                            <span className="flex items-center gap-1.5 text-[0.78em] font-bold tracking-wide text-muted-foreground uppercase md:font-semibold">
                                 {panelOpen ? (
                                     <ChevronDown className="h-3.5 w-3.5" />
                                 ) : (
@@ -298,12 +298,12 @@ export function NoteRelatedPanel({
                     </CollapsibleTrigger>
                 </div>
 
-                <CollapsibleContent className="pt-2 pl-4">
+                <CollapsibleContent className="pt-2 pl-0 md:pl-4">
                     <Collapsible open={tasksOpen} onOpenChange={setTasksOpen}>
                         <div className="flex items-center justify-between gap-2">
                             <CollapsibleTrigger asChild>
                                 <button type="button" className="flex flex-1 items-center text-left">
-                                    <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                    <span className="flex items-center gap-1.5 text-[0.78em] font-semibold tracking-wide text-muted-foreground uppercase">
                                         {tasksOpen ? (
                                             <ChevronDown className="h-3.5 w-3.5" />
                                         ) : (
@@ -317,7 +317,7 @@ export function NoteRelatedPanel({
                             </CollapsibleTrigger>
                             {taskItems.length > 0 && doneOrCanceledCount > 0 ? (
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">
+                                    <span className="text-[0.78em] text-muted-foreground">
                                         {language === 'en' ? 'Only open' : 'Alleen open'}
                                     </span>
                                     <Switch
@@ -334,9 +334,9 @@ export function NoteRelatedPanel({
                             ) : null}
                         </div>
 
-                        <CollapsibleContent className="pt-2 pl-5">
+                        <CollapsibleContent className="pt-2 pl-2 md:pl-5">
                             {visibleTaskItems.length === 0 ? (
-                                <div className="px-1 pb-2 text-xs text-muted-foreground">
+                                <div className="px-1 pb-2 text-[0.78em] text-muted-foreground">
                                     {tasksEmptyText}
                                 </div>
                             ) : (
@@ -355,7 +355,7 @@ export function NoteRelatedPanel({
                                                         [group.note.id]: open,
                                                     }))
                                                 }
-                                                className="space-y-0.5 px-2 py-1.5"
+                                                className="space-y-0.5 py-1.5 md:px-2"
                                             >
                                                 <CollapsibleTrigger asChild>
                                                     <button
@@ -369,7 +369,7 @@ export function NoteRelatedPanel({
                                                         )}
                                                         <Link
                                                             href={group.note.href}
-                                                            className="text-sm font-semibold text-muted-foreground underline-offset-2 hover:underline"
+                                                            className="text-[0.95em] font-semibold text-muted-foreground underline-offset-2 hover:underline"
                                                             onClick={(event) =>
                                                                 event.stopPropagation()
                                                             }
@@ -379,18 +379,18 @@ export function NoteRelatedPanel({
                                                     </button>
                                                 </CollapsibleTrigger>
 
-                                                <CollapsibleContent className="pl-5">
+                                                <CollapsibleContent className="pl-3 md:pl-5">
                                                     {group.tasks.map((task) => (
                                                         <article
                                                             key={`${task.id}-${task.position}`}
-                                                            className="py-1 pl-1"
+                                                            className="py-1 md:pl-1"
                                                             onDoubleClick={() =>
                                                                 openTaskInNote(task)
                                                             }
                                                         >
                                                             <div className="flex items-start gap-4">
                                                                 <TaskToggleCheckbox
-                                                                    className="mt-1.5"
+                                                                    className="mt-1"
                                                                     checked={task.checked}
                                                                     status={
                                                                         task.task_status === 'canceled'
@@ -457,7 +457,7 @@ export function NoteRelatedPanel({
                                                                                 'canceled'
                                                                             }
                                                                             className={cn(
-                                                                                'text-base leading-[1.62] font-normal tracking-[-0.01em]',
+                                                                                'text-[1em] leading-[1.66] font-normal tracking-[-0.01em] md:text-base md:leading-[1.62]',
                                                                                 (task.task_status ===
                                                                                     'canceled' ||
                                                                                     task.task_status ===
@@ -493,7 +493,7 @@ export function NoteRelatedPanel({
                                 type="button"
                                 className="flex w-full items-center justify-between text-left"
                             >
-                                <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                <span className="flex items-center gap-1.5 text-[0.78em] font-semibold tracking-wide text-muted-foreground uppercase">
                                     {backlinksOpen ? (
                                         <ChevronDown className="h-3.5 w-3.5" />
                                     ) : (
@@ -508,7 +508,7 @@ export function NoteRelatedPanel({
 
                         <CollapsibleContent className="pt-2 pl-5">
                             {backlinks.length === 0 ? (
-                                <div className="px-1 pb-1 text-xs text-muted-foreground">
+                                <div className="px-1 pb-1 text-[0.78em] text-muted-foreground">
                                     {backlinksEmptyText}
                                 </div>
                             ) : (
@@ -527,7 +527,7 @@ export function NoteRelatedPanel({
                                                         [group.note.id]: open,
                                                     }))
                                                 }
-                                                className="space-y-0.5 px-2 py-1.5"
+                                                className="space-y-0.5 py-1.5 md:px-2"
                                             >
                                                 <CollapsibleTrigger asChild>
                                                     <button
@@ -539,18 +539,18 @@ export function NoteRelatedPanel({
                                                         ) : (
                                                             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                                                         )}
-                                                        <span className="text-sm font-semibold text-muted-foreground">
+                                                        <span className="text-[0.95em] font-semibold text-muted-foreground">
                                                             {group.note.title}
                                                         </span>
                                                     </button>
                                                 </CollapsibleTrigger>
 
-                                                <CollapsibleContent className="pl-5">
+                                                <CollapsibleContent className="pl-3 md:pl-5">
                                                     <ul className="space-y-1 pb-1">
                                                         {group.backlinks.map((item) => (
                                                             <li
                                                                 key={item.id}
-                                                                className="py-1 pl-1"
+                                                                className="py-1 md:pl-1"
                                                                 onDoubleClick={() =>
                                                                     openBacklinkInNote(item)
                                                                 }
