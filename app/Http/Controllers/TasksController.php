@@ -45,7 +45,6 @@ class TasksController extends Controller
             ->all();
 
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:200'],
             'workspace_id' => ['nullable', Rule::in($workspaceIds)],
             'workspace_ids' => ['nullable', 'array'],
             'workspace_ids.*' => [Rule::in($workspaceIds)],
@@ -59,17 +58,12 @@ class TasksController extends Controller
                 'uuid',
                 Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
             ],
-            'mention' => ['nullable', 'string', 'max:120'],
-            'hashtag' => ['nullable', 'string', 'max:120'],
             'date_preset' => ['nullable', Rule::in(['today', 'this_week', 'this_month', 'today_plus_7'])],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
             'status' => ['nullable', 'array'],
             'status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog', 'question'])],
-            'show_completed' => ['nullable', 'boolean'],
             'group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
-            'sort' => ['nullable', Rule::in(['updated', 'due', 'deadline', 'note', 'position'])],
-            'direction' => ['nullable', Rule::in(['asc', 'desc'])],
         ]);
 
         $selectedWorkspaceIds = collect($filters['workspace_ids'] ?? [])
@@ -118,22 +112,8 @@ class TasksController extends Controller
             ->unique()
             ->values();
 
-        // Backward compatibility for older URLs using show_completed only.
         if ($selectedStatuses->isEmpty()) {
-            if ((bool) ($filters['show_completed'] ?? false)) {
-                $selectedStatuses = collect([
-                    'open',
-                    'completed',
-                    'canceled',
-                    'migrated',
-                    'assigned',
-                    'in_progress',
-                    'starred',
-                    'backlog',
-                ]);
-            } else {
-                $selectedStatuses = collect(['open']);
-            }
+            $selectedStatuses = collect(['open']);
         }
 
         $query->where(function (Builder $statusQuery) use ($selectedStatuses): void {
@@ -159,31 +139,12 @@ class TasksController extends Controller
             }
         });
 
-        if (($filters['q'] ?? null) !== null && trim($filters['q']) !== '') {
-            $needle = trim((string) $filters['q']);
-            $query->where(function ($inner) use ($needle) {
-                $inner->where('content_text', 'like', "%{$needle}%")
-                    ->orWhere('note_title', 'like', "%{$needle}%")
-                    ->orWhere('parent_note_title', 'like', "%{$needle}%");
-            });
-        }
-
         if (! $selectedNoteScopeIds->isEmpty()) {
             $scopeIds = $selectedNoteScopeIds->all();
             $query->where(function ($inner) use ($scopeIds) {
                 $inner->whereIn('note_id', $scopeIds)
                     ->orWhereIn('parent_note_id', $scopeIds);
             });
-        }
-
-        if ($filters['mention'] ?? null) {
-            $mention = strtolower(trim((string) $filters['mention']));
-            $query->whereRaw('LOWER(mentions) LIKE ?', ["%\"{$mention}\"%"]);
-        }
-
-        if ($filters['hashtag'] ?? null) {
-            $hashtag = strtolower(trim((string) $filters['hashtag']));
-            $query->whereRaw('LOWER(hashtags) LIKE ?', ["%\"{$hashtag}\"%"]);
         }
 
         $datePreset = is_string($filters['date_preset'] ?? null)
@@ -229,10 +190,10 @@ class TasksController extends Controller
             });
         }
 
-        $sort = $filters['sort'] ?? 'due';
-        $direction = $filters['direction'] ?? 'asc';
-
-        $this->applySorting($query, $sort, $direction);
+        $query
+            ->orderByRaw('due_date IS NULL')
+            ->orderBy('due_date')
+            ->orderBy('updated_at', 'desc');
 
         $tasks = $query
             ->paginate(50)
@@ -339,19 +300,13 @@ class TasksController extends Controller
         return Inertia::render('tasks/index', [
             'tasks' => $tasks,
             'filters' => [
-                'q' => $filters['q'] ?? '',
                 'workspace_ids' => $selectedWorkspaceIds->values()->all(),
                 'note_scope_ids' => $selectedNoteScopeIds->values()->all(),
-                'mention' => $filters['mention'] ?? '',
-                'hashtag' => $filters['hashtag'] ?? '',
                 'date_preset' => $datePreset !== '' ? $datePreset : '',
                 'date_from' => $dateFrom ?? '',
                 'date_to' => $dateTo ?? '',
-                'show_completed' => (bool) ($filters['show_completed'] ?? false),
                 'group_by' => $filters['group_by'] ?? 'none',
                 'status' => $selectedStatuses->values()->all(),
-                'sort' => $sort,
-                'direction' => $direction,
             ],
             'notes' => $notes,
             'noteTreeOptions' => $noteTreeOptions,
@@ -846,23 +801,6 @@ class TasksController extends Controller
         }
 
         return $rows;
-    }
-
-    private function applySorting(Builder $query, string $sort, string $direction): void
-    {
-        match ($sort) {
-            'deadline' => $query
-                ->orderByRaw('deadline_date IS NULL')
-                ->orderBy('deadline_date', $direction)
-                ->orderBy('updated_at', 'desc'),
-            'updated' => $query->orderBy('updated_at', $direction),
-            'note' => $query->orderBy('note_title', $direction)->orderBy('position'),
-            'position' => $query->orderBy('position', $direction)->orderBy('updated_at', 'desc'),
-            default => $query
-                ->orderByRaw('due_date IS NULL')
-                ->orderBy('due_date', $direction)
-                ->orderBy('updated_at', 'desc'),
-        };
     }
 
     /**

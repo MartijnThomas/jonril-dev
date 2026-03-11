@@ -10,9 +10,8 @@ import {
     startOfWeek,
 } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { toast } from 'sonner';
 import { TaskInlineContent } from '@/components/task-inline-content';
@@ -21,7 +20,6 @@ import { TaskToggleCheckbox } from '@/components/task-toggle-checkbox';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import {
     Popover,
     PopoverContent,
@@ -88,18 +86,13 @@ type PaginatorLink = {
 };
 
 type Filters = {
-    q: string;
     workspace_ids: string[];
     note_scope_ids: string[];
-    mention: string;
-    hashtag: string;
     date_preset: '' | 'today' | 'this_week' | 'this_month' | 'today_plus_7';
     date_from: string;
     date_to: string;
     status: string[];
     group_by: 'none' | 'note' | 'date';
-    sort: 'updated' | 'due' | 'deadline' | 'note' | 'position';
-    direction: 'asc' | 'desc';
 };
 
 type Props = {
@@ -149,12 +142,13 @@ export default function TasksIndex({
     };
     const language =
         pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
-    const currentWorkspaceId =
-        typeof pageProps.currentWorkspace?.id === 'string' &&
-        pageProps.currentWorkspace.id.trim() !== ''
-            ? pageProps.currentWorkspace.id.trim()
-            : null;
     const dateLocale = language === 'en' ? enUS : nl;
+    const resultsCountLabel = t(
+        tasks.total === 1
+            ? 'tasks_index.results_count_one'
+            : 'tasks_index.results_count_other',
+        tasks.total === 1 ? ':count result' : ':count results',
+    ).replace(':count', String(tasks.total));
     const breadcrumbs: BreadcrumbItem[] = [
         {
             title: t('tasks_index.heading', 'Tasks'),
@@ -177,6 +171,7 @@ export default function TasksIndex({
     });
     const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
     const [showAllSelectionPills, setShowAllSelectionPills] = useState(false);
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [relativeNow, setRelativeNow] = useState<number>(() => Date.now());
 
     useEffect(() => {
@@ -264,16 +259,9 @@ export default function TasksIndex({
     );
 
     const toQuery = (state: Filters) => {
-        const query: Record<string, string | number | string[]> = {
-            sort: state.sort,
-            direction: state.direction,
-        };
-
-        if (state.q.trim() !== '') query.q = state.q.trim();
+        const query: Record<string, string | number | string[]> = {};
         if (state.workspace_ids.length > 0) query.workspace_ids = state.workspace_ids;
         if (state.note_scope_ids.length > 0) query.note_scope_ids = state.note_scope_ids;
-        if (state.mention.trim() !== '') query.mention = state.mention.trim();
-        if (state.hashtag.trim() !== '') query.hashtag = state.hashtag.trim();
         if (state.date_preset) {
             query.date_preset = state.date_preset;
         } else {
@@ -301,45 +289,6 @@ export default function TasksIndex({
         if (submit) {
             visitWithFilters(merged);
         }
-    };
-
-    const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        visitWithFilters(localFilters);
-    };
-
-    const resetFilters = () => {
-        const reset: Filters = {
-            q: '',
-            workspace_ids: currentWorkspaceId ? [currentWorkspaceId] : [],
-            note_scope_ids: [],
-            mention: '',
-            hashtag: '',
-            date_preset: '',
-            date_from: '',
-            date_to: '',
-            status: ['open'],
-            group_by: 'none',
-            sort: 'due',
-            direction: 'asc',
-        };
-
-        setLocalFilters(reset);
-        visitWithFilters(reset);
-    };
-
-    const toggleDateSort = (field: 'due' | 'deadline') => {
-        if (localFilters.sort !== field) {
-            applyFilters({ sort: field, direction: 'asc' }, true);
-            return;
-        }
-
-        applyFilters(
-            {
-                direction: localFilters.direction === 'asc' ? 'desc' : 'asc',
-            },
-            true,
-        );
     };
 
     const updateTaskChecked = (
@@ -920,6 +869,56 @@ export default function TasksIndex({
     const visibleSelectionPills = selectionPills.slice(0, 3);
     const hiddenSelectionPills = selectionPills.slice(3);
     const showAllWorkspaceNotePill = selectionPills.length === 0;
+    const activeFilterPills = useMemo(() => {
+        const pills: Array<{ key: string; label: string }> = [];
+
+        selectionPills.forEach((pill, index) => {
+            pills.push({
+                key: `scope-${pill.key}-${index}`,
+                label: pill.label,
+            });
+        });
+
+        const hasNonDefaultStatus =
+            localFilters.status.length !== 1 || localFilters.status[0] !== 'open';
+        if (hasNonDefaultStatus) {
+            statusSelectionLabels.forEach((label, index) => {
+                pills.push({
+                    key: `status-${label}-${index}`,
+                    label,
+                });
+            });
+        }
+
+        if (hasDateFilterSelection) {
+            pills.push({
+                key: 'period',
+                label: formatDateRangeLabel(),
+            });
+        }
+
+        if (localFilters.group_by !== 'none') {
+            pills.push({
+                key: 'grouping',
+                label: groupingSelectionLabel,
+            });
+        }
+
+        return pills;
+    }, [
+        formatDateRangeLabel,
+        groupingSelectionLabel,
+        hasDateFilterSelection,
+        localFilters.group_by,
+        localFilters.status,
+        selectionPills,
+        statusSelectionLabels,
+    ]);
+    const visibleActiveFilterPills = activeFilterPills.slice(0, 4);
+    const hiddenActiveFilterPillCount = Math.max(
+        0,
+        activeFilterPills.length - visibleActiveFilterPills.length,
+    );
 
     const toggleNoteNodeExpanded = (id: string) => {
         setExpandedNoteNodeIds((current) => {
@@ -1067,31 +1066,74 @@ export default function TasksIndex({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={t('tasks_index.page_title', 'Tasks')} />
 
-            <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 md:p-6">
-                <section className="rounded-xl bg-card p-4">
+            <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 p-4 pt-2 md:p-6">
+                <section className="mx-auto w-full max-w-3xl rounded-xl bg-card p-4 pt-3 md:p-6">
                     <div className="flex items-center justify-between gap-2">
-                        <h1 className="text-lg font-semibold">
-                            {t('tasks_index.heading', 'Tasks')}
-                        </h1>
-                        <span className="text-sm text-muted-foreground">
-                            {t('tasks_index.results_count', ':count results').replace(
-                                ':count',
-                                String(tasks.total),
-                            )}
-                        </span>
+                        <div className="min-w-0">
+                            <div className="flex items-baseline gap-2">
+                                <h1 className="text-2xl font-semibold leading-none md:text-3xl">
+                                    {t('tasks_index.heading', 'Tasks')}
+                                </h1>
+                                <span className="shrink-0 text-[11px] leading-none text-muted-foreground md:text-sm">
+                                    {resultsCountLabel}
+                                </span>
+                            </div>
+                            {activeFilterPills.length > 0 ? (
+                                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1 md:hidden">
+                                    {visibleActiveFilterPills.map((pill) => (
+                                        <span
+                                            key={pill.key}
+                                            className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                                        >
+                                            <span className="truncate">{pill.label}</span>
+                                        </span>
+                                    ))}
+                                    {hiddenActiveFilterPillCount > 0 ? (
+                                        <span className="inline-flex items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                            +{hiddenActiveFilterPillCount}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="icon"
+                                className="h-10 w-10 rounded-full border-0 bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground md:hidden"
+                                onClick={() =>
+                                    setMobileFiltersOpen((current) => !current)
+                                }
+                                aria-label={t(
+                                    'tasks_index.toggle_filters',
+                                    'Toggle filters',
+                                )}
+                                aria-pressed={mobileFiltersOpen}
+                            >
+                                <Filter className="h-5 w-5" />
+                            </Button>
+                        </div>
                     </div>
 
-                    <form onSubmit={onSubmit} className="mt-4 space-y-3">
-                        <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
+                    <div
+                        className={cn(
+                            'mt-4 space-y-3',
+                            mobileFiltersOpen ? 'block' : 'hidden md:block',
+                        )}
+                    >
+                        <div className="grid grid-cols-1 gap-3 md:flex md:items-start md:justify-between md:gap-4">
                             <Popover>
-                                <div className="md:col-span-5">
+                                <div className="min-w-0">
                                     <PopoverTrigger asChild>
                                         <button
                                             type="button"
-                                            className="inline-flex items-center gap-1 text-sm font-medium text-foreground/90 hover:text-foreground"
+                                            className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
                                         >
-                                            <span className="inline-flex items-center gap-1">
-                                                {t('tasks_index.workspace_note_picker_trigger', 'Workspaces & notes')}
+                                            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                                                <span className="truncate">
+                                                    {t('tasks_index.workspace_note_picker_trigger', 'Workspaces & notes')}
+                                                </span>
                                                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                             </span>
                                         </button>
@@ -1222,14 +1264,16 @@ export default function TasksIndex({
                             </Popover>
 
                             <Popover>
-                                <div className="md:col-span-2">
+                                <div className="min-w-0">
                                     <PopoverTrigger asChild>
                                         <button
                                             type="button"
-                                            className="inline-flex items-center gap-1 text-sm font-medium text-foreground/90 hover:text-foreground"
+                                            className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
                                         >
-                                            <span className="inline-flex items-center gap-1">
-                                                {t('tasks_index.status_filter_label', 'Status')}
+                                            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                                                <span className="truncate">
+                                                    {t('tasks_index.status_filter_label', 'Status')}
+                                                </span>
                                                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                             </span>
                                         </button>
@@ -1301,14 +1345,16 @@ export default function TasksIndex({
                             </Popover>
 
                             <Popover>
-                                <div className="md:col-span-3">
+                                <div className="min-w-0">
                                     <PopoverTrigger asChild>
                                         <button
                                             type="button"
-                                            className="inline-flex items-center gap-1 text-sm font-medium text-foreground/90 hover:text-foreground"
+                                            className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
                                         >
-                                            <span className="inline-flex items-center gap-1">
-                                                {t('tasks_index.period_label', 'Period')}
+                                            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                                                <span className="truncate">
+                                                    {t('tasks_index.period_label', 'Period')}
+                                                </span>
                                                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                             </span>
                                         </button>
@@ -1404,14 +1450,16 @@ export default function TasksIndex({
                             </Popover>
 
                             <Popover>
-                                <div className="md:col-span-2">
+                                <div className="min-w-0">
                                     <PopoverTrigger asChild>
                                         <button
                                             type="button"
-                                            className="inline-flex items-center gap-1 text-sm font-medium text-foreground/90 hover:text-foreground"
+                                            className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
                                         >
-                                            <span className="inline-flex items-center gap-1">
-                                                {t('tasks_index.grouping_label', 'Grouping')}
+                                            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                                                <span className="truncate">
+                                                    {t('tasks_index.grouping_label', 'Grouping')}
+                                                </span>
                                                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                             </span>
                                         </button>
@@ -1474,104 +1522,7 @@ export default function TasksIndex({
                             </Popover>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-2">
-                            <Input
-                                value={localFilters.q}
-                                onChange={(event) =>
-                                    applyFilters({ q: event.target.value })
-                                }
-                                placeholder={t(
-                                    'tasks_index.search_placeholder',
-                                    'Search tasks, notes, parents...',
-                                )}
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
-                            <Input
-                                value={localFilters.mention}
-                                onChange={(event) =>
-                                    applyFilters({
-                                        mention: event.target.value,
-                                    })
-                                }
-                                placeholder={t(
-                                    'tasks_index.mention_placeholder',
-                                    'Mention',
-                                )}
-                                className="md:col-span-3"
-                            />
-
-                            <Input
-                                value={localFilters.hashtag}
-                                onChange={(event) =>
-                                    applyFilters({
-                                        hashtag: event.target.value,
-                                    })
-                                }
-                                placeholder={t(
-                                    'tasks_index.hashtag_placeholder',
-                                    'Hashtag',
-                                )}
-                                className="md:col-span-3"
-                            />
-
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="md:col-span-3"
-                                onClick={() => toggleDateSort('due')}
-                            >
-                                <span className="inline-flex items-center gap-1">
-                                    {t('tasks_index.sort_due', 'Due')}
-                                    {localFilters.sort === 'due' ? (
-                                        localFilters.direction === 'asc' ? (
-                                            <ArrowUp className="h-3.5 w-3.5" />
-                                        ) : (
-                                            <ArrowDown className="h-3.5 w-3.5" />
-                                        )
-                                    ) : (
-                                        <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                    )}
-                                </span>
-                            </Button>
-
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="md:col-span-3"
-                                onClick={() => toggleDateSort('deadline')}
-                            >
-                                <span className="inline-flex items-center gap-1">
-                                    {t('tasks_index.sort_deadline', 'Deadline')}
-                                    {localFilters.sort === 'deadline' ? (
-                                        localFilters.direction === 'asc' ? (
-                                            <ArrowUp className="h-3.5 w-3.5" />
-                                        ) : (
-                                            <ArrowDown className="h-3.5 w-3.5" />
-                                        )
-                                    ) : (
-                                        <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                    )}
-                                </span>
-                            </Button>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-end gap-3 pt-3">
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={resetFilters}
-                                >
-                                    {t('tasks_index.reset', 'Reset')}
-                                </Button>
-                                <Button type="submit">
-                                    {t('tasks_index.apply', 'Apply')}
-                                </Button>
-                            </div>
-                        </div>
-                    </form>
+                    </div>
                 </section>
 
                 <section className="editor-ui-font mx-auto w-full max-w-3xl rounded-xl bg-card p-4 md:p-6">
