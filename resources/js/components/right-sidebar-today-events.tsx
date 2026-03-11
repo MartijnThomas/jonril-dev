@@ -1,7 +1,12 @@
+import { router } from '@inertiajs/react';
 import { isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
+import { Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import {
     COLOR_SWATCH_THEME_BG_CLASS,
+    COLOR_SWATCH_THEME_BORDER_CLASS,
 } from '@/components/color-swatch-picker';
 import {
     formatClockTime,
@@ -15,9 +20,13 @@ type SidebarTodayEvent = {
     id: string;
     type: 'timeblock' | 'event';
     title: string;
+    note_id: string | null;
     starts_at: string | null;
     ends_at: string | null;
     location: string | null;
+    task_block_id: string | null;
+    task_checked: boolean | null;
+    task_status: string | null;
     note_title: string | null;
     href: string | null;
 };
@@ -161,68 +170,29 @@ export function RightSidebarTodayEvents({
     const headerLabel = capitalizeFirst(
         formatLongDate(parsedAnchorDate, locale, preferredLongDateFormat),
     );
+    const [eventItems, setEventItems] = useState<SidebarTodayEvent[]>(events);
+    const [pendingTaskBlockIds, setPendingTaskBlockIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        setEventItems(events);
+    }, [events]);
     const emptyLabel =
         language === 'en' ? 'No events planned for this day.' : 'Geen events gepland voor deze dag.';
-    const normalizedTimeblockColor = (timeblockColor ?? 'sky').toLowerCase();
+    const normalizedTimeblockColor = (
+        timeblockColor ??
+        workspaceColor ??
+        'sky'
+    ).toLowerCase();
     const normalizedWorkspaceColor = (workspaceColor ?? 'slate').toLowerCase();
     const timeblockAccent = (COLOR_SWATCH_THEME_BG_CLASS as Record<string, string>)[normalizedTimeblockColor]
         ?? COLOR_SWATCH_THEME_BG_CLASS.sky;
     const workspaceAccent = (COLOR_SWATCH_THEME_BG_CLASS as Record<string, string>)[normalizedWorkspaceColor]
         ?? COLOR_SWATCH_THEME_BG_CLASS.slate;
-    const timeblockTintClass = (() => {
-        const tintMap: Record<string, string> = {
-            black: 'bg-zinc-100 dark:bg-zinc-900',
-            slate: 'bg-slate-100 dark:bg-slate-900',
-            zinc: 'bg-zinc-100 dark:bg-zinc-900',
-            stone: 'bg-stone-100 dark:bg-stone-900',
-            red: 'bg-red-50 dark:bg-red-950',
-            orange: 'bg-orange-50 dark:bg-orange-950',
-            amber: 'bg-amber-50 dark:bg-amber-950',
-            yellow: 'bg-yellow-50 dark:bg-yellow-950',
-            lime: 'bg-lime-50 dark:bg-lime-950',
-            green: 'bg-green-50 dark:bg-green-950',
-            emerald: 'bg-emerald-50 dark:bg-emerald-950',
-            teal: 'bg-teal-50 dark:bg-teal-950',
-            cyan: 'bg-cyan-50 dark:bg-cyan-950',
-            sky: 'bg-sky-50 dark:bg-sky-950',
-            blue: 'bg-blue-50 dark:bg-blue-950',
-            indigo: 'bg-indigo-50 dark:bg-indigo-950',
-            violet: 'bg-violet-50 dark:bg-violet-950',
-            purple: 'bg-purple-50 dark:bg-purple-950',
-            fuchsia: 'bg-fuchsia-50 dark:bg-fuchsia-950',
-            pink: 'bg-pink-50 dark:bg-pink-950',
-            rose: 'bg-rose-50 dark:bg-rose-950',
-        };
-
-        return tintMap[normalizedTimeblockColor] ?? tintMap.sky;
-    })();
-    const workspaceTintClass = (() => {
-        const tintMap: Record<string, string> = {
-            black: 'bg-zinc-100 dark:bg-zinc-900',
-            slate: 'bg-slate-100 dark:bg-slate-900',
-            zinc: 'bg-zinc-100 dark:bg-zinc-900',
-            stone: 'bg-stone-100 dark:bg-stone-900',
-            red: 'bg-red-50 dark:bg-red-950',
-            orange: 'bg-orange-50 dark:bg-orange-950',
-            amber: 'bg-amber-50 dark:bg-amber-950',
-            yellow: 'bg-yellow-50 dark:bg-yellow-950',
-            lime: 'bg-lime-50 dark:bg-lime-950',
-            green: 'bg-green-50 dark:bg-green-950',
-            emerald: 'bg-emerald-50 dark:bg-emerald-950',
-            teal: 'bg-teal-50 dark:bg-teal-950',
-            cyan: 'bg-cyan-50 dark:bg-cyan-950',
-            sky: 'bg-sky-50 dark:bg-sky-950',
-            blue: 'bg-blue-50 dark:bg-blue-950',
-            indigo: 'bg-indigo-50 dark:bg-indigo-950',
-            violet: 'bg-violet-50 dark:bg-violet-950',
-            purple: 'bg-purple-50 dark:bg-purple-950',
-            fuchsia: 'bg-fuchsia-50 dark:bg-fuchsia-950',
-            pink: 'bg-pink-50 dark:bg-pink-950',
-            rose: 'bg-rose-50 dark:bg-rose-950',
-        };
-
-        return tintMap[normalizedWorkspaceColor] ?? tintMap.slate;
-    })();
+    const timeblockBorder = (COLOR_SWATCH_THEME_BORDER_CLASS as Record<string, string>)[normalizedTimeblockColor]
+        ?? COLOR_SWATCH_THEME_BORDER_CLASS.sky;
+    const workspaceBorder = (COLOR_SWATCH_THEME_BORDER_CLASS as Record<string, string>)[normalizedWorkspaceColor]
+        ?? COLOR_SWATCH_THEME_BORDER_CLASS.slate;
+    const neutralCardClass = 'bg-zinc-100 dark:bg-zinc-900';
 
     return (
         <section className="mt-2 border-t border-sidebar-border/60 px-2 pt-2 pb-2">
@@ -236,13 +206,83 @@ export function RightSidebarTodayEvents({
                 <p className="px-1 py-2 text-sm text-muted-foreground/90">{emptyLabel}</p>
             ) : (
                 <ul className="space-y-1.5">
-                    {events.map((event, index) => {
+                    {eventItems.map((event, index) => {
+                        const linkedBlockId =
+                            typeof event.task_block_id === 'string' && event.task_block_id !== ''
+                                ? event.task_block_id
+                                : null;
+                        const isTaskTogglePending =
+                            linkedBlockId !== null && pendingTaskBlockIds.includes(linkedBlockId);
+                        const toggleLinkedTask = () => {
+                            if (
+                                !linkedBlockId ||
+                                !event.note_id ||
+                                isTaskTogglePending
+                            ) {
+                                return;
+                            }
+
+                            const isBacklogPromotion =
+                                event.task_status === 'backlog' &&
+                                event.task_checked !== true;
+                            const nextChecked = isBacklogPromotion
+                                ? false
+                                : !event.task_checked;
+
+                            setPendingTaskBlockIds((current) => [...current, linkedBlockId]);
+                            router.patch(
+                                '/tasks/checked',
+                                {
+                                    note_id: event.note_id,
+                                    block_id: linkedBlockId,
+                                    checked: nextChecked,
+                                    promote_backlog: isBacklogPromotion,
+                                },
+                                {
+                                    preserveState: true,
+                                    preserveScroll: true,
+                                    replace: true,
+                                    onSuccess: () => {
+                                        setEventItems((current) =>
+                                            current.map((item) =>
+                                                item.id === event.id
+                                                    ? {
+                                                        ...item,
+                                                        task_checked: nextChecked,
+                                                        task_status: isBacklogPromotion
+                                                            ? null
+                                                            : item.task_status,
+                                                    }
+                                                    : item,
+                                            ),
+                                        );
+                                    },
+                                    onError: () => {
+                                        toast.error(
+                                            language === 'en'
+                                                ? 'Failed to update task status.'
+                                                : 'Bijwerken van taakstatus mislukt.',
+                                        );
+                                    },
+                                    onFinish: () => {
+                                        setPendingTaskBlockIds((current) =>
+                                            current.filter((blockId) => blockId !== linkedBlockId),
+                                        );
+                                    },
+                                },
+                            );
+                        };
+
                         const timeRange = formatTimeRange(
                             event.starts_at,
                             event.ends_at,
                             preferredTimeFormat,
                         );
                         const isTimeblock = event.type === 'timeblock';
+                        const hasLinkedTask = isTimeblock && !!event.task_block_id;
+                        const isLinkedTaskCompleted = hasLinkedTask && Boolean(event.task_checked);
+                        const checkboxBorderClass = isTimeblock ? timeblockBorder : workspaceBorder;
+                        const checkboxAccentClass = isTimeblock ? timeblockAccent : workspaceAccent;
                         const durationLabel = isTimeblock
                             ? formatDurationLabel(event.starts_at, event.ends_at, language)
                             : null;
@@ -256,25 +296,61 @@ export function RightSidebarTodayEvents({
                                     <article
                                         className={cn(
                                             'rounded-lg px-3 py-2 shadow-sm',
-                                            workspaceTintClass,
-                                            isTimeblock ? timeblockTintClass : null,
+                                            neutralCardClass,
                                             !isTimeblock && 'border border-sidebar-border/60',
+                                            isLinkedTaskCompleted && 'opacity-70',
                                         )}
                                     >
                                         <div className="flex items-center gap-3">
-                                            <span
-                                                className={cn(
-                                                    'h-12 w-1 shrink-0 rounded-full',
-                                                    isTimeblock ? timeblockAccent : workspaceAccent,
-                                                )}
-                                                aria-hidden="true"
-                                            />
+                                            {!hasLinkedTask ? (
+                                                <span
+                                                    className={cn(
+                                                        'h-12 w-1 shrink-0 rounded-full',
+                                                        isTimeblock ? timeblockAccent : workspaceAccent,
+                                                    )}
+                                                    aria-hidden="true"
+                                                />
+                                            ) : null}
                                             <div className="min-w-0">
-                                                <p className="truncate text-[0.88rem] leading-tight font-medium text-foreground">
-                                                    {event.title}
-                                                </p>
+                                                <div className="flex items-center gap-2">
+                                                    {hasLinkedTask ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={toggleLinkedTask}
+                                                            disabled={isTaskTogglePending}
+                                                            aria-label={
+                                                                language === 'en'
+                                                                    ? 'Toggle linked task'
+                                                                    : 'Gekoppelde taak wisselen'
+                                                            }
+                                                            className={cn(
+                                                                'inline-flex h-[1.125rem] w-[1.125rem] shrink-0 items-center justify-center rounded-full border-2 transition-opacity',
+                                                                isTaskTogglePending && 'opacity-60',
+                                                                isLinkedTaskCompleted && 'opacity-70',
+                                                                isLinkedTaskCompleted
+                                                                    ? cn(checkboxBorderClass, checkboxAccentClass, 'text-white dark:text-black')
+                                                                    : cn(checkboxBorderClass, 'bg-transparent text-transparent'),
+                                                            )}
+                                                        >
+                                                            <Check className="h-3.5 w-3.5 stroke-[4]" />
+                                                        </button>
+                                                    ) : null}
+                                                    <p
+                                                        className={cn(
+                                                            'truncate text-[0.88rem] leading-tight font-medium text-foreground',
+                                                            isLinkedTaskCompleted && 'line-through',
+                                                        )}
+                                                    >
+                                                        {event.title}
+                                                    </p>
+                                                </div>
 
-                                                <p className="mt-1 truncate text-[0.72rem] text-zinc-600 dark:text-zinc-300">
+                                                <p
+                                                    className={cn(
+                                                        'mt-1 truncate text-[0.72rem] text-zinc-600 dark:text-zinc-300',
+                                                        hasLinkedTask && 'ml-[1.625rem]',
+                                                    )}
+                                                >
                                                     {timeRange}
                                                     {durationLabel ? ` (${durationLabel})` : ''}
                                                     {event.location ? `  @${event.location}` : ''}

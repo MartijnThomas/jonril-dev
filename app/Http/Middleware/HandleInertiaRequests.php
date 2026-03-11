@@ -286,9 +286,13 @@ class HandleInertiaRequests extends Middleware
      *     id:string,
      *     type:string,
      *     title:string,
+     *     note_id:string|null,
      *     starts_at:string|null,
      *     ends_at:string|null,
      *     location:string|null,
+     *     task_block_id:string|null,
+     *     task_checked:bool|null,
+     *     task_status:string|null,
      *     note_title:string|null,
      *     href:string|null
      *   }>
@@ -325,9 +329,13 @@ class HandleInertiaRequests extends Middleware
                     'id' => $event->id,
                     'type' => $isTimeblock ? 'timeblock' : 'event',
                     'title' => (string) $event->title,
+                    'note_id' => $event->note_id,
                     'starts_at' => $event->starts_at?->toIso8601String(),
                     'ends_at' => $event->ends_at?->toIso8601String(),
                     'location' => $timeblock instanceof Timeblock ? $timeblock->location : null,
+                    'task_block_id' => $timeblock instanceof Timeblock ? $timeblock->task_block_id : null,
+                    'task_checked' => $timeblock instanceof Timeblock ? $timeblock->task_checked : null,
+                    'task_status' => $timeblock instanceof Timeblock ? $timeblock->task_status : null,
                     'note_title' => $event->note?->display_title,
                     'href' => $event->note ? $this->noteSlugService->urlFor($event->note) : null,
                 ];

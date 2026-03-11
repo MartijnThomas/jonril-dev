@@ -1046,6 +1046,211 @@ test('update falls back to first text line when no h1 exists', function () {
     expect($note->title)->toBe('First line');
 });
 
+test('json save returns updated slug url after h1 title change', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Old title',
+        'slug' => 'old-title',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 1],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Old title'],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1],
+                'content' => [
+                    ['type' => 'text', 'text' => 'New title'],
+                ],
+            ],
+            [
+                'type' => 'paragraph',
+                'content' => [
+                    ['type' => 'text', 'text' => 'Body'],
+                ],
+            ],
+        ],
+    ];
+
+    $response = $this
+        ->actingAs($user)
+        ->putJson(route('notes.update', [
+            'workspace' => $workspace->slug,
+            'note' => $note->slug,
+        ], absolute: false), [
+            'content' => $content,
+            'properties' => [],
+            'save_mode' => 'auto',
+        ]);
+
+    $response
+        ->assertOk()
+        ->assertJson([
+            'note_url' => scoped_note_url($workspace, 'new-title'),
+            'note_update_url' => scoped_note_url($workspace, $note->id),
+        ]);
+
+    $note->refresh();
+    expect($note->slug)->toBe('new-title');
+});
+
+test('regular save updates content with unchanged h1 and keeps slug stable', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Stable title',
+        'slug' => 'stable-title',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 1],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Stable title'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Old body'],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1],
+                'content' => [
+                    ['type' => 'text', 'text' => 'Stable title'],
+                ],
+            ],
+            [
+                'type' => 'paragraph',
+                'content' => [
+                    ['type' => 'text', 'text' => 'Updated body'],
+                ],
+            ],
+        ],
+    ];
+
+    $url = route('notes.update', [
+        'workspace' => $workspace->slug,
+        'note' => $note->slug,
+    ], absolute: false);
+
+    $response = $this
+        ->actingAs($user)
+        ->from(scoped_note_url($workspace, $note->slug))
+        ->put($url, [
+            'content' => $content,
+            'properties' => [],
+            'save_mode' => 'auto',
+        ]);
+
+    $response->assertRedirect(scoped_note_url($workspace, $note->slug));
+
+    $note->refresh();
+    expect($note->slug)->toBe('stable-title');
+    expect(data_get($note->content, 'content.1.content.0.text'))->toBe('Updated body');
+});
+
+test('inertia xhr save does not return json response payload', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => Carbon::parse('2026-03-11'),
+        'title' => 'Woensdag 11 maart 2026',
+        'slug' => '2026-03-11',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 1],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Woensdag 11 maart 2026'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Old body'],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $updatedContent = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1],
+                'content' => [
+                    ['type' => 'text', 'text' => 'Woensdag 11 maart 2026'],
+                ],
+            ],
+            [
+                'type' => 'paragraph',
+                'content' => [
+                    ['type' => 'text', 'text' => 'Updated body'],
+                ],
+            ],
+        ],
+    ];
+
+    $response = $this
+        ->actingAs($user)
+        ->from(scoped_journal_url($workspace, 'daily', '2026-03-11'))
+        ->withHeaders([
+            'X-Inertia' => 'true',
+            'X-Requested-With' => 'XMLHttpRequest',
+            'X-Inertia-Version' => 'test-version',
+            'Accept' => 'text/html, application/xhtml+xml',
+        ])
+        ->put(route('notes.update', [
+            'workspace' => $workspace->slug,
+            'note' => $note->id,
+        ], absolute: false), [
+            'content' => $updatedContent,
+            'properties' => [],
+            'save_mode' => 'auto',
+        ]);
+
+    $response->assertStatus(303);
+    expect($response->headers->get('content-type'))->not->toContain('application/json');
+
+    $note->refresh();
+    expect(data_get($note->content, 'content.1.content.0.text'))->toBe('Updated body');
+});
+
 test('property title overrides derived title through model accessor', function () {
     $user = User::factory()->create();
     $note = $user->notes()->create([

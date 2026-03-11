@@ -257,6 +257,14 @@ class NotesController extends Controller
             saveMode: $data['save_mode'] ?? 'auto',
         );
 
+        $isInertiaRequest = $request->header('X-Inertia') !== null;
+        if ($request->expectsJson() && ! $isInertiaRequest) {
+            return response()->json([
+                'note_url' => $this->noteSlugService->urlFor($resolved),
+                'note_update_url' => $this->noteSlugService->updateUrlFor($resolved),
+            ]);
+        }
+
         return Inertia::back();
     }
 

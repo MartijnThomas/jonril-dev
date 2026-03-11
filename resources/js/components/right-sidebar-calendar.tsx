@@ -37,9 +37,13 @@ type JournalPageProps = {
         id: string;
         type: 'timeblock' | 'event';
         title: string;
+        note_id: string | null;
         starts_at: string | null;
         ends_at: string | null;
         location: string | null;
+        task_block_id: string | null;
+        task_checked: boolean | null;
+        task_status: string | null;
         note_title: string | null;
         href: string | null;
     }>;

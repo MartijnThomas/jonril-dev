@@ -19,6 +19,22 @@ type UseEditorSaveProps = {
     includeTimeblocks?: boolean;
 };
 
+function getCookie(name: string): string | null {
+    if (typeof document === 'undefined') {
+        return null;
+    }
+
+    const match = document.cookie
+        .split('; ')
+        .find((part) => part.startsWith(`${name}=`));
+
+    if (!match) {
+        return null;
+    }
+
+    return decodeURIComponent(match.split('=').slice(1).join('='));
+}
+
 function sanitizeProperties(
     properties: DocumentPropertiesValue,
 ): DocumentPropertiesValue {
@@ -42,6 +58,70 @@ function sanitizeProperties(
     return next;
 }
 
+function collectNodeText(node: unknown): string {
+    if (!node || typeof node !== 'object') {
+        return '';
+    }
+
+    const value = node as {
+        type?: unknown;
+        text?: unknown;
+        attrs?: { label?: unknown };
+        content?: unknown;
+    };
+
+    if (value.type === 'text' && typeof value.text === 'string') {
+        return value.text;
+    }
+
+    if (value.type === 'mention' && typeof value.attrs?.label === 'string') {
+        return value.attrs.label;
+    }
+
+    if (!Array.isArray(value.content)) {
+        return '';
+    }
+
+    return value.content.map((child) => collectNodeText(child)).join('');
+}
+
+function extractFirstHeadingTitle(json: unknown): string {
+    if (!json || typeof json !== 'object') {
+        return '';
+    }
+
+    const root = json as { content?: unknown };
+    const nodes = Array.isArray(root.content) ? root.content : [];
+
+    for (const node of nodes) {
+        if (!node || typeof node !== 'object') {
+            continue;
+        }
+
+        const candidate = node as {
+            type?: unknown;
+            attrs?: { level?: unknown };
+        };
+        const isH1 =
+            candidate.type === 'heading' &&
+            Number(candidate.attrs?.level ?? 0) === 1;
+
+        if (isH1) {
+            return collectNodeText(node).trim();
+        }
+    }
+
+    return '';
+}
+
+export function resolveEditorSaveFlow(
+    lastSavedTitle: string,
+    nextDocumentJson: unknown,
+): 'json' | 'inertia' {
+    const currentTitle = extractFirstHeadingTitle(nextDocumentJson);
+    return currentTitle !== lastSavedTitle ? 'json' : 'inertia';
+}
+
 export function useEditorSave({
     editor,
     noteId,
@@ -52,18 +132,24 @@ export function useEditorSave({
 }: UseEditorSaveProps) {
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSavedContentRef = useRef<string>('');
+    const lastSavedTitleRef = useRef<string>('');
     const lastSavedPropertiesRef = useRef<string>(JSON.stringify(properties));
     const propertiesRef = useRef<DocumentPropertiesValue>(properties);
     const saveEditorRef = useRef<(force?: boolean) => void>(() => {});
     const pendingSaveRef = useRef(false);
     const pendingForceRef = useRef(false);
     const isSavingRef = useRef(false);
+    const noteUpdateUrlRef = useRef(noteUpdateUrl);
     const [status, setStatus] = useState<EditorSaveStatus>('ready');
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
     useEffect(() => {
         propertiesRef.current = properties;
     }, [properties]);
+
+    useEffect(() => {
+        noteUpdateUrlRef.current = noteUpdateUrl;
+    }, [noteUpdateUrl]);
 
     const saveEditor = useCallback(
         (force = false) => {
@@ -75,6 +161,7 @@ export function useEditorSave({
             const serialized = JSON.stringify(json);
             const sanitizedProperties = sanitizeProperties(propertiesRef.current);
             const serializedProperties = JSON.stringify(sanitizedProperties);
+            const currentTitle = extractFirstHeadingTitle(json);
             const timeblocks = includeTimeblocks
                 ? editor.storage.timeblock?.timeblocks ?? []
                 : [];
@@ -100,44 +187,122 @@ export function useEditorSave({
             isSavingRef.current = true;
             setStatus('saving');
 
+            const payload = {
+                content: json,
+                properties: sanitizedProperties,
+                ...(includeTimeblocks
+                    ? { timeblocks_json: serializedTimeblocks }
+                    : {}),
+                save_mode: force ? 'manual' : 'auto',
+            };
+            const saveFlow = resolveEditorSaveFlow(lastSavedTitleRef.current, json);
+            const xsrfToken = getCookie('XSRF-TOKEN');
+
+            const finishSave = () => {
+                isSavingRef.current = false;
+
+                if (pendingSaveRef.current) {
+                    const shouldForce = pendingForceRef.current;
+                    pendingSaveRef.current = false;
+                    pendingForceRef.current = false;
+                    saveEditorRef.current(shouldForce);
+                }
+            };
+
+            const markSaveSuccess = () => {
+                lastSavedContentRef.current = serialized;
+                lastSavedPropertiesRef.current = serializedProperties;
+                lastSavedTitleRef.current = currentTitle;
+                setLastSavedAt(Date.now());
+                setStatus('ready');
+            };
+
+            if (saveFlow === 'json') {
+                void fetch(noteUpdateUrlRef.current, {
+                    method: 'PUT',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        ...(xsrfToken
+                            ? { 'X-XSRF-TOKEN': xsrfToken }
+                            : {}),
+                    },
+                    body: JSON.stringify(payload),
+                })
+                    .then(async (response) => {
+                        if (!response.ok) {
+                            throw new Error(`Save failed: ${response.status}`);
+                        }
+
+                        const data = (await response.json().catch(() => ({}))) as {
+                            note_url?: string | null;
+                            note_update_url?: string | null;
+                        };
+
+                        const nextNoteUrl =
+                            typeof data.note_url === 'string' && data.note_url.trim() !== ''
+                                ? data.note_url.trim()
+                                : null;
+                        const nextUpdateUrl =
+                            typeof data.note_update_url === 'string' &&
+                            data.note_update_url.trim() !== ''
+                                ? data.note_update_url.trim()
+                                : null;
+
+                        if (nextUpdateUrl) {
+                            noteUpdateUrlRef.current = nextUpdateUrl;
+                        }
+
+                        if (
+                            nextNoteUrl &&
+                            typeof window !== 'undefined' &&
+                            window.location.pathname !== new URL(nextNoteUrl, window.location.origin).pathname
+                        ) {
+                            const current = new URL(window.location.href);
+                            const next = new URL(nextNoteUrl, window.location.origin);
+                            next.hash = current.hash;
+                            window.history.replaceState(
+                                window.history.state,
+                                '',
+                                `${next.pathname}${next.search}${next.hash}`,
+                            );
+                        }
+
+                        markSaveSuccess();
+                    })
+                    .catch(() => {
+                        setStatus('error');
+                    })
+                    .finally(() => {
+                        finishSave();
+                    });
+
+                return;
+            }
+
             router.put(
-                noteUpdateUrl,
+                noteUpdateUrlRef.current,
+                payload,
                 {
-                    content: json,
-                    properties: sanitizedProperties,
-                    ...(includeTimeblocks
-                        ? { timeblocks_json: serializedTimeblocks }
-                        : {}),
-                    save_mode: force ? 'manual' : 'auto',
-                },
-                {
-                    preserveState: true,
                     preserveScroll: true,
+                    preserveState: true,
                     replace: true,
-                    showProgress: false,
+                    showProgress: force,
                     onSuccess: () => {
-                        lastSavedContentRef.current = serialized;
-                        lastSavedPropertiesRef.current = serializedProperties;
-                        setLastSavedAt(Date.now());
-                        setStatus('ready');
+                        markSaveSuccess();
                     },
                     onError: () => {
                         setStatus('error');
                     },
                     onFinish: () => {
-                        isSavingRef.current = false;
-
-                        if (pendingSaveRef.current) {
-                            const shouldForce = pendingForceRef.current;
-                            pendingSaveRef.current = false;
-                            pendingForceRef.current = false;
-                            saveEditorRef.current(shouldForce);
-                        }
+                        finishSave();
                     },
                 },
             );
         },
-        [editor, includeTimeblocks, noteUpdateUrl],
+        [editor, includeTimeblocks],
     );
 
     useEffect(() => {
@@ -160,6 +325,7 @@ export function useEditorSave({
         }
 
         lastSavedContentRef.current = JSON.stringify(editor.getJSON());
+        lastSavedTitleRef.current = extractFirstHeadingTitle(editor.getJSON());
         lastSavedPropertiesRef.current = JSON.stringify(propertiesRef.current);
         isSavingRef.current = false;
         pendingSaveRef.current = false;
