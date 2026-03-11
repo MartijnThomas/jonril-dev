@@ -10,6 +10,7 @@ import UniqueID from '@tiptap/extension-unique-id';
 import { CharacterCount, Selection } from '@tiptap/extensions';
 import { StarterKit } from '@tiptap/starter-kit';
 
+import { BulletListDashInputExtension } from '@/components/tiptap-extension/bullet-list-dash-input-extension';
 import { HeadingAnchorIdExtension } from '@/components/tiptap-extension/heading-anchor-id-extension';
 import { ListItemPriorityExtension } from '@/components/tiptap-extension/list-item-priority-extension';
 import { ListItemWithPriority } from '@/components/tiptap-extension/list-item-with-priority-extension';
@@ -18,6 +19,7 @@ import {
 } from '@/components/tiptap-extension/note-title-icon-extension';
 import { TaskItemWithDates } from '@/components/tiptap-extension/task-item-dates-extension';
 import { TaskItemStatusExtension } from '@/components/tiptap-extension/task-item-status-extension';
+import { TaskListAsteriskInputExtension } from '@/components/tiptap-extension/task-list-asterisk-input-extension';
 import { TaskMigrationMetaExtension } from '@/components/tiptap-extension/task-migration-meta-extension';
 import { TimeblockExtension } from '@/components/tiptap-extension/timeblock-extension';
 import { WikiLinkMark } from '@/components/tiptap-extension/wiki-link-mark-extension';
@@ -203,16 +205,19 @@ export function createSimpleEditorExtensions({
         StarterKit.configure({
             horizontalRule: false,
             listItem: false,
+            bulletList: false,
             link: {
                 openOnClick: false,
                 enableClickSelection: true,
             },
         }),
+        BulletListDashInputExtension,
         ListItemWithPriority.configure({}),
         WikiLinkMark,
         HorizontalRule,
         TextAlignExtension.configure({ types: ['heading', 'paragraph'] }),
         TaskList,
+        TaskListAsteriskInputExtension,
         TaskItemWithDates.configure({ nested: true, displayLocale }),
         Highlight.configure({ multicolor: true }),
         Image,
