@@ -33,7 +33,7 @@ export interface UseListDropdownMenuConfig {
   editor?: Editor | null
   /**
    * The list types to display in the dropdown.
-   * @default ["bulletList", "orderedList", "taskList"]
+   * @default ["bulletList", "orderedList", "taskList", "checkList"]
    */
   types?: ListType[]
   /**
@@ -64,6 +64,11 @@ export const listOptions: ListOption[] = [
     label: "Task List",
     type: "taskList",
     icon: ListTodoIcon,
+  },
+  {
+    label: "Checklist",
+    type: "checkList",
+    icon: ListIcon,
   },
 ]
 
@@ -168,7 +173,7 @@ export function getActiveListType(
 export function useListDropdownMenu(config?: UseListDropdownMenuConfig) {
   const {
     editor: providedEditor,
-    types = ["bulletList", "orderedList", "taskList"],
+    types = ["bulletList", "orderedList", "taskList", "checkList"],
     hideWhenUnavailable = false,
   } = config || {}
 

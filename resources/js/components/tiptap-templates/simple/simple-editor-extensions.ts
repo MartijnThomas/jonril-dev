@@ -11,6 +11,9 @@ import { CharacterCount, Selection } from '@tiptap/extensions';
 import { StarterKit } from '@tiptap/starter-kit';
 
 import { BulletListDashInputExtension } from '@/components/tiptap-extension/bullet-list-dash-input-extension';
+import { CheckItem } from '@/components/tiptap-extension/check-item-extension';
+import { CheckList } from '@/components/tiptap-extension/check-list-extension';
+import { CheckListPlusInputExtension } from '@/components/tiptap-extension/check-list-plus-input-extension';
 import { HeadingAnchorIdExtension } from '@/components/tiptap-extension/heading-anchor-id-extension';
 import { ListItemPriorityExtension } from '@/components/tiptap-extension/list-item-priority-extension';
 import { ListItemWithPriority } from '@/components/tiptap-extension/list-item-with-priority-extension';
@@ -181,6 +184,8 @@ export function createSimpleEditorExtensions({
                 'paragraph',
                 'taskList',
                 'taskItem',
+                'checkList',
+                'checkItem',
                 'bulletList',
                 'orderedList',
                 'listItem',
@@ -216,6 +221,9 @@ export function createSimpleEditorExtensions({
         WikiLinkMark,
         HorizontalRule,
         TextAlignExtension.configure({ types: ['heading', 'paragraph'] }),
+        CheckList,
+        CheckItem.configure({ nested: true }),
+        CheckListPlusInputExtension,
         TaskList,
         TaskListAsteriskInputExtension,
         TaskItemWithDates.configure({ nested: true, displayLocale }),

@@ -2,11 +2,19 @@ import { TaskItem } from '@tiptap/extension-list';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import {
+    canLiftRegularListItemSafelyInTaskContext,
+    canLiftCheckItemSafelyInTaskContext,
     createDefaultNestedBulletInTaskItem,
+    isInNestedTaskListInTaskItem,
+    isInsideNestedContextListInTaskItem,
     isInsideRegularNestedListInTaskItem,
     joinTaskParagraphOnBackspace,
     shouldLiftRegularNestedListItemOnBackspace,
     toggleNestedListInTaskItem,
+    promoteCheckItemToRegularListItemInTaskContext,
+    promoteRegularListItemToTaskItemInTaskContext,
+    promoteTaskItemToRegularListItemInTaskContext,
+    toggleNestedTaskListInTaskItem,
 } from '@/lib/task-item-nested-list';
 
 declare module '@tiptap/extension-list' {
@@ -452,6 +460,21 @@ function buildTokenDecorations(
     return DecorationSet.create(doc, decorations);
 }
 
+type ActiveListNodeType = 'checkItem' | 'taskItem' | 'listItem' | null;
+
+function getActiveListNodeTypeAtSelection(editor: any): ActiveListNodeType {
+    const { $from } = editor.state.selection;
+
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+        const name = $from.node(depth).type.name;
+        if (name === 'checkItem' || name === 'taskItem' || name === 'listItem') {
+            return name;
+        }
+    }
+
+    return null;
+}
+
 export const TaskItemWithDates = TaskItem.extend({
     addOptions() {
         const parentOptions = this.parent?.();
@@ -637,15 +660,78 @@ export const TaskItemWithDates = TaskItem.extend({
                 return createDefaultNestedBulletInTaskItem(this.editor);
             },
             'Shift-Tab': () => {
+                const activeListNodeType = getActiveListNodeTypeAtSelection(
+                    this.editor,
+                );
                 if (
                     this.editor.isActive('taskItem') &&
-                    isInsideRegularNestedListInTaskItem(this.editor)
+                    isInsideNestedContextListInTaskItem(this.editor)
                 ) {
+                    const isCheckItem = activeListNodeType === 'checkItem';
+                    const isRegularListItem = activeListNodeType === 'listItem';
+                    const isTaskOnly = activeListNodeType === 'taskItem';
+                    const canLift = isCheckItem
+                        ? canLiftCheckItemSafelyInTaskContext(this.editor)
+                        : isRegularListItem
+                            ? canLiftRegularListItemSafelyInTaskContext(
+                                  this.editor,
+                              )
+                            : false;
+
+                    if (!canLift) {
+                        if (isCheckItem) {
+                            const promoted =
+                                promoteCheckItemToRegularListItemInTaskContext(
+                                    this.editor,
+                                );
+                            if (promoted) {
+                                return true;
+                            }
+
+                            const lifted = this.editor
+                                .chain()
+                                .focus()
+                                .liftListItem('checkItem')
+                                .run();
+                            return lifted || true;
+                        }
+
+                        if (isRegularListItem) {
+                            const promoted =
+                                promoteRegularListItemToTaskItemInTaskContext(
+                                    this.editor,
+                                );
+                            return promoted || true;
+                        }
+
+                        if (isTaskOnly) {
+                            const promoted =
+                                promoteTaskItemToRegularListItemInTaskContext(
+                                    this.editor,
+                                );
+                            return promoted || true;
+                        }
+
+                        return true;
+                    }
+
+                    const nestedItemType = isCheckItem
+                        ? 'checkItem'
+                        : isTaskOnly
+                            ? 'taskItem'
+                            : 'listItem';
                     return this.editor
                         .chain()
                         .focus()
-                        .liftListItem('listItem')
+                        .liftListItem(nestedItemType)
                         .run();
+                }
+
+                if (
+                    this.editor.isActive('taskItem') &&
+                    !isInNestedTaskListInTaskItem(this.editor)
+                ) {
+                    return true;
                 }
 
                 return typeof parentShiftTab === 'function'
@@ -653,15 +739,78 @@ export const TaskItemWithDates = TaskItem.extend({
                     : false;
             },
             'Mod-Shift-Tab': () => {
+                const activeListNodeType = getActiveListNodeTypeAtSelection(
+                    this.editor,
+                );
                 if (
                     this.editor.isActive('taskItem') &&
-                    isInsideRegularNestedListInTaskItem(this.editor)
+                    isInsideNestedContextListInTaskItem(this.editor)
                 ) {
+                    const isCheckItem = activeListNodeType === 'checkItem';
+                    const isRegularListItem = activeListNodeType === 'listItem';
+                    const isTaskOnly = activeListNodeType === 'taskItem';
+                    const canLift = isCheckItem
+                        ? canLiftCheckItemSafelyInTaskContext(this.editor)
+                        : isRegularListItem
+                            ? canLiftRegularListItemSafelyInTaskContext(
+                                  this.editor,
+                              )
+                            : false;
+
+                    if (!canLift) {
+                        if (isCheckItem) {
+                            const promoted =
+                                promoteCheckItemToRegularListItemInTaskContext(
+                                    this.editor,
+                                );
+                            if (promoted) {
+                                return true;
+                            }
+
+                            const lifted = this.editor
+                                .chain()
+                                .focus()
+                                .liftListItem('checkItem')
+                                .run();
+                            return lifted || true;
+                        }
+
+                        if (isRegularListItem) {
+                            const promoted =
+                                promoteRegularListItemToTaskItemInTaskContext(
+                                    this.editor,
+                                );
+                            return promoted || true;
+                        }
+
+                        if (isTaskOnly) {
+                            const promoted =
+                                promoteTaskItemToRegularListItemInTaskContext(
+                                    this.editor,
+                                );
+                            return promoted || true;
+                        }
+
+                        return true;
+                    }
+
+                    const nestedItemType = isCheckItem
+                        ? 'checkItem'
+                        : isTaskOnly
+                            ? 'taskItem'
+                            : 'listItem';
                     return this.editor
                         .chain()
                         .focus()
-                        .liftListItem('listItem')
+                        .liftListItem(nestedItemType)
                         .run();
+                }
+
+                if (
+                    this.editor.isActive('taskItem') &&
+                    !isInNestedTaskListInTaskItem(this.editor)
+                ) {
+                    return true;
                 }
 
                 return typeof parentModShiftTab === 'function'
@@ -669,11 +818,64 @@ export const TaskItemWithDates = TaskItem.extend({
                     : false;
             },
             Backspace: () => {
+                const { selection } = this.editor.state;
+                const atTextStart =
+                    selection.empty &&
+                    selection.$from.parent.isTextblock &&
+                    selection.$from.parentOffset === 0;
+                const activeListNodeType = getActiveListNodeTypeAtSelection(
+                    this.editor,
+                );
+
+                if (activeListNodeType === 'taskItem' && atTextStart) {
+                    const promoted =
+                        promoteTaskItemToRegularListItemInTaskContext(
+                            this.editor,
+                        );
+                    if (promoted) {
+                        return true;
+                    }
+
+                    const lifted = this.editor
+                        .chain()
+                        .focus()
+                        .liftListItem('taskItem')
+                        .run();
+                    if (lifted) {
+                        return true;
+                    }
+                }
+
                 if (!shouldLiftRegularNestedListItemOnBackspace(this.editor)) {
                     return joinTaskParagraphOnBackspace(this.editor);
                 }
 
-                return this.editor.chain().focus().liftListItem('listItem').run();
+                const isCheckItem = activeListNodeType === 'checkItem';
+                const canLift = isCheckItem
+                    ? canLiftCheckItemSafelyInTaskContext(this.editor)
+                    : canLiftRegularListItemSafelyInTaskContext(this.editor);
+
+                if (!canLift) {
+                    if (isCheckItem) {
+                        const promoted =
+                            promoteCheckItemToRegularListItemInTaskContext(
+                                this.editor,
+                            );
+                        return promoted || true;
+                    }
+                    const promoted =
+                        promoteRegularListItemToTaskItemInTaskContext(
+                            this.editor,
+                        );
+                    return promoted || true;
+                }
+
+                const nestedItemType = isCheckItem ? 'checkItem' : 'listItem';
+                return this.editor
+                    .chain()
+                    .focus()
+                    .liftListItem(nestedItemType)
+                    .run();
             },
             'Mod-Shift-8': () => {
                 if (!this.editor.isActive('taskItem')) {
@@ -688,6 +890,13 @@ export const TaskItemWithDates = TaskItem.extend({
                 }
 
                 return toggleNestedListInTaskItem(this.editor, 'orderedList');
+            },
+            'Mod-Shift-9': () => {
+                if (!this.editor.isActive('taskItem')) {
+                    return false;
+                }
+
+                return toggleNestedTaskListInTaskItem(this.editor);
             },
         };
     },

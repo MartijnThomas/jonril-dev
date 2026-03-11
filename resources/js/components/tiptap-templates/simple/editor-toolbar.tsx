@@ -87,7 +87,7 @@ export function MainToolbarContent({
             <ToolbarGroup>
                 <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
                 <ListDropdownMenu
-                    types={['bulletList', 'orderedList', 'taskList']}
+                    types={['bulletList', 'orderedList', 'taskList', 'checkList']}
                     portal={isMobile}
                 />
                 <BlockquoteButton />

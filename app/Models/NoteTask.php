@@ -26,6 +26,7 @@ class NoteTask extends Model
         'priority',
         'content_text',
         'render_fragments',
+        'children',
         'due_date',
         'deadline_date',
         'journal_date',
@@ -48,6 +49,7 @@ class NoteTask extends Model
             'deadline_date' => 'date',
             'journal_date' => 'date',
             'render_fragments' => 'array',
+            'children' => 'array',
             'mentions' => 'array',
             'hashtags' => 'array',
         ];

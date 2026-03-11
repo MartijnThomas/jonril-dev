@@ -129,3 +129,71 @@ test('reindex tasks command rebuilds task index for notes', function () {
     expect(NoteTask::query()->where('note_id', $noteId)->where('position', 5)->value('task_status'))->toBe('in_progress');
     expect(NoteTask::query()->where('note_id', $noteId)->where('position', 5)->value('started_at'))->not->toBeNull();
 });
+
+test('reindex tasks stores nested children separately from parent task text', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $noteId = (string) Str::uuid();
+
+    DB::table('notes')->insert([
+        'id' => $noteId,
+        'workspace_id' => $workspace?->id,
+        'title' => 'Nested index note',
+        'type' => 'note',
+        'content' => json_encode([
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => (string) Str::uuid(),
+                        'checked' => false,
+                    ],
+                    'content' => [
+                        [
+                            'type' => 'paragraph',
+                            'content' => [
+                                ['type' => 'text', 'text' => 'Parent task only'],
+                            ],
+                        ],
+                        [
+                            'type' => 'bulletList',
+                            'content' => [[
+                                'type' => 'listItem',
+                                'content' => [[
+                                    'type' => 'paragraph',
+                                    'content' => [
+                                        ['type' => 'text', 'text' => 'Nested bullet child'],
+                                    ],
+                                ]],
+                            ]],
+                        ],
+                    ],
+                ]],
+            ]],
+        ]),
+        'properties' => json_encode([]),
+        'parent_id' => null,
+        'slug' => 'nested-index-note',
+        'journal_granularity' => null,
+        'journal_date' => null,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->artisan('notes:reindex-tasks')->assertSuccessful();
+
+    /** @var NoteTask $task */
+    $task = NoteTask::query()
+        ->where('note_id', $noteId)
+        ->firstOrFail();
+
+    expect($task->content_text)->toBe('Parent task only');
+    expect($task->content_text)->not->toContain('Nested bullet child');
+    expect($task->children)->toBeArray();
+    expect(data_get($task->children, '0.content_text'))->toBe('Nested bullet child');
+    expect(data_get($task->children, '0.list_type'))->toBe('bulletList');
+    expect(data_get($task->children, '0.type'))->toBe('listItem');
+});

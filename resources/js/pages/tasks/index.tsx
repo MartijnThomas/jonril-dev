@@ -81,6 +81,7 @@ type TaskItem = {
     priority: 'high' | 'medium' | 'normal' | null;
     content: string;
     render_fragments: TaskRenderFragment[];
+    children?: TaskChildItem[];
     due_date: string | null;
     deadline_date: string | null;
     journal_date: string | null;
@@ -107,6 +108,20 @@ type TaskItem = {
     };
     updated_at: string | null;
     created_at: string | null;
+};
+
+type TaskChildItem = {
+    type: 'taskItem' | 'listItem' | 'checkItem';
+    list_type: 'taskList' | 'bulletList' | 'orderedList' | 'checkList';
+    block_id: string | null;
+    checked: boolean | null;
+    content_text: string;
+    render_fragments: TaskRenderFragment[];
+    mentions: string[];
+    hashtags: string[];
+    due_date: string | null;
+    deadline_date: string | null;
+    children: TaskChildItem[];
 };
 
 type PaginatorLink = {
@@ -211,6 +226,7 @@ export default function TasksIndex({
     const [showAllSelectionPills, setShowAllSelectionPills] = useState(false);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [relativeNow, setRelativeNow] = useState<number>(() => Date.now());
+    const [expandedTaskIds, setExpandedTaskIds] = useState<number[]>([]);
     const [savePresetOpen, setSavePresetOpen] = useState(false);
     const [presetName, setPresetName] = useState('');
     const [presetFavorite, setPresetFavorite] = useState(false);
@@ -631,7 +647,154 @@ export default function TasksIndex({
         }
     };
 
-    const renderTaskMetadataAndPath = (task: TaskItem) => {
+    const taskVisualStatus = (
+        task: Pick<TaskItem, 'task_status' | 'checked'>,
+    ): 'open' | 'completed' | 'canceled' | 'migrated' | 'in_progress' | 'backlog' => {
+        if (task.task_status === 'canceled') {
+            return 'canceled';
+        }
+
+        if (task.task_status === 'migrated') {
+            return 'migrated';
+        }
+
+        if (task.task_status === 'in_progress') {
+            return 'in_progress';
+        }
+
+        if (task.task_status === 'backlog') {
+            return 'backlog';
+        }
+
+        return task.checked ? 'completed' : 'open';
+    };
+
+    const hasTaskChildren = (task: TaskItem) =>
+        Array.isArray(task.children) && task.children.length > 0;
+
+    const toggleExpandedTask = (taskId: number) => {
+        setExpandedTaskIds((current) =>
+            current.includes(taskId)
+                ? current.filter((id) => id !== taskId)
+                : [...current, taskId],
+        );
+    };
+
+    const renderTaskChildren = (
+        children: TaskChildItem[],
+        level = 1,
+    ): JSX.Element | null => {
+        if (!children.length) {
+            return null;
+        }
+
+        return (
+            <ul className={cn('mt-1 space-y-1.5', level > 1 && 'mt-0.5')}>
+                {children.map((child, index) => {
+                    const lineThrough = child.checked === true;
+                    const showCheck = child.type === 'taskItem' || child.type === 'checkItem';
+                    const markerIsSquare = child.type === 'checkItem';
+                    const markerWrapClass =
+                        child.type === 'taskItem'
+                            ? 'mt-[5px]'
+                            : child.type === 'checkItem'
+                              ? 'mt-[4px]'
+                              : child.list_type === 'orderedList'
+                                ? 'mt-[5px]'
+                                : 'mt-[1px]';
+                    const childStatusToken = child.render_fragments.find(
+                        (fragment) =>
+                            fragment.type === 'status_token' && fragment.status,
+                    )?.status;
+                    const childTaskStatus: TaskItem['task_status'] =
+                        childStatusToken === 'canceled' ||
+                        childStatusToken === 'migrated' ||
+                        childStatusToken === 'in_progress' ||
+                        childStatusToken === 'backlog' ||
+                        childStatusToken === 'assigned' ||
+                        childStatusToken === 'starred' ||
+                        childStatusToken === 'deferred'
+                            ? childStatusToken
+                            : null;
+                    const childVisualStatus = taskVisualStatus({
+                        task_status: childTaskStatus,
+                        checked: child.checked === true,
+                    });
+
+                    return (
+                        <li key={`${child.block_id ?? child.content_text}-${level}-${index}`}>
+                            <div className="flex items-start gap-2">
+                                <span
+                                    className={cn(
+                                        markerWrapClass,
+                                        'w-5 shrink-0 text-muted-foreground opacity-55',
+                                    )}
+                                >
+                                    {child.type === 'taskItem' ? (
+                                        <TaskToggleCheckbox
+                                            checked={child.checked === true}
+                                            status={childVisualStatus}
+                                            disabled={false}
+                                            ariaLabel=""
+                                            onCheckedChange={() => undefined}
+                                            className="pointer-events-none"
+                                        />
+                                    ) : showCheck ? (
+                                        <span
+                                            className={cn(
+                                                'inline-block size-3.5 border-[1.5px] border-[#efb019]',
+                                                markerIsSquare ? 'rounded-[4px]' : 'rounded-full',
+                                                child.checked &&
+                                                    'bg-[#efb019] shadow-[inset_0_0_0_2px_var(--background)]',
+                                            )}
+                                        />
+                                    ) : (
+                                        <span className={cn(child.list_type !== 'orderedList' && 'text-[1.05rem] leading-none')}>
+                                            {child.list_type === 'orderedList' ? '1.' : '•'}
+                                        </span>
+                                    )}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <TaskInlineContent
+                                        fragments={
+                                            child.render_fragments.length > 0
+                                                ? child.render_fragments
+                                                : [
+                                                      {
+                                                          type: 'text',
+                                                          text:
+                                                              child.content_text ||
+                                                              t(
+                                                                  'tasks_index.untitled_task',
+                                                                  'Untitled task',
+                                                              ),
+                                                      },
+                                                  ]
+                                        }
+                                        language={language}
+                                        className={cn(
+                                            'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em] text-foreground opacity-55',
+                                            lineThrough && 'line-through opacity-70',
+                                        )}
+                                        priorityStyle="range"
+                                        hidePriorityTokens
+                                        hideStatusTokens
+                                    />
+                                    {renderTaskChildren(child.children, level + 1)}
+                                </div>
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
+        );
+    };
+
+    const renderTaskMetadataAndPath = (
+        task: TaskItem,
+        options?: { showPath?: boolean },
+    ) => {
+        const showPath = options?.showPath ?? true;
         const metadata: Array<{
             key: string;
             label: string;
@@ -714,23 +877,138 @@ export default function TasksIndex({
                         ))}
                     </div>
                 ) : null}
-                <div className="mt-1 text-xs text-muted-foreground">
-                    {getWorkspacePathSegment(task) ? (
-                        <span>
-                            {getWorkspacePathSegment(task)} /{' '}
-                        </span>
-                    ) : null}
-                    {task.note.parent_title
-                        ? `${task.note.parent_title} / `
-                        : ''}
-                    <Link
-                        href={task.note.href}
-                        className="text-foreground underline-offset-2 hover:underline"
-                    >
-                        {task.note.title}
-                    </Link>
-                </div>
+                {showPath ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                        {getWorkspacePathSegment(task) ? (
+                            <span>
+                                {getWorkspacePathSegment(task)} /{' '}
+                            </span>
+                        ) : null}
+                        {task.note.parent_title
+                            ? `${task.note.parent_title} / `
+                            : ''}
+                        <Link
+                            href={task.note.href}
+                            className="text-foreground underline-offset-2 hover:underline"
+                        >
+                            {task.note.title}
+                        </Link>
+                    </div>
+                ) : null}
             </>
+        );
+    };
+
+    const renderTaskRow = (
+        task: TaskItem,
+        key?: string | number,
+        options?: { showPath?: boolean },
+    ) => {
+        const hasChildren = hasTaskChildren(task);
+        const isExpanded = expandedTaskIds.includes(task.id);
+
+        return (
+            <div
+                key={key ?? task.id}
+                className={cn(
+                    'flex items-start gap-3 rounded-md px-2 py-2 transition-[background-color,padding,border-radius] duration-200 ease-out',
+                    hasChildren && isExpanded && 'bg-muted/40',
+                )}
+            >
+                <TaskToggleCheckbox
+                    className="mt-1.5"
+                    checked={task.checked}
+                    status={taskVisualStatus(task)}
+                    disabled={
+                        pendingTaskIds.includes(task.id) ||
+                        task.task_status === 'canceled' ||
+                        task.task_status === 'migrated'
+                    }
+                    ariaLabel={t(
+                        'tasks_index.toggle_task_aria',
+                        'Toggle task :task',
+                    ).replace(':task', task.content || String(task.id))}
+                    onCheckedChange={() => toggleTaskChecked(task)}
+                />
+                <div className="min-w-0 flex-1 pt-[1px]">
+                    <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <TaskInlineContent
+                                        fragments={
+                                            task.render_fragments.length > 0
+                                                ? task.render_fragments
+                                                : [
+                                              {
+                                                  type: 'text',
+                                                  text:
+                                                      task.content ||
+                                                      t(
+                                                          'tasks_index.untitled_task',
+                                                          'Untitled task',
+                                                      ),
+                                              },
+                                          ]
+                                }
+                                language={language}
+                                canceled={task.task_status === 'canceled'}
+                                className={cn(
+                                    'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
+                                    (task.task_status === 'canceled' ||
+                                        task.task_status === 'migrated' ||
+                                        task.checked) &&
+                                        'task-inline--faded',
+                                )}
+                                        priorityStyle="range"
+                                        hidePriorityTokens
+                                        hideStatusTokens
+                                    />
+                                </div>
+                                {hasChildren ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleExpandedTask(task.id)}
+                                        className="mt-[2px] inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        aria-label={
+                                            isExpanded
+                                                ? t(
+                                                      'tasks_index.collapse_children',
+                                                      'Collapse nested items',
+                                                  )
+                                                : t(
+                                                      'tasks_index.expand_children',
+                                                      'Expand nested items',
+                                                  )
+                                        }
+                                    >
+                                        {isExpanded ? (
+                                            <ChevronDown className="size-3.5" />
+                                        ) : (
+                                            <ChevronRight className="size-3.5" />
+                                        )}
+                                    </button>
+                                ) : null}
+                            </div>
+                            {renderTaskMetadataAndPath(task, options)}
+                        </div>
+                    </div>
+                    {hasChildren ? (
+                        <div
+                            className={cn(
+                                'grid transition-[grid-template-rows,opacity,margin] duration-200 ease-out',
+                                isExpanded
+                                    ? 'mt-1 ml-2 grid-rows-[1fr] opacity-100'
+                                    : 'mt-0 ml-0 grid-rows-[0fr] opacity-0',
+                            )}
+                        >
+                            <div className="overflow-hidden">
+                                {renderTaskChildren(task.children ?? [], 1)}
+                            </div>
+                        </div>
+                    ) : null}
+                </div>
+            </div>
         );
     };
 
@@ -1890,88 +2168,7 @@ export default function TasksIndex({
                     ) : (
                         <div className="space-y-5">
                             {localFilters.group_by === 'none'
-                                ? tasks.data.map((task) => (
-                                      <div key={task.id} className="flex items-start gap-3 py-1.5">
-                                          <TaskToggleCheckbox
-                                              className="mt-1.5"
-                                              checked={task.checked}
-                                              status={
-                                                  task.task_status === 'canceled'
-                                                      ? 'canceled'
-                                                      : task.task_status === 'migrated'
-                                                        ? 'migrated'
-                                                        : task.task_status === 'in_progress'
-                                                          ? 'in_progress'
-                                                        : task.task_status === 'backlog'
-                                                          ? 'backlog'
-                                                        : task.checked
-                                                          ? 'completed'
-                                                          : 'open'
-                                              }
-                                              disabled={
-                                                  pendingTaskIds.includes(task.id) ||
-                                                  task.task_status === 'canceled' ||
-                                                  task.task_status === 'migrated'
-                                              }
-                                              ariaLabel={t(
-                                                  'tasks_index.toggle_task_aria',
-                                                  'Toggle task :task',
-                                              ).replace(
-                                                  ':task',
-                                                  task.content || String(task.id),
-                                              )}
-                                              onCheckedChange={() =>
-                                                  toggleTaskChecked(task)
-                                              }
-                                          />
-                                          <div className="min-w-0 flex-1 pt-[1px]">
-                                              <p
-                                                  className={cn(
-                                                      'text-base leading-[1.62]',
-                                                      task.task_status === 'canceled' &&
-                                                          'line-through opacity-70',
-                                                      task.task_status === 'migrated' &&
-                                                          'opacity-70',
-                                                      task.task_status !== 'canceled' &&
-                                                          task.task_status !== 'migrated' &&
-                                                          task.checked &&
-                                                          'line-through opacity-70',
-                                                  )}
-                                              >
-                                                  <TaskInlineContent
-                                                      fragments={
-                                                          task.render_fragments.length > 0
-                                                              ? task.render_fragments
-                                                              : [
-                                                                    {
-                                                                        type: 'text',
-                                                                        text:
-                                                                            task.content ||
-                                                                            t(
-                                                                                'tasks_index.untitled_task',
-                                                                                'Untitled task',
-                                                                            ),
-                                                                    },
-                                                                ]
-                                                      }
-                                                      language={language}
-                                                      canceled={task.task_status === 'canceled'}
-                                                      className={cn(
-                                                          'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
-                                                          (task.task_status === 'canceled' ||
-                                                              task.task_status === 'migrated' ||
-                                                              task.checked) &&
-                                                              'task-inline--faded',
-                                                      )}
-                                                      priorityStyle="range"
-                                                      hidePriorityTokens
-                                                      hideStatusTokens
-                                                  />
-                                              </p>
-                                              {renderTaskMetadataAndPath(task)}
-                                          </div>
-                                      </div>
-                                  ))
+                                ? tasks.data.map((task) => renderTaskRow(task))
                                 : localFilters.group_by === 'date'
                                   ? groupedTasksByDate.map((group) => (
                                       <div key={group.key} className="space-y-1.5">
@@ -1979,91 +2176,12 @@ export default function TasksIndex({
                                               {formatGroupDate(group.date)}
                                           </h3>
                                           <div className="space-y-0.5">
-                                              {group.tasks.map((task) => (
-                                                  <div
-                                                      key={`${group.key}-${task.id}-${task.position}`}
-                                                      className="flex items-start gap-3 py-1.5"
-                                                  >
-                                                      <TaskToggleCheckbox
-                                                          className="mt-1.5"
-                                                          checked={task.checked}
-                                                          status={
-                                                              task.task_status === 'canceled'
-                                                                  ? 'canceled'
-                                                                  : task.task_status === 'migrated'
-                                                                    ? 'migrated'
-                                                                    : task.task_status === 'in_progress'
-                                                                      ? 'in_progress'
-                                                                    : task.task_status === 'backlog'
-                                                                      ? 'backlog'
-                                                                    : task.checked
-                                                                      ? 'completed'
-                                                                      : 'open'
-                                                          }
-                                                          disabled={
-                                                              pendingTaskIds.includes(task.id) ||
-                                                              task.task_status === 'canceled' ||
-                                                              task.task_status === 'migrated'
-                                                          }
-                                                          ariaLabel={t(
-                                                              'tasks_index.toggle_task_aria',
-                                                              'Toggle task :task',
-                                                          ).replace(
-                                                              ':task',
-                                                              task.content || String(task.id),
-                                                          )}
-                                                          onCheckedChange={() =>
-                                                              toggleTaskChecked(task)
-                                                          }
-                                                      />
-                                                      <div className="min-w-0 flex-1 pt-[1px]">
-                                                          <p
-                                                              className={cn(
-                                                                  'text-base leading-[1.62]',
-                                                                  task.task_status === 'canceled' &&
-                                                                      'line-through opacity-70',
-                                                                  task.task_status === 'migrated' &&
-                                                                      'opacity-70',
-                                                                  task.task_status !== 'canceled' &&
-                                                                      task.task_status !== 'migrated' &&
-                                                                      task.checked &&
-                                                                      'line-through opacity-70',
-                                                              )}
-                                                          >
-                                                              <TaskInlineContent
-                                                                  fragments={
-                                                                      task.render_fragments.length > 0
-                                                                          ? task.render_fragments
-                                                                          : [
-                                                                                {
-                                                                                    type: 'text',
-                                                                                    text:
-                                                                                        task.content ||
-                                                                                        t(
-                                                                                            'tasks_index.untitled_task',
-                                                                                            'Untitled task',
-                                                                                        ),
-                                                                                },
-                                                                            ]
-                                                                  }
-                                                                  language={language}
-                                                                  canceled={task.task_status === 'canceled'}
-                                                                  className={cn(
-                                                                      'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
-                                                                      (task.task_status === 'canceled' ||
-                                                                          task.task_status === 'migrated' ||
-                                                                          task.checked) &&
-                                                                          'task-inline--faded',
-                                                                  )}
-                                                                  priorityStyle="range"
-                                                                  hidePriorityTokens
-                                                                  hideStatusTokens
-                                                              />
-                                                          </p>
-                                                          {renderTaskMetadataAndPath(task)}
-                                                      </div>
-                                                  </div>
-                                              ))}
+                                              {group.tasks.map((task) =>
+                                                  renderTaskRow(
+                                                      task,
+                                                      `${group.key}-${task.id}-${task.position}`,
+                                                  ),
+                                              )}
                                           </div>
                                       </div>
                                   ))
@@ -2078,91 +2196,11 @@ export default function TasksIndex({
                                               </Link>
                                           </h3>
                                           <div className="space-y-0.5">
-                                              {group.tasks.map((task) => (
-                                                  <div
-                                                      key={task.id}
-                                                      className="flex items-start gap-3 py-1.5"
-                                                  >
-                                                      <TaskToggleCheckbox
-                                                          className="mt-1.5"
-                                                          checked={task.checked}
-                                                          status={
-                                                              task.task_status === 'canceled'
-                                                                  ? 'canceled'
-                                                                  : task.task_status === 'migrated'
-                                                                    ? 'migrated'
-                                                                    : task.task_status === 'in_progress'
-                                                                      ? 'in_progress'
-                                                                    : task.task_status === 'backlog'
-                                                                      ? 'backlog'
-                                                                    : task.checked
-                                                                      ? 'completed'
-                                                                      : 'open'
-                                                          }
-                                                          disabled={
-                                                              pendingTaskIds.includes(task.id) ||
-                                                              task.task_status === 'canceled' ||
-                                                              task.task_status === 'migrated'
-                                                          }
-                                                          ariaLabel={t(
-                                                              'tasks_index.toggle_task_aria',
-                                                              'Toggle task :task',
-                                                          ).replace(
-                                                              ':task',
-                                                              task.content || String(task.id),
-                                                          )}
-                                                          onCheckedChange={() =>
-                                                              toggleTaskChecked(task)
-                                                          }
-                                                      />
-                                                      <div className="min-w-0 flex-1 pt-[1px]">
-                                                          <p
-                                                              className={cn(
-                                                                  'text-base leading-[1.62]',
-                                                                  task.task_status === 'canceled' &&
-                                                                      'line-through opacity-70',
-                                                                  task.task_status === 'migrated' &&
-                                                                      'opacity-70',
-                                                                  task.task_status !== 'canceled' &&
-                                                                      task.task_status !== 'migrated' &&
-                                                                      task.checked &&
-                                                                      'line-through opacity-70',
-                                                              )}
-                                                          >
-                                                              <TaskInlineContent
-                                                                  fragments={
-                                                                      task.render_fragments.length > 0
-                                                                          ? task.render_fragments
-                                                                          : [
-                                                                                {
-                                                                                    type: 'text',
-                                                                                    text:
-                                                                                        task.content ||
-                                                                                        t(
-                                                                                            'tasks_index.untitled_task',
-                                                                                            'Untitled task',
-                                                                                        ),
-                                                                                },
-                                                                            ]
-                                                                  }
-                                                                  language={language}
-                                                                  canceled={task.task_status === 'canceled'}
-                                                                  className={cn(
-                                                                      'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
-                                                                      (task.task_status === 'canceled' ||
-                                                                          task.task_status === 'migrated' ||
-                                                                          task.checked) &&
-                                                                          'task-inline--faded',
-                                                                  )}
-                                                                  priorityStyle="range"
-                                                                  hidePriorityTokens
-                                                                  hideStatusTokens
-                                                              />
-                                                          </p>
-                                                          {renderTaskMetadataAndPath(task)}
-                                                      </div>
-                                                  </div>
-                                              ))}
+                                              {group.tasks.map((task) =>
+                                                  renderTaskRow(task, task.id, {
+                                                      showPath: false,
+                                                  }),
+                                              )}
                                           </div>
                                       </div>
                                   ))}

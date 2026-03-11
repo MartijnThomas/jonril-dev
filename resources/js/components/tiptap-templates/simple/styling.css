@@ -220,8 +220,26 @@
 
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList'] {
+    margin: 0.2em 0 0.62em 0;
+    padding-left: 0.18em;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
     li {
+    margin: 0.12em 0;
+    padding-left: 0;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
     margin: 0.12em 0;
     padding-left: 0;
 }
@@ -232,8 +250,8 @@
     ul[data-type='taskList']
     li
     > div
-    :is(ul:not([data-type='taskList']), ol)
-    li {
+    :is(ul:not([data-type='taskList']):not([data-type='checkList']), ol)
+    > li {
     display: list-item !important;
     align-items: normal;
     position: relative;
@@ -252,7 +270,7 @@
     ul[data-type='taskList']
     li
     > div
-    ul:not([data-type='taskList'])
+    ul:not([data-type='taskList']):not([data-type='checkList'])
     > li {
     list-style-type: disc !important;
 }
@@ -277,10 +295,28 @@
     padding-right: 0.76rem !important;
 }
 
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li
+    > label {
+    position: relative;
+    padding-top: 0.26rem;
+    padding-right: 0.76rem !important;
+}
+
 @media (max-width: 768px) {
     .simple-editor-content
         .tiptap.ProseMirror.simple-editor
         ul[data-type='taskList']
+        li
+        > label {
+        padding-top: 0.36rem;
+    }
+
+    .simple-editor-content
+        .tiptap.ProseMirror.simple-editor
+        ul[data-type='checkList']
         li
         > label {
         padding-top: 0.36rem;
@@ -293,9 +329,22 @@
     li
     > label
     > input[type='checkbox'] {
-    width: 1.125rem;
-    height: 1.125rem;
-    border-radius: 9999px;
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li
+    > label
+    > input[type='checkbox'] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
 }
 
 .simple-editor-content
@@ -304,12 +353,102 @@
     li
     > label
     > span {
+    display: block;
+    position: relative;
+    cursor: pointer;
     width: 1.125rem;
     height: 1.125rem;
     border-radius: 9999px;
     background-color: rgb(255 255 255);
     border-width: 2px;
     border-color: rgb(251 191 36);
+    transition:
+        background-color 80ms ease-out,
+        border-color 80ms ease-out;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li
+    > label
+    > span::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 0.75rem;
+    height: 0.75rem;
+    background-color: rgb(255 255 255);
+    opacity: 0;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22currentColor%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M21.4142%204.58579C22.1953%205.36683%2022.1953%206.63317%2021.4142%207.41421L10.4142%2018.4142C9.63317%2019.1953%208.36684%2019.1953%207.58579%2018.4142L2.58579%2013.4142C1.80474%2012.6332%201.80474%2011.3668%202.58579%2010.5858C3.36683%209.80474%204.63317%209.80474%205.41421%2010.5858L9%2014.1716L18.5858%204.58579C19.3668%203.80474%2020.6332%203.80474%2021.4142%204.58579Z%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E")
+        center/contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22currentColor%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M21.4142%204.58579C22.1953%205.36683%2022.1953%206.63317%2021.4142%207.41421L10.4142%2018.4142C9.63317%2019.1953%208.36684%2019.1953%207.58579%2018.4142L2.58579%2013.4142C1.80474%2012.6332%201.80474%2011.3668%202.58579%2010.5858C3.36683%209.80474%204.63317%209.80474%205.41421%2010.5858L9%2014.1716L18.5858%204.58579C19.3668%203.80474%2020.6332%203.80474%2021.4142%204.58579Z%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E")
+        center/contain no-repeat;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li
+    > label
+    > input[type='checkbox']:checked
+    + span::before {
+    opacity: 1;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li
+    > label
+    > span {
+    width: 0.98rem;
+    height: 0.98rem;
+    border-radius: 0.34rem;
+    display: block;
+    position: relative;
+    cursor: pointer;
+    width: 0.98rem;
+    height: 0.98rem;
+    background-color: rgb(255 255 255);
+    border-width: 2px;
+    border-color: rgb(251 191 36);
+    transition:
+        background-color 80ms ease-out,
+        border-color 80ms ease-out;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li
+    > label
+    > span::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 0.66rem;
+    height: 0.66rem;
+    background-color: rgb(255 255 255);
+    opacity: 0;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22currentColor%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M21.4142%204.58579C22.1953%205.36683%2022.1953%206.63317%2021.4142%207.41421L10.4142%2018.4142C9.63317%2019.1953%208.36684%2019.1953%207.58579%2018.4142L2.58579%2013.4142C1.80474%2012.6332%201.80474%2011.3668%202.58579%2010.5858C3.36683%209.80474%204.63317%209.80474%205.41421%2010.5858L9%2014.1716L18.5858%204.58579C19.3668%203.80474%2020.6332%203.80474%2021.4142%204.58579Z%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E")
+        center/contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22currentColor%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M21.4142%204.58579C22.1953%205.36683%2022.1953%206.63317%2021.4142%207.41421L10.4142%2018.4142C9.63317%2019.1953%208.36684%2019.1953%207.58579%2018.4142L2.58579%2013.4142C1.80474%2012.6332%201.80474%2011.3668%202.58579%2010.5858C3.36683%209.80474%204.63317%209.80474%205.41421%2010.5858L9%2014.1716L18.5858%204.58579C19.3668%203.80474%2020.6332%203.80474%2021.4142%204.58579Z%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E")
+        center/contain no-repeat;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li
+    > label
+    > input[type='checkbox']:checked
+    + span::before {
+    opacity: 1;
 }
 
 .dark
@@ -320,6 +459,17 @@
     > label
     > span {
     background-color: rgb(39 39 42);
+}
+
+.dark
+    .simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li
+    > label
+    > span {
+    background-color: rgb(39 39 42);
+    border-color: rgb(251 191 36);
 }
 
 .simple-editor-content
@@ -568,6 +718,17 @@
 
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li
+    > label
+    > input[type='checkbox']:checked
+    + span {
+    background-color: rgb(251 191 36);
+    border-color: rgb(251 191 36);
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
     li[data-task-status='assigned']
     > label::before,
@@ -610,6 +771,23 @@
     > label::before {
     filter: blur(10.8px);
     opacity: 0.7;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li[data-checked='true']
+    > div
+    > p,
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='checkList']
+    li[data-checked='true']
+    > div
+    > p
+    span {
+    opacity: 0.72;
+    text-decoration-line: line-through;
 }
 
 .simple-editor-content

@@ -51,7 +51,7 @@ export interface ListDropdownMenuProps extends Omit<ButtonProps, "type"> {
 
 export function ListDropdownMenu({
   editor: providedEditor,
-  types = ["bulletList", "orderedList", "taskList"],
+  types = ["bulletList", "orderedList", "taskList", "checkList"],
   hideWhenUnavailable = false,
   onOpenChange,
   portal = false,

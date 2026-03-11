@@ -15,6 +15,7 @@ import {
   canHandleNestedListInTaskItem,
   shouldHandleNestedListInTaskItem,
   toggleNestedListInTaskItem,
+  toggleNestedTaskListInTaskItem,
 } from "@/lib/task-item-nested-list"
 
 // --- Lib ---
@@ -27,7 +28,7 @@ import {
   selectionWithinConvertibleTypes,
 } from "@/lib/tiptap-utils"
 
-export type ListType = "bulletList" | "orderedList" | "taskList"
+export type ListType = "bulletList" | "orderedList" | "taskList" | "checkList"
 
 /**
  * Configuration for the list functionality
@@ -56,18 +57,21 @@ export const listIcons = {
   bulletList: ListIcon,
   orderedList: ListOrderedIcon,
   taskList: ListTodoIcon,
+  checkList: ListIcon,
 }
 
 export const listLabels: Record<ListType, string> = {
   bulletList: "Bullet List",
   orderedList: "Ordered List",
   taskList: "Task List",
+  checkList: "Checklist",
 }
 
 export const LIST_SHORTCUT_KEYS: Record<ListType, string> = {
   bulletList: "mod+shift+8",
   orderedList: "mod+shift+7",
   taskList: "mod+shift+9",
+  checkList: "",
 }
 
 /**
@@ -84,7 +88,10 @@ export function canToggleList(
 
   // Inside task items, bullet/ordered lists should be handled as nested
   // context lists (or conversion from nested subtasks), not lifted to top-level.
-  if (type !== "taskList" && shouldHandleNestedListInTaskItem(editor)) {
+  if (
+    (type === "bulletList" || type === "orderedList") &&
+    shouldHandleNestedListInTaskItem(editor)
+  ) {
     if (canHandleNestedListInTaskItem(editor, type)) {
       return true
     }
@@ -102,6 +109,8 @@ export function canToggleList(
         return editor.can().toggleOrderedList()
       case "taskList":
         return editor.can().toggleList("taskList", "taskItem")
+      case "checkList":
+        return editor.can().toggleCheckList()
       default:
         return false
     }
@@ -115,6 +124,7 @@ export function canToggleList(
       "bulletList",
       "orderedList",
       "taskList",
+      "checkList",
       "blockquote",
       "codeBlock",
     ])
@@ -133,6 +143,8 @@ export function canToggleList(
         editor.can().toggleList("taskList", "taskItem") ||
         editor.can().clearNodes()
       )
+    case "checkList":
+      return editor.can().toggleCheckList() || editor.can().clearNodes()
     default:
       return false
   }
@@ -151,6 +163,8 @@ export function isListActive(editor: Editor | null, type: ListType): boolean {
       return editor.isActive("orderedList")
     case "taskList":
       return editor.isActive("taskList")
+    case "checkList":
+      return editor.isActive("checkList")
     default:
       return false
   }
@@ -164,7 +178,27 @@ export function toggleList(editor: Editor | null, type: ListType): boolean {
   if (!canToggleList(editor, type)) return false
 
   try {
-    if (type !== "taskList" && shouldHandleNestedListInTaskItem(editor)) {
+    if (type === "taskList" && editor.isActive("taskItem")) {
+      const didHandleNestedTaskList = toggleNestedTaskListInTaskItem(editor)
+      if (didHandleNestedTaskList) {
+        editor.chain().focus().selectTextblockEnd().run()
+        return true
+      }
+    }
+
+    // Inside task items, checklist toggles should stay scoped to nested context.
+    if (type === "checkList" && editor.isActive("taskItem")) {
+      const didHandleNestedChecklist = toggleNestedListInTaskItem(editor, type)
+      if (didHandleNestedChecklist) {
+        editor.chain().focus().selectTextblockEnd().run()
+        return true
+      }
+    }
+
+    if (
+      (type === "bulletList" || type === "orderedList") &&
+      shouldHandleNestedListInTaskItem(editor)
+    ) {
       const didHandle = toggleNestedListInTaskItem(editor, type)
       if (didHandle) {
         editor.chain().focus().selectTextblockEnd().run()
@@ -188,6 +222,7 @@ export function toggleList(editor: Editor | null, type: ListType): boolean {
         "bulletList",
         "orderedList",
         "taskList",
+        "checkList",
         "blockquote",
         "codeBlock",
       ]) && blocks.length === 1
@@ -235,18 +270,23 @@ export function toggleList(editor: Editor | null, type: ListType): boolean {
 
     if (editor.isActive(type)) {
       // Unwrap list
-      chain
-        .liftListItem("listItem")
-        .lift("bulletList")
-        .lift("orderedList")
-        .lift("taskList")
-        .run()
+      if (type === "checkList") {
+        chain.liftListItem("checkItem").lift("checkList").run()
+      } else {
+        chain
+          .liftListItem("listItem")
+          .lift("bulletList")
+          .lift("orderedList")
+          .lift("taskList")
+          .run()
+      }
     } else {
       // Wrap in specific list type
       const toggleMap: Record<ListType, () => typeof chain> = {
         bulletList: () => chain.toggleBulletList(),
         orderedList: () => chain.toggleOrderedList(),
         taskList: () => chain.toggleList("taskList", "taskItem"),
+        checkList: () => chain.toggleCheckList(),
       }
 
       const toggle = toggleMap[type]

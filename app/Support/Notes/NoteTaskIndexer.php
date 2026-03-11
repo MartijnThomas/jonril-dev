@@ -11,6 +11,11 @@ use Throwable;
 
 class NoteTaskIndexer
 {
+    /**
+     * @var array<int, string>
+     */
+    private const NESTED_LIST_TYPES = ['taskList', 'bulletList', 'orderedList', 'checkList'];
+
     public function reindexWorkspace(Workspace $workspace): void
     {
         $notes = $workspace->notes()->get([
@@ -48,6 +53,7 @@ class NoteTaskIndexer
                 $mentions = [];
                 $hashtags = [];
                 $fragments = $this->taskFragments($taskItem, $mentions, $hashtags);
+                $children = $this->taskChildren($taskItem);
                 $text = $this->fragmentsToText($fragments);
                 $fallbackDates = $this->extractDatesFromText($text);
 
@@ -99,6 +105,7 @@ class NoteTaskIndexer
                     'priority' => $priorityFromAttrs ?? $this->extractPriorityFromText($text),
                     'content_text' => $text,
                     'render_fragments' => json_encode($fragments),
+                    'children' => json_encode($children),
                     'due_date' => Arr::get($attrs, 'dueDate') ?? $fallbackDates['due_date'],
                     'deadline_date' => Arr::get($attrs, 'deadlineDate') ?? $fallbackDates['deadline_date'],
                     'journal_date' => $note->type === Note::TYPE_JOURNAL && $note->journal_granularity === Note::JOURNAL_DAILY
@@ -145,23 +152,7 @@ class NoteTaskIndexer
      */
     private function taskFragments(array $taskItem, array &$mentions, array &$hashtags): array
     {
-        $fragments = [];
-
-        foreach (Arr::get($taskItem, 'content', []) as $child) {
-            if (! is_array($child)) {
-                continue;
-            }
-
-            // Nested task lists are indexed as their own task items.
-            if (($child['type'] ?? null) === 'taskList') {
-                continue;
-            }
-
-            $fragments = array_merge(
-                $fragments,
-                $this->inlineFragments($child, $mentions, $hashtags),
-            );
-        }
+        $fragments = $this->lineFragments($taskItem, $mentions, $hashtags);
 
         $normalized = [];
         foreach ($fragments as $fragment) {
@@ -197,6 +188,129 @@ class NoteTaskIndexer
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param  array<int, string>  $mentions
+     * @param  array<int, string>  $hashtags
+     * @return array<int, array<string, mixed>>
+     */
+    private function lineFragments(array $node, array &$mentions, array &$hashtags): array
+    {
+        $fragments = [];
+
+        foreach (Arr::get($node, 'content', []) as $child) {
+            if (! is_array($child)) {
+                continue;
+            }
+
+            if (in_array((string) ($child['type'] ?? ''), self::NESTED_LIST_TYPES, true)) {
+                continue;
+            }
+
+            $fragments = array_merge(
+                $fragments,
+                $this->inlineFragments($child, $mentions, $hashtags),
+            );
+        }
+
+        return $fragments;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function taskChildren(array $taskItem): array
+    {
+        $children = [];
+
+        foreach (Arr::get($taskItem, 'content', []) as $child) {
+            if (! is_array($child)) {
+                continue;
+            }
+
+            if (! in_array((string) ($child['type'] ?? ''), self::NESTED_LIST_TYPES, true)) {
+                continue;
+            }
+
+            $children = [
+                ...$children,
+                ...$this->listChildren($child),
+            ];
+        }
+
+        return $children;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function listChildren(array $listNode): array
+    {
+        $listType = (string) ($listNode['type'] ?? '');
+        $children = [];
+
+        foreach (Arr::get($listNode, 'content', []) as $child) {
+            if (! is_array($child)) {
+                continue;
+            }
+
+            $itemType = (string) ($child['type'] ?? '');
+            if (! in_array($itemType, ['taskItem', 'listItem', 'checkItem'], true)) {
+                continue;
+            }
+
+            $children[] = $this->childItemPayload($child, $listType);
+        }
+
+        return $children;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function childItemPayload(array $itemNode, string $listType): array
+    {
+        $mentions = [];
+        $hashtags = [];
+        $fragments = $this->taskFragments($itemNode, $mentions, $hashtags);
+        $text = $this->fragmentsToText($fragments);
+        $fallbackDates = $this->extractDatesFromText($text);
+
+        $nestedChildren = [];
+        foreach (Arr::get($itemNode, 'content', []) as $child) {
+            if (! is_array($child)) {
+                continue;
+            }
+
+            if (! in_array((string) ($child['type'] ?? ''), self::NESTED_LIST_TYPES, true)) {
+                continue;
+            }
+
+            $nestedChildren = [
+                ...$nestedChildren,
+                ...$this->listChildren($child),
+            ];
+        }
+
+        $attrs = Arr::get($itemNode, 'attrs', []);
+        $itemType = (string) ($itemNode['type'] ?? '');
+
+        return [
+            'type' => $itemType,
+            'list_type' => $listType,
+            'block_id' => Arr::get($attrs, 'id'),
+            'checked' => in_array($itemType, ['taskItem', 'checkItem'], true)
+                ? (bool) Arr::get($attrs, 'checked', false)
+                : null,
+            'content_text' => $text,
+            'render_fragments' => $fragments,
+            'mentions' => array_values(array_unique($mentions)),
+            'hashtags' => array_values(array_unique($hashtags)),
+            'due_date' => Arr::get($attrs, 'dueDate') ?? $fallbackDates['due_date'],
+            'deadline_date' => Arr::get($attrs, 'deadlineDate') ?? $fallbackDates['deadline_date'],
+            'children' => $nestedChildren,
+        ];
     }
 
     /**

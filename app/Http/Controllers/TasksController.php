@@ -239,6 +239,7 @@ class TasksController extends Controller
                     'priority' => $task->priority,
                     'content' => $task->content_text,
                     'render_fragments' => $task->render_fragments ?? [],
+                    'children' => $task->children ?? [],
                     'due_date' => $task->due_date?->toDateString(),
                     'deadline_date' => $task->deadline_date?->toDateString(),
                     'journal_date' => $task->journal_date?->toDateString(),
