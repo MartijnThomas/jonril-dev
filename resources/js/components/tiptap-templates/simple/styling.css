@@ -702,14 +702,14 @@
     li[data-checked='true']
     > div
     > p
-    span,
+    span:not(.md-task-token-hidden),
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList']
     li[data-task-status='canceled']
     > div
     > p
-    span {
+    span:not(.md-task-token-hidden) {
     opacity: 0.72;
 }
 
@@ -725,7 +725,7 @@
     li[data-task-status='canceled']
     > div
     > p
-    span {
+    span:not(.md-task-token-hidden) {
     text-decoration-line: line-through;
 }
 
@@ -931,9 +931,14 @@
 }
 
 .md-task-token-hidden {
-    opacity: 0;
-    font-size: 0;
-    line-height: 0;
+    opacity: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    letter-spacing: 0 !important;
+    display: inline-block;
+    width: 0 !important;
+    overflow: hidden;
+    white-space: nowrap;
     user-select: none;
 }
 

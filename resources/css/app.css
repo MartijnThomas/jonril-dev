@@ -361,6 +361,18 @@ html {
     @apply text-sm font-normal text-red-700/70 dark:text-red-300/80;
 }
 
+.md-task-token-hidden {
+    opacity: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    letter-spacing: 0 !important;
+    display: inline-block;
+    width: 0 !important;
+    overflow: hidden;
+    white-space: nowrap;
+    user-select: none;
+}
+
 .task-toggle-checkbox {
     position: relative;
     display: inline-flex;
