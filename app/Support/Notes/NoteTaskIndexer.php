@@ -6,6 +6,8 @@ use App\Models\Note;
 use App\Models\NoteTask;
 use App\Models\Workspace;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
+use Throwable;
 
 class NoteTaskIndexer
 {
@@ -569,7 +571,15 @@ class NoteTaskIndexer
 
         $normalized = trim($value);
 
-        return $normalized !== '' ? $normalized : null;
+        if ($normalized === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($normalized)->toDateTimeString();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private function normalizeUuidValue(mixed $value): ?string

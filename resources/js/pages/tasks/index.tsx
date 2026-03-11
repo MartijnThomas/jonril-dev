@@ -10,7 +10,16 @@ import {
     startOfWeek,
 } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
-import { Check, ChevronDown, ChevronRight, Filter } from 'lucide-react';
+import {
+    Bookmark,
+    Check,
+    ChevronDown,
+    ChevronRight,
+    Filter,
+    Settings2,
+    Star,
+    X,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { toast } from 'sonner';
@@ -20,6 +29,27 @@ import { TaskToggleCheckbox } from '@/components/task-toggle-checkbox';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Popover,
     PopoverContent,
@@ -102,6 +132,13 @@ type Props = {
         total: number;
     };
     filters: Filters;
+    filterPresets: Array<{
+        id: string;
+        name: string;
+        favorite: boolean;
+        filters: Filters;
+        updated_at: string | null;
+    }>;
     workspaces: { id: string; name: string }[];
     noteTreeOptions: { id: string; title: string; depth: number; workspace_name: string | null; workspace_id: string }[];
 };
@@ -124,6 +161,7 @@ type SelectionPill = {
 export default function TasksIndex({
     tasks,
     filters,
+    filterPresets,
     workspaces,
     noteTreeOptions,
 }: Props) {
@@ -173,6 +211,18 @@ export default function TasksIndex({
     const [showAllSelectionPills, setShowAllSelectionPills] = useState(false);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [relativeNow, setRelativeNow] = useState<number>(() => Date.now());
+    const [savePresetOpen, setSavePresetOpen] = useState(false);
+    const [presetName, setPresetName] = useState('');
+    const [presetFavorite, setPresetFavorite] = useState(false);
+    const [presetProcessing, setPresetProcessing] = useState(false);
+    const favoriteFilterPresets = useMemo(
+        () => filterPresets.filter((preset) => preset.favorite),
+        [filterPresets],
+    );
+    const nonFavoriteFilterPresets = useMemo(
+        () => filterPresets.filter((preset) => !preset.favorite),
+        [filterPresets],
+    );
 
     useEffect(() => {
         const timer = window.setInterval(() => {
@@ -252,10 +302,58 @@ export default function TasksIndex({
 
         return null;
     };
+    const normalizeFilterState = (state: Partial<Filters> | Filters): Filters => {
+        const allowedStatuses = new Set([
+            'open',
+            'completed',
+            'canceled',
+            'migrated',
+            'assigned',
+            'in_progress',
+            'starred',
+            'backlog',
+        ]);
+
+        const normalizedStatuses = [...(state.status ?? ['open'])]
+            .map((value) => (value === 'question' ? 'backlog' : value))
+            .filter((value): value is string => allowedStatuses.has(value));
+
+        return {
+            workspace_ids: [...(state.workspace_ids ?? [])]
+                .map((id) => id.trim())
+                .filter((id) => id !== '')
+                .sort(),
+            note_scope_ids: [...(state.note_scope_ids ?? [])]
+                .map((id) => id.trim())
+                .filter((id) => id !== '')
+                .sort(),
+            date_preset:
+                state.date_preset && ['today', 'this_week', 'this_month', 'today_plus_7'].includes(state.date_preset)
+                    ? state.date_preset
+                    : '',
+            date_from: state.date_from?.trim() ?? '',
+            date_to: state.date_to?.trim() ?? '',
+            status: (normalizedStatuses.length > 0 ? normalizedStatuses : ['open']).sort(),
+            group_by:
+                state.group_by && ['none', 'note', 'date'].includes(state.group_by)
+                    ? state.group_by
+                    : 'none',
+        };
+    };
+    const filterSignature = (state: Partial<Filters> | Filters) =>
+        JSON.stringify(normalizeFilterState(state));
     const groupingSelectionLabel = useMemo(
         () => groupingOptions.find((option) => option.value === localFilters.group_by)?.label
             ?? t('tasks_index.group_by_none', 'No grouping'),
         [groupingOptions, localFilters.group_by, t],
+    );
+    const activeFilterPreset = useMemo(
+        () =>
+            filterPresets.find(
+                (preset) =>
+                    filterSignature(preset.filters) === filterSignature(localFilters),
+            ) ?? null,
+        [filterPresets, localFilters],
     );
 
     const toQuery = (state: Filters) => {
@@ -289,6 +387,71 @@ export default function TasksIndex({
         if (submit) {
             visitWithFilters(merged);
         }
+    };
+
+    const applyPreset = (preset: Props['filterPresets'][number]) => {
+        const normalized: Filters = {
+            workspace_ids: [...(preset.filters.workspace_ids ?? [])],
+            note_scope_ids: [...(preset.filters.note_scope_ids ?? [])],
+            date_preset: preset.filters.date_preset ?? '',
+            date_from: preset.filters.date_from ?? '',
+            date_to: preset.filters.date_to ?? '',
+            status:
+                preset.filters.status && preset.filters.status.length > 0
+                    ? [...preset.filters.status]
+                    : ['open'],
+            group_by: preset.filters.group_by ?? 'none',
+        };
+
+        setLocalFilters(normalized);
+        visitWithFilters(normalized);
+    };
+
+    const openSavePresetDialog = () => {
+        setPresetName('');
+        setPresetFavorite(false);
+        setSavePresetOpen(true);
+    };
+
+    const clearAppliedPreset = () => {
+        router.get('/tasks', {}, {
+            preserveState: false,
+            preserveScroll: true,
+            replace: true,
+        });
+    };
+
+    const saveCurrentFiltersPreset = () => {
+        const name = presetName.trim();
+        if (name === '' || presetProcessing) {
+            return;
+        }
+
+        setPresetProcessing(true);
+        router.post(
+            '/tasks/filter-presets',
+            {
+                name,
+                favorite: presetFavorite,
+                filters: localFilters,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onSuccess: () => {
+                    setSavePresetOpen(false);
+                    setPresetName('');
+                    setPresetFavorite(false);
+                    toast.success(
+                        t('tasks_index.filter_preset_saved', 'Filter saved.'),
+                    );
+                },
+                onFinish: () => {
+                    setPresetProcessing(false);
+                },
+            },
+        );
     };
 
     const updateTaskChecked = (
@@ -993,7 +1156,7 @@ export default function TasksIndex({
         );
     };
 
-    const renderNoteTreeNode = (node: NoteTreeNode, depthOffset = 0): JSX.Element => {
+    const renderNoteTreeNode = (node: NoteTreeNode, depthOffset = 0) => {
         const descendants = descendantIdsById.get(node.id) ?? [];
         const hasChildren = descendants.length > 0;
         const isExpanded = expandedNoteNodeIds.has(node.id);
@@ -1078,6 +1241,27 @@ export default function TasksIndex({
                                     {resultsCountLabel}
                                 </span>
                             </div>
+                            {activeFilterPreset ? (
+                                <div className="mt-1.5 flex min-w-0 items-center">
+                                    <span className="inline-flex min-w-0 items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                        <Bookmark className="h-3 w-3 shrink-0" />
+                                        <span className="truncate">
+                                            {activeFilterPreset.name}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                            onClick={clearAppliedPreset}
+                                            aria-label={t(
+                                                'tasks_index.clear_filter_preset',
+                                                'Clear preset filter',
+                                            )}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </span>
+                                </div>
+                            ) : null}
                             {activeFilterPills.length > 0 ? (
                                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1 md:hidden">
                                     {visibleActiveFilterPills.map((pill) => (
@@ -1097,6 +1281,99 @@ export default function TasksIndex({
                             ) : null}
                         </div>
                         <div className="flex items-center gap-1.5">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        className="h-10 rounded-full border-0 bg-muted px-3 text-muted-foreground hover:bg-muted/80 hover:text-foreground md:h-8"
+                                        aria-label={t(
+                                            'tasks_index.filter_presets_menu',
+                                            'Filter presets',
+                                        )}
+                                    >
+                                        <Bookmark className="h-4 w-4" />
+                                        <span className="text-xs font-medium md:text-[11px]">
+                                            {t('tasks_index.filter_presets_label', 'Preset filters')}
+                                        </span>
+                                        <ChevronDown className="h-3.5 w-3.5" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-72">
+                                    {favoriteFilterPresets.length > 0 ? (
+                                        <>
+                                            <DropdownMenuLabel>
+                                                {t(
+                                                    'tasks_index.favorite_filter_presets',
+                                                    'Favorites',
+                                                )}
+                                            </DropdownMenuLabel>
+                                            {favoriteFilterPresets.map((preset) => (
+                                                <DropdownMenuItem
+                                                    key={preset.id}
+                                                    onClick={() =>
+                                                        applyPreset(preset)
+                                                    }
+                                                    className="gap-2"
+                                                >
+                                                    <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
+                                                    <span className="truncate">
+                                                        {preset.name}
+                                                    </span>
+                                                </DropdownMenuItem>
+                                            ))}
+                                            <DropdownMenuSeparator />
+                                        </>
+                                    ) : null}
+
+                                    <DropdownMenuItem onClick={openSavePresetDialog} className="gap-2">
+                                        <Bookmark className="h-3.5 w-3.5" />
+                                        {t(
+                                            'tasks_index.save_filter_preset',
+                                            'Save filter',
+                                        )}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild className="gap-2">
+                                        <Link href="/settings/task-filters">
+                                            <Settings2 className="h-3.5 w-3.5" />
+                                            {t(
+                                                'tasks_index.manage_filter_presets',
+                                                'Manage filters',
+                                            )}
+                                        </Link>
+                                    </DropdownMenuItem>
+
+                                    {nonFavoriteFilterPresets.length > 0 ? (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuSub>
+                                                <DropdownMenuSubTrigger>
+                                                    {t(
+                                                        'tasks_index.saved_filter_presets',
+                                                        'Other saved filters',
+                                                    )}
+                                                </DropdownMenuSubTrigger>
+                                                <DropdownMenuSubContent className="w-64">
+                                                    {nonFavoriteFilterPresets.map((preset) => (
+                                                        <DropdownMenuItem
+                                                            key={preset.id}
+                                                            onClick={() =>
+                                                                applyPreset(
+                                                                    preset,
+                                                                )
+                                                            }
+                                                        >
+                                                            <span className="truncate">
+                                                                {preset.name}
+                                                            </span>
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+                                        </>
+                                    ) : null}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                             <Button
                                 type="button"
                                 variant="secondary"
@@ -1524,6 +1801,83 @@ export default function TasksIndex({
 
                     </div>
                 </section>
+
+                <Dialog open={savePresetOpen} onOpenChange={setSavePresetOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>
+                                {t(
+                                    'tasks_index.save_filter_preset',
+                                    'Save filter',
+                                )}
+                            </DialogTitle>
+                            <DialogDescription>
+                                {t(
+                                    'tasks_index.save_filter_preset_description',
+                                    'Save current filters for quick access.',
+                                )}
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="task-filter-preset-name">
+                                    {t(
+                                        'tasks_index.filter_preset_name',
+                                        'Name',
+                                    )}
+                                </Label>
+                                <Input
+                                    id="task-filter-preset-name"
+                                    value={presetName}
+                                    onChange={(event) =>
+                                        setPresetName(event.target.value)
+                                    }
+                                    placeholder={t(
+                                        'tasks_index.filter_preset_name_placeholder',
+                                        'My filter',
+                                    )}
+                                />
+                            </div>
+                            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Checkbox
+                                    checked={presetFavorite}
+                                    onCheckedChange={(checked) =>
+                                        setPresetFavorite(checked === true)
+                                    }
+                                />
+                                <span>
+                                    {t(
+                                        'tasks_index.filter_preset_favorite',
+                                        'Mark as favorite',
+                                    )}
+                                </span>
+                            </label>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setSavePresetOpen(false)}
+                                disabled={presetProcessing}
+                            >
+                                {t('note_actions.cancel', 'Cancel')}
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={saveCurrentFiltersPreset}
+                                disabled={
+                                    presetProcessing ||
+                                    presetName.trim() === ''
+                                }
+                            >
+                                {t(
+                                    'tasks_index.save_filter_preset',
+                                    'Save filter',
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 <section className="editor-ui-font mx-auto w-full max-w-3xl rounded-xl bg-card p-4 md:p-6">
                     {tasks.data.length === 0 ? (

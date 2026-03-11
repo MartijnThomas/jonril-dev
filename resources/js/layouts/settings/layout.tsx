@@ -81,6 +81,10 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             title: t('settings_nav.editor_preferences', 'Editor preferences'),
             href: editEditorPreferences(),
         },
+        {
+            title: t('settings_nav.task_filters', 'Task filters'),
+            href: '/settings/task-filters',
+        },
     ];
 
     if (typeof window === 'undefined') {

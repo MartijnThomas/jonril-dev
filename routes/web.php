@@ -95,6 +95,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('tasks.checked-by-reference');
     Route::patch('tasks/{task}/checked', [TasksController::class, 'updateChecked'])
         ->name('tasks.checked');
+    Route::post('tasks/filter-presets', [TasksController::class, 'saveFilterPreset'])
+        ->name('tasks.filter-presets.store');
+    Route::delete('tasks/filter-presets/{presetId}', [TasksController::class, 'deleteFilterPreset'])
+        ->name('tasks.filter-presets.destroy');
     Route::get('tasks/migrate-targets', [TasksController::class, 'migrateTargets'])
         ->name('tasks.migrate-targets');
     Route::post('tasks/migrate', [TasksController::class, 'migrate'])

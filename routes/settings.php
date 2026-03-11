@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\TaskFilterPresetController;
 use App\Http\Controllers\Settings\EditorPreferencesController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
 use App\Http\Controllers\WorkspaceController;
@@ -28,6 +29,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('editor-preferences.edit');
     Route::patch('settings/editor-preferences', [EditorPreferencesController::class, 'update'])
         ->name('editor-preferences.update');
+    Route::get('settings/task-filters', [TaskFilterPresetController::class, 'edit'])
+        ->name('task-filter-presets.edit');
+    Route::patch('settings/task-filters/{presetId}', [TaskFilterPresetController::class, 'update'])
+        ->name('task-filter-presets.update');
+    Route::delete('settings/task-filters/{presetId}', [TaskFilterPresetController::class, 'destroy'])
+        ->name('task-filter-presets.destroy');
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');

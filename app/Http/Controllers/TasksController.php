@@ -308,6 +308,7 @@ class TasksController extends Controller
                 'group_by' => $filters['group_by'] ?? 'none',
                 'status' => $selectedStatuses->values()->all(),
             ],
+            'filterPresets' => $this->taskFilterPresetsForUser($user),
             'notes' => $notes,
             'noteTreeOptions' => $noteTreeOptions,
             'workspaces' => $workspaces
@@ -317,6 +318,114 @@ class TasksController extends Controller
                 ])
                 ->values(),
         ]);
+    }
+
+    public function saveFilterPreset(Request $request)
+    {
+        $user = $request->user();
+        if (! $user) {
+            abort(403);
+        }
+
+        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->all();
+        if ($workspaceIds === []) {
+            abort(403, 'No workspace available.');
+        }
+
+        $validated = $request->validate([
+            'preset_id' => ['nullable', 'string', 'max:64'],
+            'name' => ['required', 'string', 'max:80'],
+            'favorite' => ['nullable', 'boolean'],
+            'filters' => ['required', 'array'],
+            'filters.workspace_ids' => ['nullable', 'array'],
+            'filters.workspace_ids.*' => [Rule::in($workspaceIds)],
+            'filters.note_scope_ids' => ['nullable', 'array'],
+            'filters.note_scope_ids.*' => [
+                'uuid',
+                Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
+            ],
+            'filters.date_preset' => ['nullable', Rule::in(['', 'today', 'this_week', 'this_month', 'today_plus_7'])],
+            'filters.date_from' => ['nullable', 'date'],
+            'filters.date_to' => ['nullable', 'date'],
+            'filters.status' => ['nullable', 'array'],
+            'filters.status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog', 'question'])],
+            'filters.group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
+        ]);
+
+        $normalizedFilters = $this->normalizeTaskPresetFilters((array) ($validated['filters'] ?? []));
+        $name = trim((string) ($validated['name'] ?? ''));
+        $favorite = (bool) ($validated['favorite'] ?? false);
+        $presetId = is_string($validated['preset_id'] ?? null) ? trim((string) $validated['preset_id']) : '';
+        $now = now()->toIso8601String();
+
+        $settings = is_array($user->settings) ? $user->settings : [];
+        $presets = collect(data_get($settings, 'tasks.filter_presets', []))
+            ->filter(fn ($preset) => is_array($preset))
+            ->map(function (array $preset): array {
+                $id = is_string($preset['id'] ?? null) ? trim((string) $preset['id']) : '';
+                $name = trim((string) ($preset['name'] ?? ''));
+                if ($id === '' || $name === '') {
+                    return [];
+                }
+
+                return [
+                    'id' => $id,
+                    'name' => $name,
+                    'favorite' => (bool) ($preset['favorite'] ?? false),
+                    'filters' => $this->normalizeTaskPresetFilters((array) ($preset['filters'] ?? [])),
+                    'updated_at' => is_string($preset['updated_at'] ?? null) ? (string) $preset['updated_at'] : null,
+                ];
+            })
+            ->filter(fn (array $preset) => $preset !== [])
+            ->values();
+
+        $foundIndex = $presetId !== ''
+            ? $presets->search(fn (array $preset): bool => $preset['id'] === $presetId)
+            : false;
+
+        if ($foundIndex !== false) {
+            $presets->put((int) $foundIndex, [
+                'id' => $presetId,
+                'name' => $name,
+                'favorite' => $favorite,
+                'filters' => $normalizedFilters,
+                'updated_at' => $now,
+            ]);
+        } else {
+            $newPresetId = (string) Str::uuid();
+            $presets->prepend([
+                'id' => $newPresetId,
+                'name' => $name,
+                'favorite' => $favorite,
+                'filters' => $normalizedFilters,
+                'updated_at' => $now,
+            ]);
+        }
+
+        data_set($settings, 'tasks.filter_presets', $presets->values()->all());
+        $user->forceFill(['settings' => $settings])->save();
+
+        return back();
+    }
+
+    public function deleteFilterPreset(Request $request, string $presetId)
+    {
+        $user = $request->user();
+        if (! $user) {
+            abort(403);
+        }
+
+        $settings = is_array($user->settings) ? $user->settings : [];
+        $presets = collect(data_get($settings, 'tasks.filter_presets', []))
+            ->filter(fn ($preset) => is_array($preset))
+            ->reject(fn (array $preset): bool => (string) ($preset['id'] ?? '') === $presetId)
+            ->values()
+            ->all();
+
+        data_set($settings, 'tasks.filter_presets', $presets);
+        $user->forceFill(['settings' => $settings])->save();
+
+        return back();
     }
 
     public function updateChecked(Request $request, NoteTask $task)
@@ -959,6 +1068,88 @@ class TasksController extends Controller
                 $today->toDateString(),
             ],
         };
+    }
+
+    /**
+     * @return array<int, array{id:string,name:string,favorite:bool,filters:array<string,mixed>,updated_at:?string}>
+     */
+    private function taskFilterPresetsForUser($user): array
+    {
+        $settings = is_array($user?->settings) ? $user->settings : [];
+
+        return collect(data_get($settings, 'tasks.filter_presets', []))
+            ->filter(fn ($preset) => is_array($preset))
+            ->map(function (array $preset): array {
+                return [
+                    'id' => is_string($preset['id'] ?? null) ? (string) $preset['id'] : '',
+                    'name' => is_string($preset['name'] ?? null) ? trim((string) $preset['name']) : '',
+                    'favorite' => (bool) ($preset['favorite'] ?? false),
+                    'filters' => $this->normalizeTaskPresetFilters((array) ($preset['filters'] ?? [])),
+                    'updated_at' => is_string($preset['updated_at'] ?? null) ? (string) $preset['updated_at'] : null,
+                ];
+            })
+            ->filter(fn (array $preset) => $preset['id'] !== '' && $preset['name'] !== '')
+            ->sortByDesc(fn (array $preset) => $preset['favorite'] ? 1 : 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *   workspace_ids: array<int, string>,
+     *   note_scope_ids: array<int, string>,
+     *   date_preset: string,
+     *   date_from: string,
+     *   date_to: string,
+     *   status: array<int, string>,
+     *   group_by: 'none'|'note'|'date'
+     * }
+     */
+    private function normalizeTaskPresetFilters(array $filters): array
+    {
+        $workspaceIds = collect($filters['workspace_ids'] ?? [])
+            ->filter(fn ($id) => is_string($id) && trim($id) !== '')
+            ->map(fn (string $id) => trim($id))
+            ->unique()
+            ->values()
+            ->all();
+
+        $noteScopeIds = collect($filters['note_scope_ids'] ?? [])
+            ->filter(fn ($id) => is_string($id) && trim($id) !== '')
+            ->map(fn (string $id) => trim($id))
+            ->unique()
+            ->values()
+            ->all();
+
+        $datePreset = is_string($filters['date_preset'] ?? null) ? trim((string) $filters['date_preset']) : '';
+        if (! in_array($datePreset, ['', 'today', 'this_week', 'this_month', 'today_plus_7'], true)) {
+            $datePreset = '';
+        }
+
+        $statuses = collect($filters['status'] ?? [])
+            ->filter(fn ($status) => is_string($status) && trim($status) !== '')
+            ->map(fn (string $status) => trim(strtolower($status)))
+            ->map(fn (string $status) => $status === 'question' ? 'backlog' : $status)
+            ->filter(fn (string $status) => in_array($status, ['open', 'completed', 'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog'], true))
+            ->unique()
+            ->values()
+            ->all();
+
+        $groupBy = is_string($filters['group_by'] ?? null) ? trim((string) $filters['group_by']) : 'none';
+        if (! in_array($groupBy, ['none', 'note', 'date'], true)) {
+            $groupBy = 'none';
+        }
+
+        return [
+            'workspace_ids' => $workspaceIds,
+            'note_scope_ids' => $noteScopeIds,
+            'date_preset' => $datePreset,
+            'date_from' => is_string($filters['date_from'] ?? null) ? trim((string) $filters['date_from']) : '',
+            'date_to' => is_string($filters['date_to'] ?? null) ? trim((string) $filters['date_to']) : '',
+            'status' => $statuses !== [] ? $statuses : ['open'],
+            'group_by' => $groupBy,
+        ];
     }
 
     /**
