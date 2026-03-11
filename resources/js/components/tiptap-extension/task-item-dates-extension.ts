@@ -649,6 +649,14 @@ export const TaskItemWithDates = TaskItem.extend({
         return {
             ...restParentShortcuts,
             Tab: () => {
+                if (this.editor.isActive('checkItem')) {
+                    return this.editor
+                        .chain()
+                        .focus()
+                        .sinkListItem('checkItem')
+                        .run();
+                }
+
                 if (!this.editor.isActive('taskItem')) {
                     return false;
                 }
@@ -878,21 +886,30 @@ export const TaskItemWithDates = TaskItem.extend({
                     .run();
             },
             'Mod-Shift-8': () => {
-                if (!this.editor.isActive('taskItem')) {
+                if (
+                    !this.editor.isActive('taskItem') &&
+                    !this.editor.isActive('checkItem')
+                ) {
                     return false;
                 }
 
                 return toggleNestedListInTaskItem(this.editor, 'bulletList');
             },
             'Mod-Shift-7': () => {
-                if (!this.editor.isActive('taskItem')) {
+                if (
+                    !this.editor.isActive('taskItem') &&
+                    !this.editor.isActive('checkItem')
+                ) {
                     return false;
                 }
 
                 return toggleNestedListInTaskItem(this.editor, 'orderedList');
             },
             'Mod-Shift-9': () => {
-                if (!this.editor.isActive('taskItem')) {
+                if (
+                    !this.editor.isActive('taskItem') &&
+                    !this.editor.isActive('checkItem')
+                ) {
                     return false;
                 }
 

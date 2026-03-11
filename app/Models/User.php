@@ -15,6 +15,25 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, TwoFactorAuthenticatable;
 
+    public const LONG_DATE_FORMAT_OPTIONS = [
+        'weekday_day_month_year',
+        'weekday_month_day_year',
+        'day_month_year',
+        'iso_date',
+    ];
+
+    public const SHORT_DATE_FORMAT_OPTIONS = [
+        'weekday_day_month_short_year',
+        'day_month_short_year',
+        'numeric_day_month_year',
+        'iso_date',
+    ];
+
+    public const TIME_FORMAT_OPTIONS = [
+        '24h',
+        '12h',
+    ];
+
     /**
      * The attributes that are mass assignable.
      *
@@ -148,5 +167,44 @@ class User extends Authenticatable
         $duration = (int) $value;
 
         return max($min, min($max, $duration));
+    }
+
+    public function languagePreference(): string
+    {
+        $language = strtolower((string) data_get($this->settings, 'language', 'nl'));
+
+        return in_array($language, ['nl', 'en'], true) ? $language : 'nl';
+    }
+
+    public function longDateFormatPreference(): string
+    {
+        $value = strtolower((string) data_get($this->settings, 'date_long_format', ''));
+        if (in_array($value, self::LONG_DATE_FORMAT_OPTIONS, true)) {
+            return $value;
+        }
+
+        return $this->languagePreference() === 'en'
+            ? 'weekday_day_month_year'
+            : 'weekday_day_month_year';
+    }
+
+    public function shortDateFormatPreference(): string
+    {
+        $value = strtolower((string) data_get($this->settings, 'date_short_format', ''));
+        if (in_array($value, self::SHORT_DATE_FORMAT_OPTIONS, true)) {
+            return $value;
+        }
+
+        return 'weekday_day_month_short_year';
+    }
+
+    public function timeFormatPreference(): string
+    {
+        $value = strtolower((string) data_get($this->settings, 'time_format', ''));
+        if (in_array($value, self::TIME_FORMAT_OPTIONS, true)) {
+            return $value;
+        }
+
+        return $this->languagePreference() === 'en' ? '12h' : '24h';
     }
 }

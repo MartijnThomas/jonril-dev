@@ -46,6 +46,12 @@ export function TaskMigratePicker({
     const [loading, setLoading] = useState(false);
     const [submittingKey, setSubmittingKey] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const resetPickerState = useCallback(() => {
+        setQuery('');
+        setItems([]);
+        setLoading(false);
+        setSubmittingKey(null);
+    }, []);
 
     useEffect(() => {
         if (!open) {
@@ -59,6 +65,7 @@ export function TaskMigratePicker({
             limit: '20',
         });
 
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setLoading(true);
 
         fetch(`/tasks/migrate-targets?${params.toString()}`, {
@@ -101,12 +108,10 @@ export function TaskMigratePicker({
 
     useEffect(() => {
         if (!open) {
-            setQuery('');
-            setItems([]);
-            setLoading(false);
-            setSubmittingKey(null);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            resetPickerState();
         }
-    }, [open]);
+    }, [open, resetPickerState]);
 
     const canSubmit = useMemo(
         () => Boolean(blockId && blockId.trim() !== '') || (position ?? 0) > 0,

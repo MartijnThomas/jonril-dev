@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Note;
 use App\Models\NoteTask;
+use App\Models\User;
 use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\NoteSlugService;
 use Carbon\CarbonImmutable;
@@ -64,7 +65,12 @@ class TasksController extends Controller
             'status' => ['nullable', 'array'],
             'status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog', 'question'])],
             'group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
+            'show_completed' => ['nullable', 'boolean'],
+            'hashtag' => ['nullable', 'string', 'max:120'],
         ]);
+
+        $showCompleted = $request->boolean('show_completed');
+        $hashtag = ltrim(trim((string) ($filters['hashtag'] ?? '')), '#');
 
         $selectedWorkspaceIds = collect($filters['workspace_ids'] ?? [])
             ->map(fn ($id) => is_string($id) ? trim($id) : '')
@@ -113,7 +119,9 @@ class TasksController extends Controller
             ->values();
 
         if ($selectedStatuses->isEmpty()) {
-            $selectedStatuses = collect(['open']);
+            $selectedStatuses = $showCompleted
+                ? collect(['open', 'completed'])
+                : collect(['open']);
         }
 
         $query->where(function (Builder $statusQuery) use ($selectedStatuses): void {
@@ -145,6 +153,10 @@ class TasksController extends Controller
                 $inner->whereIn('note_id', $scopeIds)
                     ->orWhereIn('parent_note_id', $scopeIds);
             });
+        }
+
+        if ($hashtag !== '') {
+            $query->whereJsonContains('hashtags', $hashtag);
         }
 
         $datePreset = is_string($filters['date_preset'] ?? null)
@@ -308,6 +320,8 @@ class TasksController extends Controller
                 'date_to' => $dateTo ?? '',
                 'group_by' => $filters['group_by'] ?? 'none',
                 'status' => $selectedStatuses->values()->all(),
+                'show_completed' => $showCompleted,
+                'hashtag' => $hashtag,
             ],
             'filterPresets' => $this->taskFilterPresetsForUser($user),
             'notes' => $notes,
@@ -597,7 +611,8 @@ class TasksController extends Controller
         $workspaceId = (string) $sourceNote->workspace_id;
         $limit = (int) ($data['limit'] ?? 20);
         $query = trim((string) ($data['q'] ?? ''));
-        $language = $user->language ?? 'nl';
+        $language = $this->userLanguage($user);
+        $longDateFormat = $this->userLongDateFormat($user);
         $today = CarbonImmutable::now();
 
         $presetTargets = [
@@ -629,7 +644,12 @@ class TasksController extends Controller
         $items = [];
         foreach ($presetTargets as [$granularity, $date]) {
             $period = $this->journalNoteService->periodFor($granularity, $date);
-            $title = $this->journalNoteService->titleFor($granularity, $date, $language);
+            $title = $this->journalNoteService->titleFor(
+                $granularity,
+                $date,
+                $language,
+                $longDateFormat,
+            );
             $key = "{$granularity}:{$date->toDateString()}";
             $existing = $journalByKey->get($key);
 
@@ -755,7 +775,8 @@ class TasksController extends Controller
                 $workspace,
                 $data['target_journal_granularity'],
                 $data['target_journal_period'],
-                $user->language,
+                $this->userLanguage($user),
+                $this->userLongDateFormat($user),
             );
         }
 
@@ -1151,6 +1172,30 @@ class TasksController extends Controller
             'status' => $statuses !== [] ? $statuses : ['open'],
             'group_by' => $groupBy,
         ];
+    }
+
+    private function userLanguage(User $user): string
+    {
+        $language = strtolower((string) data_get($user->settings, 'language', 'nl'));
+
+        return in_array($language, ['nl', 'en'], true) ? $language : 'nl';
+    }
+
+    private function userLongDateFormat(User $user): string
+    {
+        $value = strtolower((string) data_get($user->settings, 'date_long_format', ''));
+        $allowed = [
+            'weekday_day_month_year',
+            'weekday_month_day_year',
+            'day_month_year',
+            'iso_date',
+        ];
+
+        if (in_array($value, $allowed, true)) {
+            return $value;
+        }
+
+        return 'weekday_day_month_year';
     }
 
     /**

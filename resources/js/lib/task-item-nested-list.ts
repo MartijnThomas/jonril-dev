@@ -427,7 +427,13 @@ export function canHandleNestedListInTaskItem(
     editor: Editor | null,
     type: NestedListType,
 ): boolean {
-    if (!editor || !editor.isEditable || !editor.isActive('taskItem')) {
+    if (!editor || !editor.isEditable) {
+        return false;
+    }
+
+    const inTaskContext =
+        editor.isActive('taskItem') || isInsideNestedContextListInTaskItem(editor);
+    if (!inTaskContext) {
         return false;
     }
 
@@ -469,6 +475,52 @@ export function toggleNestedListInTaskItem(
 
     if (!targetListType || !listItemType || !paragraphType || !taskItemType) {
         return false;
+    }
+
+    // When a checklist item is active and user chooses bullet/ordered list,
+    // convert the current checklist level instead of inserting a new child.
+    if (type !== 'checkList' && editor.isActive('checkItem')) {
+        const checkListDepth = findDepth(
+            editor,
+            (depth) => state.selection.$from.node(depth).type.name === 'checkList',
+        );
+        const checkItemType = state.schema.nodes.checkItem;
+
+        if (checkListDepth !== null && checkItemType) {
+            const checkListPos = state.selection.$from.before(checkListDepth);
+            const checkListNode = state.selection.$from.node(checkListDepth);
+            const convertedChildren: any[] = [];
+
+            checkListNode.forEach((child) => {
+                if (child.type === checkItemType) {
+                    convertedChildren.push(listItemType.create({}, child.content));
+                    return;
+                }
+
+                convertedChildren.push(child);
+            });
+
+            const convertedList = targetListType.create(
+                type === 'orderedList' ? { start: 1 } : {},
+                convertedChildren,
+            );
+
+            let tr = state.tr.replaceWith(
+                checkListPos,
+                checkListPos + checkListNode.nodeSize,
+                convertedList,
+            );
+
+            const mappedListPos = tr.mapping.map(checkListPos, -1);
+            const targetPos = Math.min(
+                tr.doc.content.size,
+                Math.max(1, mappedListPos + 3),
+            );
+            tr = tr.setSelection(TextSelection.create(tr.doc, targetPos));
+            view.dispatch(tr.scrollIntoView());
+
+            return true;
+        }
     }
 
     const nestedTaskListDepth = findDepth(
@@ -576,26 +628,32 @@ export function toggleNestedListInTaskItem(
         }
     }
 
-    // Otherwise create a nested regular list under the current task item.
+    // Otherwise create a nested regular list under the current checklist item
+    // (when active there) or under the current task item.
+    const checkItemDepth = findDepth(
+        editor,
+        (depth) => state.selection.$from.node(depth).type.name === 'checkItem',
+    );
     const taskItemDepth = findDepth(
         editor,
         (depth) => state.selection.$from.node(depth).type.name === 'taskItem',
     );
+    const parentDepth = checkItemDepth ?? taskItemDepth;
 
-    if (taskItemDepth === null) {
+    if (parentDepth === null) {
         return false;
     }
 
-    const taskItemPos = state.selection.$from.before(taskItemDepth);
-    const taskItemNode = state.selection.$from.node(taskItemDepth);
+    const parentPos = state.selection.$from.before(parentDepth);
+    const parentNode = state.selection.$from.node(parentDepth);
 
     const nestedList = targetListType.create(
         type === 'orderedList' ? { start: 1 } : {},
         [listItemType.create({}, [paragraphType.create()])],
     );
 
-    let tr = state.tr.insert(taskItemPos + taskItemNode.nodeSize - 1, nestedList);
-    const insertPos = taskItemPos + taskItemNode.nodeSize - 1;
+    let tr = state.tr.insert(parentPos + parentNode.nodeSize - 1, nestedList);
+    const insertPos = parentPos + parentNode.nodeSize - 1;
     const targetPos = Math.min(tr.doc.content.size, Math.max(1, insertPos + 3));
     tr = tr.setSelection(TextSelection.create(tr.doc, targetPos));
     view.dispatch(tr.scrollIntoView());

@@ -23,7 +23,10 @@ class ProfileController extends Controller
         return Inertia::render('settings/profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
-            'language' => data_get($request->user()?->settings, 'language', 'nl'),
+            'language' => $request->user()?->languagePreference() ?? 'nl',
+            'dateLongFormat' => $request->user()?->longDateFormatPreference() ?? 'weekday_day_month_year',
+            'dateShortFormat' => $request->user()?->shortDateFormatPreference() ?? 'weekday_day_month_short_year',
+            'timeFormat' => $request->user()?->timeFormatPreference() ?? '24h',
         ]);
     }
 
@@ -40,11 +43,22 @@ class ProfileController extends Controller
             $request->user()->email_verified_at = null;
         }
 
+        $settings = is_array($request->user()->settings) ? $request->user()->settings : [];
+
         if (isset($validated['language'])) {
-            $settings = is_array($request->user()->settings) ? $request->user()->settings : [];
             $settings['language'] = $validated['language'];
-            $request->user()->settings = $settings;
         }
+        if (isset($validated['date_long_format'])) {
+            $settings['date_long_format'] = $validated['date_long_format'];
+        }
+        if (isset($validated['date_short_format'])) {
+            $settings['date_short_format'] = $validated['date_short_format'];
+        }
+        if (isset($validated['time_format'])) {
+            $settings['time_format'] = $validated['time_format'];
+        }
+
+        $request->user()->settings = $settings;
 
         $request->user()->save();
 

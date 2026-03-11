@@ -193,6 +193,7 @@ class NotesController extends Controller
                 $granularity,
                 $period,
                 $this->userLanguage(),
+                $this->userLongDateFormat(),
             );
         } catch (InvalidArgumentException) {
             abort(404);
@@ -645,6 +646,24 @@ class NotesController extends Controller
         $language = strtolower((string) data_get(Auth::user()?->settings, 'language', 'nl'));
 
         return in_array($language, ['nl', 'en'], true) ? $language : 'nl';
+    }
+
+    private function userLongDateFormat(): string
+    {
+        $language = $this->userLanguage();
+        $value = strtolower((string) data_get(Auth::user()?->settings, 'date_long_format', ''));
+        $allowed = [
+            'weekday_day_month_year',
+            'weekday_month_day_year',
+            'day_month_year',
+            'iso_date',
+        ];
+
+        if (in_array($value, $allowed, true)) {
+            return $value;
+        }
+
+        return 'weekday_day_month_year';
     }
 
     /**

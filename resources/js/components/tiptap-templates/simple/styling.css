@@ -161,7 +161,7 @@
     ul:not([data-type='taskList']),
 .simple-editor-content .tiptap.ProseMirror.simple-editor ol {
     margin: 0.18em 0 0.62em 0;
-    padding-left: 1.35em;
+    padding-left: 1.05em;
 }
 
 .simple-editor-content
@@ -171,7 +171,7 @@
 .simple-editor-content .tiptap.ProseMirror.simple-editor ol li {
     position: relative;
     margin: 0.05em 0;
-    padding-left: 0.7em;
+    padding-left: 0.6em;
     font-family: inherit;
     font-size: inherit;
     font-weight: inherit;
@@ -215,14 +215,14 @@
     .tiptap.ProseMirror.simple-editor
     ul[data-type='taskList'] {
     margin: 0.2em 0 0.62em 0;
-    padding-left: 0.18em;
+    padding-left: 0.08em;
 }
 
 .simple-editor-content
     .tiptap.ProseMirror.simple-editor
     ul[data-type='checkList'] {
     margin: 0.2em 0 0.62em 0;
-    padding-left: 0.18em;
+    padding-left: 0.08em;
 }
 
 .simple-editor-content
@@ -256,7 +256,7 @@
     align-items: normal;
     position: relative;
     margin: 0.05em 0;
-    padding-left: 0.7em;
+    padding-left: 0.6em;
     font-family: inherit;
     font-size: inherit;
     font-weight: inherit;
@@ -292,7 +292,7 @@
     > label {
     position: relative;
     padding-top: 0.26rem;
-    padding-right: 0.76rem !important;
+    padding-right: 0.56rem !important;
 }
 
 .simple-editor-content
@@ -302,7 +302,7 @@
     > label {
     position: relative;
     padding-top: 0.26rem;
-    padding-right: 0.76rem !important;
+    padding-right: 0.56rem !important;
 }
 
 @media (max-width: 768px) {
@@ -581,8 +581,16 @@
     font-variant-numeric: tabular-nums;
     font-size: 0.82em;
     letter-spacing: 0.01em;
-    color: color-mix(in srgb, currentColor 62%, transparent);
-    padding-right: 0.75rem;
+    font-weight: 500;
+    color: color-mix(in srgb, rgb(14 116 144) 82%, transparent);
+    padding-right: 0;
+}
+
+.dark
+    .simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    .md-timeblock-time-token {
+    color: color-mix(in srgb, rgb(125 211 252) 86%, transparent);
 }
 
 .simple-editor-content

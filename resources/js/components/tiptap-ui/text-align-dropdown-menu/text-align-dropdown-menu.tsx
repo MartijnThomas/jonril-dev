@@ -7,8 +7,8 @@ import {
   textAlignIcons,
   textAlignLabels,
   TextAlignButton,
-  type TextAlign,
 } from "@/components/tiptap-ui/text-align-button"
+import type { TextAlign } from "@/components/tiptap-ui/text-align-button"
 import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
 import { Button, ButtonGroup } from "@/components/tiptap-ui-primitive/button"
 import { Card, CardBody } from "@/components/tiptap-ui-primitive/card"

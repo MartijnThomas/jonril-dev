@@ -9,10 +9,10 @@ import {
     ChevronsRight,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { RightSidebarTodayEvents } from '@/components/right-sidebar-today-events';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { RightSidebarTodayEvents } from '@/components/right-sidebar-today-events';
 import { cn } from '@/lib/utils';
 
 type JournalPageProps = {
@@ -23,6 +23,8 @@ type JournalPageProps = {
         user?: {
             settings?: {
                 language?: string;
+                date_long_format?: string;
+                time_format?: string;
             };
         };
     };
@@ -441,6 +443,8 @@ export function RightSidebarCalendar() {
                 anchorDate={pageProps.todayEventsDate ?? null}
                 timeblockColor={pageProps.currentWorkspace?.timeblock_color ?? pageProps.currentWorkspace?.color ?? null}
                 workspaceColor={pageProps.currentWorkspace?.color ?? null}
+                dateLongFormat={pageProps.auth?.user?.settings?.date_long_format ?? null}
+                timeFormat={pageProps.auth?.user?.settings?.time_format ?? null}
             />
         </section>
     );

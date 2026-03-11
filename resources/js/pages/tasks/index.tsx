@@ -57,6 +57,10 @@ import {
 } from '@/components/ui/popover';
 import AppLayout from '@/layouts/app-layout';
 import { useI18n } from '@/lib/i18n';
+import {
+    formatLongDate,
+    resolveLongDateFormat,
+} from '@/lib/user-date-time-format';
 import { cn } from '@/lib/utils';
 import type { BreadcrumbItem } from '@/types';
 
@@ -186,6 +190,7 @@ export default function TasksIndex({
             user?: {
                 settings?: {
                     language?: string;
+                    date_long_format?: string;
                 };
             };
         };
@@ -196,6 +201,10 @@ export default function TasksIndex({
     const language =
         pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
     const dateLocale = language === 'en' ? enUS : nl;
+    const longDateFormat = resolveLongDateFormat(
+        pageProps.auth?.user?.settings?.date_long_format,
+        language,
+    );
     const resultsCountLabel = t(
         tasks.total === 1
             ? 'tasks_index.results_count_one'
@@ -617,7 +626,8 @@ export default function TasksIndex({
 
     const formatGroupDate = (value: string) => {
         try {
-            return format(parseISO(value), 'PPP', { locale: dateLocale });
+            const label = formatLongDate(parseISO(value), dateLocale, longDateFormat);
+            return label.length > 0 ? label.charAt(0).toUpperCase() + label.slice(1) : label;
         } catch {
             return value;
         }

@@ -10,7 +10,13 @@ use InvalidArgumentException;
 
 class JournalNoteService
 {
-    public function resolveOrCreate(Workspace $workspace, string $granularity, string $period, ?string $locale = null): Note
+    public function resolveOrCreate(
+        Workspace $workspace,
+        string $granularity,
+        string $period,
+        ?string $locale = null,
+        ?string $longDateFormat = null,
+    ): Note
     {
         $normalizedGranularity = $this->normalizeGranularity($granularity);
         $date = $this->parsePeriod($normalizedGranularity, $period);
@@ -28,7 +34,7 @@ class JournalNoteService
             return $existing;
         }
 
-        $title = $this->titleFor($normalizedGranularity, $date, $locale);
+        $title = $this->titleFor($normalizedGranularity, $date, $locale, $longDateFormat);
 
         return $workspace->notes()->create([
             'type' => Note::TYPE_JOURNAL,
@@ -54,13 +60,19 @@ class JournalNoteService
         };
     }
 
-    public function titleFor(string $granularity, mixed $journalDate, ?string $locale = null): string
+    public function titleFor(
+        string $granularity,
+        mixed $journalDate,
+        ?string $locale = null,
+        ?string $longDateFormat = null,
+    ): string
     {
         $normalizedGranularity = $this->normalizeGranularity($granularity);
-        $date = $this->normalizeDate($journalDate)->locale($this->normalizeLocale($locale));
+        $normalizedLocale = $this->normalizeLocale($locale);
+        $date = $this->normalizeDate($journalDate)->locale($normalizedLocale);
 
         return match ($normalizedGranularity) {
-            Note::JOURNAL_DAILY => Str::ucfirst($date->isoFormat('dddd D MMMM YYYY')),
+            Note::JOURNAL_DAILY => Str::ucfirst($date->isoFormat($this->dailyTitlePattern($normalizedLocale, $longDateFormat))),
             Note::JOURNAL_WEEKLY => "Week {$date->isoWeek()} {$date->isoWeekYear()}",
             Note::JOURNAL_MONTHLY => Str::ucfirst($date->isoFormat('MMMM YYYY')),
             Note::JOURNAL_YEARLY => $date->format('Y'),
@@ -72,6 +84,26 @@ class JournalNoteService
         $normalized = strtolower(trim((string) $locale));
 
         return in_array($normalized, ['nl', 'en'], true) ? $normalized : 'nl';
+    }
+
+    private function dailyTitlePattern(string $locale, ?string $longDateFormat): string
+    {
+        $normalizedFormat = strtolower(trim((string) $longDateFormat));
+        $fallback = 'weekday_day_month_year';
+        $formatKey = in_array($normalizedFormat, [
+            'weekday_day_month_year',
+            'weekday_month_day_year',
+            'day_month_year',
+            'iso_date',
+        ], true) ? $normalizedFormat : $fallback;
+
+        return match ($formatKey) {
+            'weekday_day_month_year' => 'dddd D MMMM YYYY',
+            'weekday_month_day_year' => 'dddd MMMM D, YYYY',
+            'day_month_year' => 'D MMMM YYYY',
+            'iso_date' => 'YYYY-MM-DD',
+            default => 'dddd D MMMM YYYY',
+        };
     }
 
     public function parsePeriod(string $granularity, string $period): CarbonImmutable

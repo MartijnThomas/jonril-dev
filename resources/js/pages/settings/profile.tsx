@@ -18,10 +18,16 @@ export default function Profile({
     mustVerifyEmail,
     status,
     language,
+    dateLongFormat,
+    dateShortFormat,
+    timeFormat,
 }: {
     mustVerifyEmail: boolean;
     status?: string;
     language: 'nl' | 'en';
+    dateLongFormat: string;
+    dateShortFormat: string;
+    timeFormat: string;
 }) {
     const { auth } = usePage().props;
     const { t } = useI18n();
@@ -122,6 +128,111 @@ export default function Profile({
                                     <InputError
                                         className="mt-2"
                                         message={errors.language}
+                                    />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="date_long_format">
+                                        {t('settings_profile.date_long_format', 'Long date format')}
+                                    </Label>
+                                    <select
+                                        id="date_long_format"
+                                        name="date_long_format"
+                                        defaultValue={dateLongFormat}
+                                        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-[3px] focus-visible:outline-none"
+                                    >
+                                        <option value="weekday_day_month_year">
+                                            {t(
+                                                'settings_profile.date_long_format_weekday_day_month_year',
+                                                'Wednesday 11 March 2026',
+                                            )}
+                                        </option>
+                                        <option value="weekday_month_day_year">
+                                            {t(
+                                                'settings_profile.date_long_format_weekday_month_day_year',
+                                                'Wednesday March 11, 2026',
+                                            )}
+                                        </option>
+                                        <option value="day_month_year">
+                                            {t(
+                                                'settings_profile.date_long_format_day_month_year',
+                                                '11 March 2026',
+                                            )}
+                                        </option>
+                                        <option value="iso_date">
+                                            {t(
+                                                'settings_profile.date_long_format_iso_date',
+                                                '2026-03-11',
+                                            )}
+                                        </option>
+                                    </select>
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.date_long_format}
+                                    />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="date_short_format">
+                                        {t('settings_profile.date_short_format', 'Short date format')}
+                                    </Label>
+                                    <select
+                                        id="date_short_format"
+                                        name="date_short_format"
+                                        defaultValue={dateShortFormat}
+                                        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-[3px] focus-visible:outline-none"
+                                    >
+                                        <option value="weekday_day_month_short_year">
+                                            {t(
+                                                'settings_profile.date_short_format_weekday_day_month_short_year',
+                                                "Wed 12 Mar '26",
+                                            )}
+                                        </option>
+                                        <option value="day_month_short_year">
+                                            {t(
+                                                'settings_profile.date_short_format_day_month_short_year',
+                                                "12 Mar '26",
+                                            )}
+                                        </option>
+                                        <option value="numeric_day_month_year">
+                                            {t(
+                                                'settings_profile.date_short_format_numeric_day_month_year',
+                                                '12-03-26',
+                                            )}
+                                        </option>
+                                        <option value="iso_date">
+                                            {t(
+                                                'settings_profile.date_short_format_iso_date',
+                                                '2026-03-12',
+                                            )}
+                                        </option>
+                                    </select>
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.date_short_format}
+                                    />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="time_format">
+                                        {t('settings_profile.time_format', 'Time format')}
+                                    </Label>
+                                    <select
+                                        id="time_format"
+                                        name="time_format"
+                                        defaultValue={timeFormat}
+                                        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-[3px] focus-visible:outline-none"
+                                    >
+                                        <option value="24h">
+                                            {t('settings_profile.time_format_24h', '24-hour (14:30)')}
+                                        </option>
+                                        <option value="12h">
+                                            {t('settings_profile.time_format_12h', '12-hour (2:30 PM)')}
+                                        </option>
+                                    </select>
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.time_format}
                                     />
                                 </div>
 

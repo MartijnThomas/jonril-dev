@@ -331,15 +331,16 @@ export const TimeblockExtension = Extension.create<TimeblockOptions>({
     },
 
     addProseMirrorPlugins() {
-        const extension = this;
+        const options = this.options;
+        const storage = this.storage;
 
         return [
             new Plugin<TimeblockPluginState>({
                 key: TIMEBLOCK_PLUGIN_KEY,
                 state: {
                     init: (_config, state) => {
-                        const nextState = collectTimeblocks(state.doc, extension.options);
-                        extension.storage.timeblocks = nextState.timeblocks;
+                        const nextState = collectTimeblocks(state.doc, options);
+                        storage.timeblocks = nextState.timeblocks;
 
                         return nextState;
                     },
@@ -348,14 +349,14 @@ export const TimeblockExtension = Extension.create<TimeblockOptions>({
                             return value;
                         }
 
-                        const nextState = collectTimeblocks(tr.doc, extension.options);
-                        extension.storage.timeblocks = nextState.timeblocks;
+                        const nextState = collectTimeblocks(tr.doc, options);
+                        storage.timeblocks = nextState.timeblocks;
 
                         return nextState;
                     },
                 },
                 appendTransaction: (transactions, _oldState, newState) => {
-                    if (!extension.options.enabled) {
+                    if (!options.enabled) {
                         return null;
                     }
 
@@ -402,7 +403,7 @@ export const TimeblockExtension = Extension.create<TimeblockOptions>({
                             const end = computeEndTime(
                                 hour,
                                 minute,
-                                extension.options.defaultDurationMinutes,
+                                options.defaultDurationMinutes,
                             );
 
                             if (!end) {
@@ -411,7 +412,7 @@ export const TimeblockExtension = Extension.create<TimeblockOptions>({
                             }
 
                             const token = `${padTime(hour)}:${padTime(minute)}`;
-                            const replacement = `${token}-${padTime(end.endHour)}:${padTime(end.endMinute)}`;
+                            const replacement = `${token} - ${padTime(end.endHour)}:${padTime(end.endMinute)}`;
                             const localStart = (match.groups.leading ?? '').length;
                             const from = pos + 1 + childPos + localStart;
                             const to = from + token.length;

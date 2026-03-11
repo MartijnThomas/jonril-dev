@@ -12,6 +12,7 @@ export type TaskStatus =
     | null;
 
 const TASK_STATUS_TOKEN_REGEX = /^(\s*)(—|<|\*|\?|\/)(?=\s|$)/u;
+const isStatusSeparator = (char: string): boolean => char === ' ' || char === '\u00A0';
 
 function statusFromToken(token: string): TaskStatus {
     if (token === '—') {
@@ -131,7 +132,7 @@ function findFirstStatusTokenRange(
         let absoluteEnd = pos + 1 + childPos + match.tokenEnd;
         const text = child.text as string;
         let separatorOffset = match.tokenEnd;
-        while (text.charAt(separatorOffset) === ' ') {
+        while (isStatusSeparator(text.charAt(separatorOffset))) {
             absoluteEnd += 1;
             separatorOffset += 1;
         }
@@ -214,7 +215,7 @@ function buildStatusDecorations(doc: any): DecorationSet {
             let absoluteEnd = pos + 1 + childPos + match.tokenEnd;
             const text = child.text as string;
             let separatorOffset = match.tokenEnd;
-            while (text.charAt(separatorOffset) === ' ') {
+            while (isStatusSeparator(text.charAt(separatorOffset))) {
                 absoluteEnd += 1;
                 separatorOffset += 1;
             }

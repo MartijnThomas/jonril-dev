@@ -97,6 +97,30 @@ export const COLOR_SWATCH_THEME_BG_CLASS: Record<ColorOption, string> = {
     rose: 'bg-rose-600 dark:bg-rose-400',
 };
 
+export const COLOR_SWATCH_THEME_BORDER_CLASS: Record<ColorOption, string> = {
+    black: 'border-black dark:border-zinc-200',
+    slate: 'border-slate-600 dark:border-slate-400',
+    zinc: 'border-zinc-600 dark:border-zinc-400',
+    stone: 'border-stone-600 dark:border-stone-400',
+    red: 'border-red-600 dark:border-red-400',
+    orange: 'border-orange-600 dark:border-orange-400',
+    amber: 'border-amber-600 dark:border-amber-400',
+    yellow: 'border-yellow-500 dark:border-yellow-400',
+    lime: 'border-lime-600 dark:border-lime-400',
+    green: 'border-green-600 dark:border-green-400',
+    emerald: 'border-emerald-600 dark:border-emerald-400',
+    teal: 'border-teal-600 dark:border-teal-400',
+    cyan: 'border-cyan-600 dark:border-cyan-400',
+    sky: 'border-sky-600 dark:border-sky-400',
+    blue: 'border-blue-600 dark:border-blue-400',
+    indigo: 'border-indigo-600 dark:border-indigo-400',
+    violet: 'border-violet-600 dark:border-violet-400',
+    purple: 'border-purple-600 dark:border-purple-400',
+    fuchsia: 'border-fuchsia-600 dark:border-fuchsia-400',
+    pink: 'border-pink-600 dark:border-pink-400',
+    rose: 'border-rose-600 dark:border-rose-400',
+};
+
 export const COLOR_SWATCH_TEXT_CLASS: Record<ColorOption, string> = {
     black: 'text-black dark:text-zinc-300',
     slate: 'text-slate-600 dark:text-slate-400',

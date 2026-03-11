@@ -71,17 +71,28 @@ export function TaskInlineContent({
         return 'md-priority md-priority--low';
     };
 
-    let activePriority: TaskRenderFragment['priority'] = null;
-
     return (
         <span
             className={`task-inline ${canceled ? 'task-inline--canceled' : ''} ${className}`.trim()}
         >
             {fragments.map((fragment, index) => {
+                const activePriority: TaskRenderFragment['priority'] =
+                    priorityStyle === 'range'
+                        ? (() => {
+                            for (let i = index; i >= 0; i -= 1) {
+                                const candidate = fragments[i];
+                                if (candidate?.type === 'priority_token') {
+                                    return candidate.priority ?? 'normal';
+                                }
+                            }
+
+                            return null;
+                        })()
+                        : null;
+
                 if (priorityStyle === 'range' && fragment.type === 'priority_token') {
                     const value = fragment.value ?? '';
                     const priority = fragment.priority ?? 'normal';
-                    activePriority = priority;
 
                     if (hidePriorityTokens) {
                         return null;
