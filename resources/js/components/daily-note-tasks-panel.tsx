@@ -18,7 +18,16 @@ type DailyTaskItem = {
     block_id: string | null;
     position: number;
     checked: boolean;
-    task_status: 'canceled' | 'assigned' | 'migrated' | 'deferred' | 'starred' | 'question' | null;
+    task_status:
+        | 'canceled'
+        | 'assigned'
+        | 'in_progress'
+        | 'migrated'
+        | 'deferred'
+        | 'starred'
+        | 'backlog'
+        | null;
+    backlog_promoted_at?: string | null;
     content: string;
     render_fragments: TaskRenderFragment[];
     due_date: string | null;
@@ -71,7 +80,9 @@ export function DailyNoteTasksPanel({
             return;
         }
 
-        const nextChecked = !task.checked;
+        const isBacklogPromotion =
+            task.task_status === 'backlog' && task.checked !== true;
+        const nextChecked = isBacklogPromotion ? false : !task.checked;
         setPendingTaskIds((current) => [...current, task.id]);
 
         router.patch(
@@ -81,6 +92,7 @@ export function DailyNoteTasksPanel({
                 block_id: task.block_id,
                 position: task.position,
                 checked: nextChecked,
+                promote_backlog: isBacklogPromotion,
             },
             {
                 preserveState: true,
@@ -90,7 +102,16 @@ export function DailyNoteTasksPanel({
                     setItems((current) =>
                         current.map((item) =>
                             item.id === task.id
-                                ? { ...item, checked: nextChecked }
+                                ? {
+                                      ...item,
+                                      checked: nextChecked,
+                                      task_status: isBacklogPromotion
+                                          ? null
+                                          : item.task_status,
+                                      backlog_promoted_at: isBacklogPromotion
+                                          ? new Date().toISOString()
+                                          : item.backlog_promoted_at ?? null,
+                                  }
                                 : item,
                         ),
                     );
@@ -194,6 +215,10 @@ export function DailyNoteTasksPanel({
                                                 ? 'canceled'
                                                 : task.task_status === 'migrated'
                                                   ? 'migrated'
+                                                  : task.task_status === 'in_progress'
+                                                    ? 'in_progress'
+                                                  : task.task_status === 'backlog'
+                                                    ? 'backlog'
                                                   : task.checked
                                                     ? 'completed'
                                                     : 'open'

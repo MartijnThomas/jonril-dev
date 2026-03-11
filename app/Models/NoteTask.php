@@ -17,6 +17,12 @@ class NoteTask extends Model
         'position',
         'checked',
         'task_status',
+        'canceled_at',
+        'completed_at',
+        'started_at',
+        'backlog_promoted_at',
+        'migrated_to_note_id',
+        'migrated_from_note_id',
         'priority',
         'content_text',
         'render_fragments',
@@ -34,6 +40,10 @@ class NoteTask extends Model
     {
         return [
             'checked' => 'boolean',
+            'canceled_at' => 'datetime',
+            'completed_at' => 'datetime',
+            'started_at' => 'datetime',
+            'backlog_promoted_at' => 'datetime',
             'due_date' => 'date',
             'deadline_date' => 'date',
             'journal_date' => 'date',

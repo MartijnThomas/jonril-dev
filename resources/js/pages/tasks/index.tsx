@@ -4,13 +4,14 @@ import {
     endOfMonth,
     endOfWeek,
     format,
+    formatDistance,
     parseISO,
     startOfMonth,
     startOfWeek,
 } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { toast } from 'sonner';
@@ -36,7 +37,19 @@ type TaskItem = {
     block_id: string | null;
     position: number;
     checked: boolean;
-    task_status: 'canceled' | 'assigned' | 'migrated' | 'deferred' | 'starred' | 'question' | null;
+    task_status:
+        | 'canceled'
+        | 'assigned'
+        | 'in_progress'
+        | 'migrated'
+        | 'deferred'
+        | 'starred'
+        | 'backlog'
+        | null;
+    backlog_promoted_at?: string | null;
+    completed_at?: string | null;
+    canceled_at?: string | null;
+    started_at?: string | null;
     priority: 'high' | 'medium' | 'normal' | null;
     content: string;
     render_fragments: TaskRenderFragment[];
@@ -45,6 +58,16 @@ type TaskItem = {
     journal_date: string | null;
     mentions: string[];
     hashtags: string[];
+    migrated_to_note?: {
+        id: string;
+        title: string;
+        href: string;
+    } | null;
+    migrated_from_note?: {
+        id: string;
+        title: string;
+        href: string;
+    } | null;
     note: {
         id: string;
         title: string;
@@ -154,6 +177,15 @@ export default function TasksIndex({
     });
     const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
     const [showAllSelectionPills, setShowAllSelectionPills] = useState(false);
+    const [relativeNow, setRelativeNow] = useState<number>(() => Date.now());
+
+    useEffect(() => {
+        const timer = window.setInterval(() => {
+            setRelativeNow(Date.now());
+        }, 30_000);
+
+        return () => window.clearInterval(timer);
+    }, []);
     const statusOptions = useMemo(
         () => [
             { value: 'open', label: t('tasks_index.status_open', 'Open') },
@@ -161,8 +193,9 @@ export default function TasksIndex({
             { value: 'canceled', label: t('tasks_index.status_canceled', 'Canceled') },
             { value: 'migrated', label: t('tasks_index.status_migrated', 'Migrated') },
             { value: 'assigned', label: t('tasks_index.status_assigned', 'Assigned') },
+            { value: 'in_progress', label: t('tasks_index.status_in_progress', 'In progress') },
             { value: 'starred', label: t('tasks_index.status_starred', 'Starred') },
-            { value: 'question', label: t('tasks_index.status_question', 'Question') },
+            { value: 'backlog', label: t('tasks_index.status_backlog', 'Backlog') },
         ],
         [t],
     );
@@ -312,6 +345,7 @@ export default function TasksIndex({
     const updateTaskChecked = (
         task: TaskItem,
         checked: boolean,
+        promoteBacklog: boolean,
         options?: {
             onSuccess?: () => void;
             onError?: () => void;
@@ -331,6 +365,7 @@ export default function TasksIndex({
                 block_id: task.block_id,
                 position: task.position,
                 checked,
+                promote_backlog: promoteBacklog,
             },
             {
                 preserveState: true,
@@ -352,9 +387,11 @@ export default function TasksIndex({
             return;
         }
 
-        const nextChecked = !task.checked;
+        const isBacklogPromotion =
+            task.task_status === 'backlog' && task.checked !== true;
+        const nextChecked = isBacklogPromotion ? false : !task.checked;
 
-        updateTaskChecked(task, nextChecked, {
+        updateTaskChecked(task, nextChecked, isBacklogPromotion, {
             onSuccess: () => {
                 toast.success(
                     nextChecked
@@ -364,7 +401,7 @@ export default function TasksIndex({
                         action: {
                             label: t('tasks_index.undo', 'Undo'),
                             onClick: () => {
-                                updateTaskChecked(task, task.checked, {
+                                updateTaskChecked(task, task.checked, false, {
                                     onSuccess: () => {
                                         toast.success(
                                             t(
@@ -462,6 +499,128 @@ export default function TasksIndex({
         task.note.workspace_name?.trim() ||
         workspaceNameById.get(task.note.workspace_id)?.trim() ||
         '';
+
+    const formatPromotedAt = (value: string) => {
+        try {
+            return format(parseISO(value), 'PPP', { locale: dateLocale });
+        } catch {
+            return value;
+        }
+    };
+
+    const formatTaskStateAt = (value: string) => {
+        try {
+            return formatDistance(parseISO(value), new Date(relativeNow), {
+                addSuffix: true,
+                locale: dateLocale,
+            });
+        } catch {
+            return value;
+        }
+    };
+
+    const renderTaskMetadataAndPath = (task: TaskItem) => {
+        const metadata: Array<{
+            key: string;
+            label: string;
+            value: string;
+            href?: string;
+        }> = [];
+
+        if (task.task_status === 'migrated') {
+            if (task.migrated_to_note) {
+                metadata.push({
+                    key: 'migrated-to',
+                    label: t('tasks_index.migrated_to', 'Migrated to'),
+                    value: task.migrated_to_note.title,
+                    href: task.migrated_to_note.href,
+                });
+            } else if (task.migrated_from_note) {
+                metadata.push({
+                    key: 'migrated-from',
+                    label: t('tasks_index.migrated_from', 'Migrated from'),
+                    value: task.migrated_from_note.title,
+                    href: task.migrated_from_note.href,
+                });
+            }
+        }
+
+        if (task.backlog_promoted_at) {
+            metadata.push({
+                key: 'promoted-at',
+                label: t('tasks_index.promoted_at', 'Promoted at'),
+                value: formatPromotedAt(task.backlog_promoted_at),
+            });
+        }
+
+        if (task.checked && task.completed_at) {
+            metadata.push({
+                key: 'completed-at',
+                label: t('tasks_index.completed_at', 'Completed at'),
+                value: formatTaskStateAt(task.completed_at),
+            });
+        }
+
+        if (task.task_status === 'canceled' && task.canceled_at) {
+            metadata.push({
+                key: 'canceled-at',
+                label: t('tasks_index.canceled_at', 'Canceled at'),
+                value: formatTaskStateAt(task.canceled_at),
+            });
+        }
+
+        if (task.task_status === 'in_progress' && task.started_at) {
+            metadata.push({
+                key: 'started-at',
+                label: t('tasks_index.started_at', 'Started at'),
+                value: formatTaskStateAt(task.started_at),
+            });
+        }
+
+        return (
+            <>
+                {metadata.length > 0 ? (
+                    <div className="md-task-migration-meta mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5">
+                        {metadata.map((item) => (
+                            <span key={item.key} className="inline-flex min-w-0 items-baseline gap-1">
+                                <span className="md-task-migration-meta-label shrink-0">
+                                    {item.label}:
+                                </span>{' '}
+                                {item.href ? (
+                                    <Link
+                                        href={item.href}
+                                        className="md-task-migration-link truncate"
+                                    >
+                                        {item.value}
+                                    </Link>
+                                ) : (
+                                    <span className="truncate text-inherit">
+                                        {item.value}
+                                    </span>
+                                )}
+                            </span>
+                        ))}
+                    </div>
+                ) : null}
+                <div className="mt-1 text-xs text-muted-foreground">
+                    {getWorkspacePathSegment(task) ? (
+                        <span>
+                            {getWorkspacePathSegment(task)} /{' '}
+                        </span>
+                    ) : null}
+                    {task.note.parent_title
+                        ? `${task.note.parent_title} / `
+                        : ''}
+                    <Link
+                        href={task.note.href}
+                        className="text-foreground underline-offset-2 hover:underline"
+                    >
+                        {task.note.title}
+                    </Link>
+                </div>
+            </>
+        );
+    };
 
     const groupedTasksByNote = useMemo(() => {
         const map = new Map<
@@ -1436,6 +1595,10 @@ export default function TasksIndex({
                                                       ? 'canceled'
                                                       : task.task_status === 'migrated'
                                                         ? 'migrated'
+                                                        : task.task_status === 'in_progress'
+                                                          ? 'in_progress'
+                                                        : task.task_status === 'backlog'
+                                                          ? 'backlog'
                                                         : task.checked
                                                           ? 'completed'
                                                           : 'open'
@@ -1489,7 +1652,7 @@ export default function TasksIndex({
                                                       language={language}
                                                       canceled={task.task_status === 'canceled'}
                                                       className={cn(
-                                                          'text-base leading-[1.62] font-normal tracking-[-0.01em]',
+                                                          'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
                                                           (task.task_status === 'canceled' ||
                                                               task.task_status === 'migrated' ||
                                                               task.checked) &&
@@ -1500,22 +1663,7 @@ export default function TasksIndex({
                                                       hideStatusTokens
                                                   />
                                               </p>
-                                              <div className="mt-1 text-xs text-muted-foreground">
-                                                  {getWorkspacePathSegment(task) ? (
-                                                      <span>
-                                                          {getWorkspacePathSegment(task)} /{' '}
-                                                      </span>
-                                                  ) : null}
-                                                  {task.note.parent_title
-                                                      ? `${task.note.parent_title} / `
-                                                      : ''}
-                                                  <Link
-                                                      href={task.note.href}
-                                                      className="text-foreground underline-offset-2 hover:underline"
-                                                  >
-                                                      {task.note.title}
-                                                  </Link>
-                                              </div>
+                                              {renderTaskMetadataAndPath(task)}
                                           </div>
                                       </div>
                                   ))
@@ -1539,6 +1687,10 @@ export default function TasksIndex({
                                                                   ? 'canceled'
                                                                   : task.task_status === 'migrated'
                                                                     ? 'migrated'
+                                                                    : task.task_status === 'in_progress'
+                                                                      ? 'in_progress'
+                                                                    : task.task_status === 'backlog'
+                                                                      ? 'backlog'
                                                                     : task.checked
                                                                       ? 'completed'
                                                                       : 'open'
@@ -1592,7 +1744,7 @@ export default function TasksIndex({
                                                                   language={language}
                                                                   canceled={task.task_status === 'canceled'}
                                                                   className={cn(
-                                                                      'text-base leading-[1.62] font-normal tracking-[-0.01em]',
+                                                                      'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
                                                                       (task.task_status === 'canceled' ||
                                                                           task.task_status === 'migrated' ||
                                                                           task.checked) &&
@@ -1603,22 +1755,7 @@ export default function TasksIndex({
                                                                   hideStatusTokens
                                                               />
                                                           </p>
-                                                          <div className="mt-1 text-xs text-muted-foreground">
-                                                              {getWorkspacePathSegment(task) ? (
-                                                                  <span>
-                                                                      {getWorkspacePathSegment(task)} /{' '}
-                                                                  </span>
-                                                              ) : null}
-                                                              {task.note.parent_title
-                                                                  ? `${task.note.parent_title} / `
-                                                                  : ''}
-                                                              <Link
-                                                                  href={task.note.href}
-                                                                  className="text-foreground underline-offset-2 hover:underline"
-                                                              >
-                                                                  {task.note.title}
-                                                              </Link>
-                                                          </div>
+                                                          {renderTaskMetadataAndPath(task)}
                                                       </div>
                                                   </div>
                                               ))}
@@ -1649,6 +1786,10 @@ export default function TasksIndex({
                                                                   ? 'canceled'
                                                                   : task.task_status === 'migrated'
                                                                     ? 'migrated'
+                                                                    : task.task_status === 'in_progress'
+                                                                      ? 'in_progress'
+                                                                    : task.task_status === 'backlog'
+                                                                      ? 'backlog'
                                                                     : task.checked
                                                                       ? 'completed'
                                                                       : 'open'
@@ -1702,7 +1843,7 @@ export default function TasksIndex({
                                                                   language={language}
                                                                   canceled={task.task_status === 'canceled'}
                                                                   className={cn(
-                                                                      'text-base leading-[1.62] font-normal tracking-[-0.01em]',
+                                                                      'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
                                                                       (task.task_status === 'canceled' ||
                                                                           task.task_status === 'migrated' ||
                                                                           task.checked) &&
@@ -1713,22 +1854,7 @@ export default function TasksIndex({
                                                                   hideStatusTokens
                                                               />
                                                           </p>
-                                                          <div className="mt-1 text-xs text-muted-foreground">
-                                                              {getWorkspacePathSegment(task) ? (
-                                                                  <span>
-                                                                      {getWorkspacePathSegment(task)} /{' '}
-                                                                  </span>
-                                                              ) : null}
-                                                              {task.note.parent_title
-                                                                  ? `${task.note.parent_title} / `
-                                                                  : ''}
-                                                              <Link
-                                                                  href={task.note.href}
-                                                                  className="text-foreground underline-offset-2 hover:underline"
-                                                              >
-                                                                  {task.note.title}
-                                                              </Link>
-                                                          </div>
+                                                          {renderTaskMetadataAndPath(task)}
                                                       </div>
                                                   </div>
                                               ))}

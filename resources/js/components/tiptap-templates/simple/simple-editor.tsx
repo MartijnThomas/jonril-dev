@@ -33,6 +33,41 @@ import '@/components/tiptap-templates/simple/styling.css';
 
 type SimpleEditorContent = string | Record<string, any> | null;
 const EMPTY_SUGGESTIONS: string[] = [];
+const PROPERTY_VISIBILITY_META_PREFIX = '__visible:';
+
+const isPropertyVisibilityMetaKey = (key: string) =>
+    key.startsWith(PROPERTY_VISIBILITY_META_PREFIX);
+
+const isDefaultVisibleProperty = (key: string) => {
+    const normalized = key.trim().toLowerCase();
+    return normalized === 'context' || normalized === 'tags';
+};
+
+const hasVisibleProperties = (properties: DocumentPropertiesValue): boolean => {
+    for (const [key, propertyValue] of Object.entries(properties)) {
+        if (isPropertyVisibilityMetaKey(key)) {
+            continue;
+        }
+
+        if (typeof propertyValue !== 'string' || propertyValue.trim() === '') {
+            continue;
+        }
+
+        const metaValue =
+            properties[`${PROPERTY_VISIBILITY_META_PREFIX}${key}`];
+        const isVisible = metaValue === '1'
+            ? true
+            : metaValue === '0'
+                ? false
+                : isDefaultVisibleProperty(key);
+
+        if (isVisible) {
+            return true;
+        }
+    }
+
+    return false;
+};
 
 function serializeEditorContent(content: SimpleEditorContent): string {
     if (typeof content === 'string') {
@@ -109,19 +144,21 @@ type SimpleEditorProps = {
             status?:
                 | 'canceled'
                 | 'assigned'
+                | 'in_progress'
                 | 'migrated'
                 | 'deferred'
                 | 'starred'
-                | 'question'
+                | 'backlog'
                 | null;
         }[];
         task_status?:
             | 'canceled'
             | 'assigned'
+            | 'in_progress'
             | 'migrated'
             | 'deferred'
             | 'starred'
-            | 'question'
+            | 'backlog'
             | null;
         due_date: string | null;
         deadline_date: string | null;
@@ -153,10 +190,11 @@ type SimpleEditorProps = {
             status?:
                 | 'canceled'
                 | 'assigned'
+                | 'in_progress'
                 | 'migrated'
                 | 'deferred'
                 | 'starred'
-                | 'question'
+                | 'backlog'
                 | null;
         }[];
         note: {
@@ -229,6 +267,9 @@ export function SimpleEditor({
 
     const [documentProperties, setDocumentProperties] =
         useState<DocumentPropertiesValue>(properties);
+    const [showDocumentProperties, setShowDocumentProperties] = useState(
+        hasVisibleProperties(properties),
+    );
     const noteIconProp = documentProperties.icon;
     const noteIconColorProp = documentProperties['icon-color'];
     const noteIconBgProp = documentProperties['icon-bg'];
@@ -312,7 +353,32 @@ export function SimpleEditor({
 
     useEffect(() => {
         setDocumentProperties(properties);
-    }, [properties]);
+        setShowDocumentProperties(hasVisibleProperties(properties));
+    }, [id, properties]);
+
+    useEffect(() => {
+        const handlePropertiesToggleRequest = () => {
+            setShowDocumentProperties((current) => !current);
+        };
+
+        window.addEventListener(
+            'note-properties-toggle-request',
+            handlePropertiesToggleRequest,
+        );
+
+        return () => {
+            window.removeEventListener(
+                'note-properties-toggle-request',
+                handlePropertiesToggleRequest,
+            );
+        };
+    }, []);
+
+    useEffect(() => {
+        window.dispatchEvent(new CustomEvent('note-properties-visibility-state', {
+            detail: { visible: showDocumentProperties },
+        }));
+    }, [showDocumentProperties]);
 
     useEffect(() => {
         if (!editor) {
@@ -648,23 +714,25 @@ export function SimpleEditor({
                     </div>
                 ) : null}
 
-                <div className="w-full md:mx-auto md:max-w-3xl md:px-8">
-                    <div className="pt-0 md:pt-1">
-                        <DocumentProperties
-                            value={documentProperties}
-                            onChange={setDocumentProperties}
-                            onPersistRequested={() => {
-                                requestAnimationFrame(() => {
-                                    saveEditor(false);
-                                });
-                            }}
-                            workspaceSuggestions={{
-                                mentions: mentionSuggestions,
-                                hashtags: hashtagSuggestions,
-                            }}
-                        />
+                {showDocumentProperties ? (
+                    <div className="w-full md:mx-auto md:max-w-3xl md:px-8">
+                        <div className="pt-0 md:pt-1">
+                            <DocumentProperties
+                                value={documentProperties}
+                                onChange={setDocumentProperties}
+                                onPersistRequested={() => {
+                                    requestAnimationFrame(() => {
+                                        saveEditor(false);
+                                    });
+                                }}
+                                workspaceSuggestions={{
+                                    mentions: mentionSuggestions,
+                                    hashtags: hashtagSuggestions,
+                                }}
+                            />
+                        </div>
                     </div>
-                </div>
+                ) : null}
 
                 <div className="mx-auto w-full max-w-3xl">
                     {editor && !isMobile && <EditorBubbleToolbar editor={editor} />}

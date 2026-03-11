@@ -22,11 +22,13 @@ type RelatedTaskItem = {
     task_status?:
         | 'canceled'
         | 'assigned'
+        | 'in_progress'
         | 'migrated'
         | 'deferred'
         | 'starred'
-        | 'question'
+        | 'backlog'
         | null;
+    backlog_promoted_at?: string | null;
     content: string;
     render_fragments: TaskRenderFragment[];
     due_date: string | null;
@@ -86,8 +88,6 @@ export function NoteRelatedPanel({
         language === 'en'
             ? 'No related tasks found.'
             : 'Geen gerelateerde taken gevonden.';
-    const backlinksEmptyText =
-        language === 'en' ? 'No backlinks found.' : 'Geen backlinks gevonden.';
 
     const openCount = useMemo(
         () => taskItems.filter((task) => isOpenTask(task)).length,
@@ -161,13 +161,21 @@ export function NoteRelatedPanel({
     const doneOrCanceledCount = taskItems.length - openCount;
     const taskCounterLabel = `${doneOrCanceledCount}/${taskItems.length}`;
     const relatedItemsCount = taskItems.length + backlinks.length;
+    const showTasksSection = taskItems.length > 0;
+    const showBacklinksSection = backlinks.length > 0;
+
+    if (!showTasksSection && !showBacklinksSection) {
+        return null;
+    }
 
     const toggleTask = (task: RelatedTaskItem) => {
         if (pendingTaskIds.includes(task.id)) {
             return;
         }
 
-        const nextChecked = !task.checked;
+        const isBacklogPromotion =
+            task.task_status === 'backlog' && task.checked !== true;
+        const nextChecked = isBacklogPromotion ? false : !task.checked;
         setPendingTaskIds((current) => [...current, task.id]);
 
         router.patch(
@@ -177,6 +185,7 @@ export function NoteRelatedPanel({
                 block_id: task.block_id,
                 position: task.position,
                 checked: nextChecked,
+                promote_backlog: isBacklogPromotion,
             },
             {
                 preserveState: true,
@@ -186,7 +195,16 @@ export function NoteRelatedPanel({
                     setTaskItems((current) =>
                         current.map((item) =>
                             item.id === task.id
-                                ? { ...item, checked: nextChecked }
+                                ? {
+                                      ...item,
+                                      checked: nextChecked,
+                                      task_status: isBacklogPromotion
+                                          ? null
+                                          : item.task_status,
+                                      backlog_promoted_at: isBacklogPromotion
+                                          ? new Date().toISOString()
+                                          : item.backlog_promoted_at ?? null,
+                                  }
                                 : item,
                         ),
                     );
@@ -299,195 +317,202 @@ export function NoteRelatedPanel({
                 </div>
 
                 <CollapsibleContent className="pt-2 pl-0 md:pl-4">
-                    <Collapsible open={tasksOpen} onOpenChange={setTasksOpen}>
-                        <div className="flex items-center justify-between gap-2">
-                            <CollapsibleTrigger asChild>
-                                <button type="button" className="flex flex-1 items-center text-left">
-                                    <span className="flex items-center gap-1.5 text-[0.78em] font-semibold tracking-wide text-muted-foreground uppercase">
-                                        {tasksOpen ? (
-                                            <ChevronDown className="h-3.5 w-3.5" />
-                                        ) : (
-                                            <ChevronRight className="h-3.5 w-3.5" />
-                                        )}
-                                        <span>
-                                            {relatedTasksTitle} ({taskCounterLabel})
+                    {showTasksSection ? (
+                        <Collapsible open={tasksOpen} onOpenChange={setTasksOpen}>
+                            <div className="flex items-center justify-between gap-2">
+                                <CollapsibleTrigger asChild>
+                                    <button type="button" className="flex flex-1 items-center text-left">
+                                        <span className="flex items-center gap-1.5 text-[0.78em] font-semibold tracking-wide text-muted-foreground uppercase">
+                                            {tasksOpen ? (
+                                                <ChevronDown className="h-3.5 w-3.5" />
+                                            ) : (
+                                                <ChevronRight className="h-3.5 w-3.5" />
+                                            )}
+                                            <span>
+                                                {relatedTasksTitle} ({taskCounterLabel})
+                                            </span>
                                         </span>
-                                    </span>
-                                </button>
-                            </CollapsibleTrigger>
-                            {taskItems.length > 0 && doneOrCanceledCount > 0 ? (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[0.78em] text-muted-foreground">
-                                        {language === 'en' ? 'Only open' : 'Alleen open'}
-                                    </span>
-                                    <Switch
-                                        checked={onlyOpenTasks}
-                                        onCheckedChange={setOnlyOpenTasks}
-                                        className="h-4 w-7 data-[state=checked]:bg-zinc-400 data-[state=unchecked]:bg-zinc-300 [&>span]:h-3 [&>span]:w-3"
-                                        aria-label={
-                                            language === 'en'
-                                                ? 'Only open tasks'
-                                                : 'Alleen open taken'
-                                        }
-                                    />
-                                </div>
-                            ) : null}
-                        </div>
+                                    </button>
+                                </CollapsibleTrigger>
+                                {doneOrCanceledCount > 0 ? (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[0.78em] text-muted-foreground">
+                                            {language === 'en' ? 'Only open' : 'Alleen open'}
+                                        </span>
+                                        <Switch
+                                            checked={onlyOpenTasks}
+                                            onCheckedChange={setOnlyOpenTasks}
+                                            className="h-4 w-7 data-[state=checked]:bg-zinc-400 data-[state=unchecked]:bg-zinc-300 [&>span]:h-3 [&>span]:w-3"
+                                            aria-label={
+                                                language === 'en'
+                                                    ? 'Only open tasks'
+                                                    : 'Alleen open taken'
+                                            }
+                                        />
+                                    </div>
+                                ) : null}
+                            </div>
 
-                        <CollapsibleContent className="pt-2 pl-2 md:pl-5">
-                            {visibleTaskItems.length === 0 ? (
-                                <div className="px-1 pb-2 text-[0.78em] text-muted-foreground">
-                                    {tasksEmptyText}
-                                </div>
-                            ) : (
-                                <div className="space-y-1 pb-2">
-                                    {visibleGroupedTaskItems.map((group) => {
-                                        const groupOpen =
-                                            openTaskGroups[group.note.id] ?? true;
+                            <CollapsibleContent className="pt-2 pl-2 md:pl-5">
+                                {visibleTaskItems.length === 0 ? (
+                                    <div className="px-1 pb-2 text-[0.78em] text-muted-foreground">
+                                        {tasksEmptyText}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1 pb-2">
+                                        {visibleGroupedTaskItems.map((group) => {
+                                            const groupOpen =
+                                                openTaskGroups[group.note.id] ?? true;
 
-                                        return (
-                                            <Collapsible
-                                                key={group.note.id}
-                                                open={groupOpen}
-                                                onOpenChange={(open) =>
-                                                    setOpenTaskGroups((current) => ({
-                                                        ...current,
-                                                        [group.note.id]: open,
-                                                    }))
-                                                }
-                                                className="space-y-0.5 py-1.5 md:px-2"
-                                            >
-                                                <CollapsibleTrigger asChild>
-                                                    <button
-                                                        type="button"
-                                                        className="flex w-full items-center gap-1.5 text-left"
-                                                    >
-                                                        {groupOpen ? (
-                                                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                                        ) : (
-                                                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                                                        )}
-                                                        <Link
-                                                            href={group.note.href}
-                                                            className="text-[0.95em] font-semibold text-muted-foreground underline-offset-2 hover:underline"
-                                                            onClick={(event) =>
-                                                                event.stopPropagation()
-                                                            }
+                                            return (
+                                                <Collapsible
+                                                    key={group.note.id}
+                                                    open={groupOpen}
+                                                    onOpenChange={(open) =>
+                                                        setOpenTaskGroups((current) => ({
+                                                            ...current,
+                                                            [group.note.id]: open,
+                                                        }))
+                                                    }
+                                                    className="space-y-0.5 py-1.5 md:px-2"
+                                                >
+                                                    <CollapsibleTrigger asChild>
+                                                        <button
+                                                            type="button"
+                                                            className="flex w-full items-center gap-1.5 text-left"
                                                         >
-                                                            {group.note.title}
-                                                        </Link>
-                                                    </button>
-                                                </CollapsibleTrigger>
+                                                            {groupOpen ? (
+                                                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                                            ) : (
+                                                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                                            )}
+                                                            <Link
+                                                                href={group.note.href}
+                                                                className="text-[0.95em] font-semibold text-muted-foreground underline-offset-2 hover:underline"
+                                                                onClick={(event) =>
+                                                                    event.stopPropagation()
+                                                                }
+                                                            >
+                                                                {group.note.title}
+                                                            </Link>
+                                                        </button>
+                                                    </CollapsibleTrigger>
 
-                                                <CollapsibleContent className="pl-3 md:pl-5">
-                                                    {group.tasks.map((task) => (
-                                                        <article
-                                                            key={`${task.id}-${task.position}`}
-                                                            className="py-1 md:pl-1"
-                                                            onDoubleClick={() =>
-                                                                openTaskInNote(task)
-                                                            }
-                                                        >
-                                                            <div className="flex items-start gap-4">
-                                                                <TaskToggleCheckbox
-                                                                    className="mt-1"
-                                                                    checked={task.checked}
-                                                                    status={
-                                                                        task.task_status === 'canceled'
-                                                                            ? 'canceled'
-                                                                            : task.task_status === 'migrated'
-                                                                              ? 'migrated'
-                                                                              : task.checked
-                                                                                ? 'completed'
-                                                                                : 'open'
-                                                                    }
-                                                                    disabled={
-                                                                        pendingTaskIds.includes(
-                                                                            task.id,
-                                                                        ) ||
-                                                                        task.task_status ===
-                                                                            'canceled' ||
-                                                                        task.task_status ===
-                                                                            'migrated'
-                                                                    }
-                                                                    ariaLabel={`Toggle task ${task.content || task.id}`}
-                                                                    onCheckedChange={() =>
-                                                                        toggleTask(task)
-                                                                    }
-                                                                />
-                                                                <div className="min-w-0 flex-1 pt-[1px]">
-                                                                    <p
-                                                                        className={cn(
-                                                                            'text-base leading-[1.62]',
+                                                    <CollapsibleContent className="pl-3 md:pl-5">
+                                                        {group.tasks.map((task) => (
+                                                            <article
+                                                                key={`${task.id}-${task.position}`}
+                                                                className="py-1 md:pl-1"
+                                                                onDoubleClick={() =>
+                                                                    openTaskInNote(task)
+                                                                }
+                                                            >
+                                                                <div className="flex items-start gap-4">
+                                                                    <TaskToggleCheckbox
+                                                                        className="mt-1"
+                                                                        checked={task.checked}
+                                                                        status={
+                                                                            task.task_status === 'canceled'
+                                                                                ? 'canceled'
+                                                                                : task.task_status === 'migrated'
+                                                                                  ? 'migrated'
+                                                                                  : task.task_status === 'in_progress'
+                                                                                    ? 'in_progress'
+                                                                                  : task.task_status === 'backlog'
+                                                                                    ? 'backlog'
+                                                                                  : task.checked
+                                                                                    ? 'completed'
+                                                                                    : 'open'
+                                                                        }
+                                                                        disabled={
+                                                                            pendingTaskIds.includes(
+                                                                                task.id,
+                                                                            ) ||
                                                                             task.task_status ===
-                                                                                'canceled' &&
-                                                                                'line-through opacity-70',
+                                                                                'canceled' ||
                                                                             task.task_status ===
-                                                                                'migrated' &&
-                                                                                'opacity-70',
-                                                                            task.task_status !==
-                                                                                'canceled' &&
-                                                                                task.task_status !==
-                                                                                    'migrated' &&
-                                                                                task.checked &&
-                                                                                'line-through opacity-70',
-                                                                        )}
-                                                                    >
-                                                                        <TaskInlineContent
-                                                                            fragments={
-                                                                                task
-                                                                                    .render_fragments
-                                                                                    .length > 0
-                                                                                    ? task.render_fragments
-                                                                                    : [
-                                                                                          {
-                                                                                              type: 'text',
-                                                                                              text:
-                                                                                                  task.content ||
-                                                                                                  (language ===
-                                                                                                  'en'
-                                                                                                      ? 'Untitled task'
-                                                                                                      : 'Naamloze taak'),
-                                                                                          },
-                                                                                      ]
-                                                                            }
-                                                                            language={language}
-                                                                            canceled={
-                                                                                task.task_status ===
-                                                                                'canceled'
-                                                                            }
+                                                                                'migrated'
+                                                                        }
+                                                                        ariaLabel={`Toggle task ${task.content || task.id}`}
+                                                                        onCheckedChange={() =>
+                                                                            toggleTask(task)
+                                                                        }
+                                                                    />
+                                                                    <div className="min-w-0 flex-1 pt-[1px]">
+                                                                        <p
                                                                             className={cn(
-                                                                                'text-[1em] leading-[1.66] font-normal tracking-[-0.01em] md:text-base md:leading-[1.62]',
-                                                                                (task.task_status ===
-                                                                                    'canceled' ||
-                                                                                    task.task_status ===
-                                                                                        'migrated' ||
-                                                                                    task.checked) &&
-                                                                                    'task-inline--faded',
+                                                                                'text-base leading-[1.62]',
+                                                                                task.task_status ===
+                                                                                    'canceled' &&
+                                                                                    'line-through opacity-70',
+                                                                                task.task_status ===
+                                                                                    'migrated' &&
+                                                                                    'opacity-70',
+                                                                                task.task_status !==
+                                                                                    'canceled' &&
+                                                                                    task.task_status !==
+                                                                                        'migrated' &&
+                                                                                    task.checked &&
+                                                                                    'line-through opacity-70',
                                                                             )}
-                                                                            priorityStyle="range"
-                                                                            hideStatusTokens
-                                                                            hidePriorityTokens
-                                                                        />
-                                                                    </p>
+                                                                        >
+                                                                            <TaskInlineContent
+                                                                                fragments={
+                                                                                    task
+                                                                                        .render_fragments
+                                                                                        .length > 0
+                                                                                        ? task.render_fragments
+                                                                                        : [
+                                                                                              {
+                                                                                                  type: 'text',
+                                                                                                  text:
+                                                                                                      task.content ||
+                                                                                                      (language ===
+                                                                                                      'en'
+                                                                                                          ? 'Untitled task'
+                                                                                                          : 'Naamloze taak'),
+                                                                                              },
+                                                                                          ]
+                                                                                }
+                                                                                language={language}
+                                                                                canceled={
+                                                                                    task.task_status ===
+                                                                                    'canceled'
+                                                                                }
+                                                                                className={cn(
+                                                                                    'text-[1em] leading-[1.66] font-normal tracking-[-0.01em] md:text-base md:leading-[1.62]',
+                                                                                    (task.task_status ===
+                                                                                        'canceled' ||
+                                                                                        task.task_status ===
+                                                                                            'migrated' ||
+                                                                                        task.checked) &&
+                                                                                        'task-inline--faded',
+                                                                                )}
+                                                                                priorityStyle="range"
+                                                                                hideStatusTokens
+                                                                                hidePriorityTokens
+                                                                            />
+                                                                        </p>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        </article>
-                                                    ))}
-                                                </CollapsibleContent>
-                                            </Collapsible>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </CollapsibleContent>
-                    </Collapsible>
+                                                            </article>
+                                                        ))}
+                                                    </CollapsibleContent>
+                                                </Collapsible>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </CollapsibleContent>
+                        </Collapsible>
+                    ) : null}
 
-                    <Collapsible
-                        open={backlinksOpen}
-                        onOpenChange={setBacklinksOpen}
-                        className="pt-3"
-                    >
+                    {showBacklinksSection ? (
+                        <Collapsible
+                            open={backlinksOpen}
+                            onOpenChange={setBacklinksOpen}
+                            className={showTasksSection ? 'pt-3' : undefined}
+                        >
                         <CollapsibleTrigger asChild>
                             <button
                                 type="button"
@@ -507,91 +532,86 @@ export function NoteRelatedPanel({
                         </CollapsibleTrigger>
 
                         <CollapsibleContent className="pt-2 pl-5">
-                            {backlinks.length === 0 ? (
-                                <div className="px-1 pb-1 text-[0.78em] text-muted-foreground">
-                                    {backlinksEmptyText}
-                                </div>
-                            ) : (
-                                <div className="space-y-1 pb-2">
-                                    {groupedBacklinks.map((group) => {
-                                        const groupOpen =
-                                            openBacklinkGroups[group.note.id] ?? true;
+                            <div className="space-y-1 pb-2">
+                                {groupedBacklinks.map((group) => {
+                                    const groupOpen =
+                                        openBacklinkGroups[group.note.id] ?? true;
 
-                                        return (
-                                            <Collapsible
-                                                key={group.note.id}
-                                                open={groupOpen}
-                                                onOpenChange={(open) =>
-                                                    setOpenBacklinkGroups((current) => ({
-                                                        ...current,
-                                                        [group.note.id]: open,
-                                                    }))
-                                                }
-                                                className="space-y-0.5 py-1.5 md:px-2"
-                                            >
-                                                <CollapsibleTrigger asChild>
-                                                    <button
-                                                        type="button"
-                                                        className="flex w-full items-center gap-1.5 text-left"
-                                                    >
-                                                        {groupOpen ? (
-                                                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                                        ) : (
-                                                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                                                        )}
-                                                        <span className="text-[0.95em] font-semibold text-muted-foreground">
-                                                            {group.note.title}
-                                                        </span>
-                                                    </button>
-                                                </CollapsibleTrigger>
+                                    return (
+                                        <Collapsible
+                                            key={group.note.id}
+                                            open={groupOpen}
+                                            onOpenChange={(open) =>
+                                                setOpenBacklinkGroups((current) => ({
+                                                    ...current,
+                                                    [group.note.id]: open,
+                                                }))
+                                            }
+                                            className="space-y-0.5 py-1.5 md:px-2"
+                                        >
+                                            <CollapsibleTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    className="flex w-full items-center gap-1.5 text-left"
+                                                >
+                                                    {groupOpen ? (
+                                                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    ) : (
+                                                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    )}
+                                                    <span className="text-[0.95em] font-semibold text-muted-foreground">
+                                                        {group.note.title}
+                                                    </span>
+                                                </button>
+                                            </CollapsibleTrigger>
 
-                                                <CollapsibleContent className="pl-3 md:pl-5">
-                                                    <ul className="space-y-1 pb-1">
-                                                        {group.backlinks.map((item) => (
-                                                            <li
-                                                                key={item.id}
-                                                                className="py-1 md:pl-1"
-                                                                onDoubleClick={() =>
-                                                                    openBacklinkInNote(item)
-                                                                }
-                                                            >
-                                                                <div className="flex items-start gap-4">
-                                                                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center">
-                                                                        <span
-                                                                            className="h-1.5 w-1.5 rounded-full bg-muted-foreground/80"
-                                                                            aria-hidden="true"
-                                                                        />
-                                                                    </span>
-                                                                    <p className="min-w-0 flex-1 text-base leading-[1.62]">
-                                                                        <TaskInlineContent
-                                                                            fragments={
-                                                                                item
-                                                                                    .render_fragments
-                                                                                    .length > 0
-                                                                                    ? item.render_fragments
-                                                                                    : [
-                                                                                          {
-                                                                                              type: 'text',
-                                                                                              text:
-                                                                                                  item.excerpt,
-                                                                                          },
-                                                                                      ]
-                                                                            }
-                                                                            language={language}
-                                                                        />
-                                                                    </p>
-                                                                </div>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </CollapsibleContent>
-                                            </Collapsible>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                                            <CollapsibleContent className="pl-3 md:pl-5">
+                                                <ul className="space-y-1 pb-1">
+                                                    {group.backlinks.map((item) => (
+                                                        <li
+                                                            key={item.id}
+                                                            className="py-1 md:pl-1"
+                                                            onDoubleClick={() =>
+                                                                openBacklinkInNote(item)
+                                                            }
+                                                        >
+                                                            <div className="flex items-start gap-4">
+                                                                <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                                                                    <span
+                                                                        className="h-1.5 w-1.5 rounded-full bg-muted-foreground/80"
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                </span>
+                                                                <p className="min-w-0 flex-1 text-base leading-[1.62]">
+                                                                    <TaskInlineContent
+                                                                        fragments={
+                                                                            item
+                                                                                .render_fragments
+                                                                                .length > 0
+                                                                                ? item.render_fragments
+                                                                                : [
+                                                                                      {
+                                                                                          type: 'text',
+                                                                                          text:
+                                                                                              item.excerpt,
+                                                                                      },
+                                                                                  ]
+                                                                        }
+                                                                        language={language}
+                                                                    />
+                                                                </p>
+                                                            </div>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </CollapsibleContent>
+                                        </Collapsible>
+                                    );
+                                })}
+                            </div>
                         </CollapsibleContent>
-                    </Collapsible>
+                        </Collapsible>
+                    ) : null}
                 </CollapsibleContent>
             </Collapsible>
         </section>

@@ -28,6 +28,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 export type DocumentPropertiesValue = Record<string, string>;
@@ -375,6 +376,7 @@ export function DocumentProperties({
     defaultCollapsed = true,
     workspaceSuggestions,
 }: DocumentPropertiesProps) {
+    const { t } = useI18n();
     const [collapsed, setCollapsed] = useState(defaultCollapsed);
     const [searchByRow, setSearchByRow] = useState<Record<string, string>>({});
     const [openRowId, setOpenRowId] = useState<string | null>(null);
@@ -873,7 +875,7 @@ export function DocumentProperties({
                             <ChevronDown className="h-3.5 w-3.5" />
                         )}
                         <span>
-                            Properties ({entries.length + draftRows.length})
+                            {t('note_actions.properties', 'Note properties')} ({entries.length + draftRows.length})
                         </span>
                     </button>
                 </div>

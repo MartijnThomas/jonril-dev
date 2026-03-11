@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { Eraser, FolderInput, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { Eraser, FolderInput, MoreVertical, Pencil, TableProperties, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { MoveNoteDialog } from '@/components/move-note-dialog';
@@ -17,6 +17,7 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,9 +34,11 @@ type Props = {
     canDelete: boolean;
     canClear: boolean;
     triggerClassName?: string;
+    triggerIconClassName?: string;
     dropdownAlign?: 'start' | 'center' | 'end';
     dropdownSide?: 'top' | 'right' | 'bottom' | 'left';
     listenForMoveEvent?: boolean;
+    enablePropertiesToggle?: boolean;
 };
 
 export function NoteHeaderActions({
@@ -49,15 +52,18 @@ export function NoteHeaderActions({
     canDelete,
     canClear,
     triggerClassName,
+    triggerIconClassName = 'h-4 w-4',
     dropdownAlign = 'start',
     dropdownSide = 'bottom',
     listenForMoveEvent = true,
+    enablePropertiesToggle = false,
 }: Props) {
     const { t } = useI18n();
     const [renameOpen, setRenameOpen] = useState(false);
     const [moveOpen, setMoveOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [clearOpen, setClearOpen] = useState(false);
+    const [propertiesVisible, setPropertiesVisible] = useState(true);
     const [nextTitle, setNextTitle] = useState(title);
     const [processing, setProcessing] = useState(false);
 
@@ -78,6 +84,31 @@ export function NoteHeaderActions({
             window.removeEventListener('open-move-note-dialog', openMoveDialog);
         };
     }, [canMove, listenForMoveEvent]);
+
+    useEffect(() => {
+        if (!enablePropertiesToggle) {
+            return;
+        }
+
+        const handlePropertiesState = (event: Event) => {
+            const detail = (event as CustomEvent<{ visible?: boolean }>).detail;
+            if (typeof detail?.visible === 'boolean') {
+                setPropertiesVisible(detail.visible);
+            }
+        };
+
+        window.addEventListener(
+            'note-properties-visibility-state',
+            handlePropertiesState,
+        );
+
+        return () => {
+            window.removeEventListener(
+                'note-properties-visibility-state',
+                handlePropertiesState,
+            );
+        };
+    }, [enablePropertiesToggle]);
 
     const submitRename = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -130,6 +161,10 @@ export function NoteHeaderActions({
         );
     };
 
+    const togglePropertiesVisibility = () => {
+        window.dispatchEvent(new Event('note-properties-toggle-request'));
+    };
+
     return (
         <>
             <DropdownMenu>
@@ -141,14 +176,46 @@ export function NoteHeaderActions({
                         className={triggerClassName ?? 'h-7 w-7'}
                         aria-label={t('note_actions.menu_aria', 'Note actions')}
                     >
-                        <MoreVertical className="h-4 w-4" />
+                        <MoreVertical className={triggerIconClassName} />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align={dropdownAlign} side={dropdownSide}>
+                    {enablePropertiesToggle ? (
+                        <>
+                            <DropdownMenuItem
+                                onClick={togglePropertiesVisibility}
+                                className="flex items-center justify-between gap-3"
+                            >
+                                <span className="inline-flex flex-1 items-center gap-2">
+                                    <TableProperties className="h-4 w-4 shrink-0 rotate-180" />
+                                    {t('note_actions.properties', 'Properties')}
+                                </span>
+                                <span
+                                    aria-hidden="true"
+                                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                                        propertiesVisible
+                                            ? 'bg-foreground/30'
+                                            : 'bg-muted-foreground/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`absolute top-0.5 h-3 w-3 rounded-full bg-background shadow-[0_0_0_1px_rgba(0,0,0,0.08)] transition-transform ${
+                                            propertiesVisible
+                                                ? 'translate-x-3.5'
+                                                : 'translate-x-0.5'
+                                        }`}
+                                    />
+                                </span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                        </>
+                    ) : null}
                     {canMove ? (
                         <DropdownMenuItem onClick={() => setMoveOpen(true)}>
-                            <FolderInput className="mr-2 h-4 w-4" />
-                            {t('note_actions.move', 'Move note')}
+                            <span className="inline-flex flex-1 items-center gap-2">
+                                <FolderInput className="h-4 w-4 shrink-0" />
+                                {t('note_actions.move', 'Move note')}
+                            </span>
                         </DropdownMenuItem>
                     ) : null}
                     {canRename ? (
@@ -158,14 +225,18 @@ export function NoteHeaderActions({
                                 setRenameOpen(true);
                             }}
                         >
-                            <Pencil className="mr-2 h-4 w-4" />
-                            {t('note_actions.rename', 'Rename note')}
+                            <span className="inline-flex flex-1 items-center gap-2">
+                                <Pencil className="h-4 w-4 shrink-0" />
+                                {t('note_actions.rename', 'Rename note')}
+                            </span>
                         </DropdownMenuItem>
                     ) : null}
                     {canClear ? (
                         <DropdownMenuItem onClick={() => setClearOpen(true)}>
-                            <Eraser className="mr-2 h-4 w-4" />
-                            {t('note_actions.clear', 'Erase note')}
+                            <span className="inline-flex flex-1 items-center gap-2">
+                                <Eraser className="h-4 w-4 shrink-0" />
+                                {t('note_actions.clear', 'Erase note')}
+                            </span>
                         </DropdownMenuItem>
                     ) : null}
                     {canDelete ? (
@@ -173,8 +244,10 @@ export function NoteHeaderActions({
                             className="text-destructive focus:text-destructive"
                             onClick={() => setDeleteOpen(true)}
                         >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            {t('note_actions.delete', 'Delete note')}
+                            <span className="inline-flex flex-1 items-center gap-2">
+                                <Trash2 className="h-4 w-4 shrink-0" />
+                                {t('note_actions.delete', 'Delete note')}
+                            </span>
                         </DropdownMenuItem>
                     ) : null}
                 </DropdownMenuContent>

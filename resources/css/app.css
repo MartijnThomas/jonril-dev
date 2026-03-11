@@ -240,6 +240,34 @@ html {
     @apply font-semibold text-blue-600 dark:text-blue-300;
 }
 
+.md-task-migration-meta {
+    margin-top: 0.15rem;
+    font-size: 0.78em;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    color: color-mix(in srgb, currentColor 64%, transparent);
+    user-select: none;
+    pointer-events: auto;
+}
+
+.md-task-migration-meta .md-task-migration-meta-label {
+    font-variant-caps: small-caps;
+}
+
+.md-task-migration-meta .md-task-migration-link {
+    color: inherit !important;
+    text-decoration: none !important;
+}
+
+.md-task-migration-meta .md-task-migration-link:hover {
+    text-decoration: underline !important;
+}
+
+.md-task-migration-meta .md-task-migration-link::before,
+.md-task-migration-meta .md-task-migration-link::after {
+    content: none !important;
+}
+
 .task-inline.task-inline--faded
     :is(.mention, .hashtag, .md-wikilink, .md-task-due-token, .md-task-deadline-token) {
     text-decoration: inherit !important;
@@ -402,9 +430,15 @@ html {
 }
 
 .dark .task-toggle-checkbox[data-status='canceled'] span,
-.dark .task-toggle-checkbox[data-status='migrated'] span {
+.dark .task-toggle-checkbox[data-status='migrated'] span,
+.dark .task-toggle-checkbox[data-status='backlog'] span {
     border-color: rgb(113 113 122);
     background-color: rgb(39 39 42);
+}
+
+.task-toggle-checkbox[data-status='backlog'] span {
+    border-color: rgb(209 213 219);
+    background-color: rgb(255 255 255);
 }
 
 .task-toggle-checkbox[data-status='canceled']
@@ -441,6 +475,65 @@ html {
     mask-position: center;
     mask-repeat: no-repeat;
     mask-size: contain;
+}
+
+.task-toggle-checkbox[data-status='backlog']
+    input[type='checkbox']
+    + span::before {
+    opacity: 0;
+}
+
+.task-toggle-checkbox[data-status='backlog'] span {
+    position: relative;
+}
+
+.task-toggle-checkbox[data-status='backlog'] span::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0.66rem;
+    height: 0.66rem;
+    background-color: rgb(156 163 175);
+    -webkit-mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-position: center;
+    mask-repeat: no-repeat;
+    mask-size: contain;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath fill-rule='evenodd' d='M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25Zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25Z' clip-rule='evenodd'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath fill-rule='evenodd' d='M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25Zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25Z' clip-rule='evenodd'/%3E%3C/svg%3E");
+    pointer-events: none;
+}
+
+.task-toggle-checkbox[data-status='in_progress'] span::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0.96rem;
+    height: 0.96rem;
+    background-color: rgb(251 191 36);
+    transform: translateX(-1px);
+    -webkit-mask: center / contain no-repeat
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 4A8 8 0 0 1 12 20Z'/%3E%3C/svg%3E");
+    mask: center / contain no-repeat
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 4A8 8 0 0 1 12 20Z'/%3E%3C/svg%3E");
+    pointer-events: none;
+}
+
+.task-toggle-checkbox[data-status='in_progress']
+    input[type='checkbox']:checked
+    + span::after {
+    opacity: 0;
+}
+
+.dark .task-toggle-checkbox[data-status='in_progress'] span::after {
+    background-color: rgb(251 191 36);
+}
+
+.dark .task-toggle-checkbox[data-status='backlog'] span::after {
+    background-color: rgb(161 161 170);
 }
 
 .dark .task-toggle-checkbox[data-status='canceled'] span::after,

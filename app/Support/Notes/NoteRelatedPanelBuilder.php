@@ -109,6 +109,7 @@ class NoteRelatedPanelBuilder
             'position' => (int) $task->position,
             'checked' => (bool) $task->checked,
             'task_status' => $task->task_status,
+            'backlog_promoted_at' => $task->backlog_promoted_at?->toIso8601String(),
             'priority' => $task->priority,
             'content' => $task->content_text ?? '',
             'render_fragments' => is_array($task->render_fragments) ? $task->render_fragments : [],

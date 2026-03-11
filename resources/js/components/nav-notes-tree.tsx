@@ -106,12 +106,16 @@ function RootNoteItem({
                     >
                         <ChevronRight className="h-4 w-4" />
                     </button>
-                    <SidebarMenuButton asChild isActive={isActive} className="pr-8">
+                    <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        className="pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+                    >
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
                                 <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
                             </span>
-                            <span>{item.title}</span>
+                            <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
                         </Link>
                     </SidebarMenuButton>
                     <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
@@ -154,12 +158,16 @@ function RootNoteItem({
                         </button>
                     </CollapsibleTrigger>
 
-                    <SidebarMenuButton asChild isActive={isActive} className="pr-8">
+                    <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        className="pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+                    >
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
                                 <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
                             </span>
-                            <span>{item.title}</span>
+                            <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
                         </Link>
                     </SidebarMenuButton>
                     <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
@@ -262,12 +270,16 @@ function SubTreeNode({
                     >
                         <ChevronRight className="h-4 w-4" />
                     </button>
-                    <SidebarMenuSubButton asChild isActive={isActive} className="pr-8">
+                    <SidebarMenuSubButton
+                        asChild
+                        isActive={isActive}
+                        className="pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+                    >
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
                                 <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
                             </span>
-                            <span>{item.title}</span>
+                            <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
                         </Link>
                     </SidebarMenuSubButton>
                     <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
@@ -310,12 +322,16 @@ function SubTreeNode({
                         </button>
                     </CollapsibleTrigger>
 
-                    <SidebarMenuSubButton asChild isActive={isActive} className="pr-8">
+                    <SidebarMenuSubButton
+                        asChild
+                        isActive={isActive}
+                        className="pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+                    >
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
                                 <Icon iconNode={NoteIcon} className={cn('h-4 w-4', iconColorClass)} />
                             </span>
-                            <span>{item.title}</span>
+                            <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
                         </Link>
                     </SidebarMenuSubButton>
                     <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">

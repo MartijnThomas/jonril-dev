@@ -148,6 +148,87 @@ test('tasks index can include completed tasks and filter by hashtag', function (
         );
 });
 
+test('tasks index exposes completed and canceled metadata timestamps', function () {
+    $user = User::factory()->create();
+
+    $completedAt = '2026-03-10T09:15:00+00:00';
+    $canceledAt = '2026-03-10T10:45:00+00:00';
+    $startedAt = '2026-03-10T08:30:00+00:00';
+
+    $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Task metadata note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => [
+                            'checked' => true,
+                            'dueDate' => '2026-03-10',
+                            'completedAt' => $completedAt,
+                        ],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [['type' => 'text', 'text' => 'Completed task']],
+                        ]],
+                    ],
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => [
+                            'checked' => false,
+                            'taskStatus' => 'canceled',
+                            'dueDate' => '2026-03-11',
+                            'canceledAt' => $canceledAt,
+                        ],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [['type' => 'text', 'text' => 'Canceled task']],
+                        ]],
+                    ],
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => [
+                            'checked' => false,
+                            'taskStatus' => 'in_progress',
+                            'dueDate' => '2026-03-12',
+                            'startedAt' => $startedAt,
+                        ],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [['type' => 'text', 'text' => 'In progress task']],
+                        ]],
+                    ],
+                ],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks?show_completed=1&status[]=completed&status[]=canceled&status[]=in_progress')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/index')
+            ->has('tasks.data', 3)
+            ->where('tasks.data.0.checked', true)
+            ->where('tasks.data.0.completed_at', $completedAt)
+            ->where('tasks.data.0.canceled_at', null)
+            ->where('tasks.data.0.started_at', null)
+            ->where('tasks.data.1.task_status', 'canceled')
+            ->where('tasks.data.1.checked', false)
+            ->where('tasks.data.1.canceled_at', $canceledAt)
+            ->where('tasks.data.1.completed_at', null)
+            ->where('tasks.data.1.started_at', null)
+            ->where('tasks.data.2.task_status', 'in_progress')
+            ->where('tasks.data.2.checked', false)
+            ->where('tasks.data.2.started_at', $startedAt)
+            ->where('tasks.data.2.completed_at', null)
+            ->where('tasks.data.2.canceled_at', null),
+        );
+});
+
 test('tasks index exposes render fragments for mentions hashtags and wikilinks', function () {
     $user = User::factory()->create();
 
@@ -832,7 +913,9 @@ test('task checkbox update persists in note json and task index', function () {
     $reindexedTask = NoteTask::query()->where('note_id', $note->id)->first();
 
     expect(data_get($note->content, 'content.0.content.0.attrs.checked'))->toBeTrue();
+    expect((string) data_get($note->content, 'content.0.content.0.attrs.completedAt'))->not->toBe('');
     expect($reindexedTask?->checked)->toBeTrue();
+    expect($reindexedTask?->completed_at)->not->toBeNull();
 });
 
 test('task checkbox can be toggled and undone via stable task reference', function () {
@@ -876,6 +959,7 @@ test('task checkbox can be toggled and undone via stable task reference', functi
 
     $note->refresh();
     expect(data_get($note->content, 'content.0.content.0.attrs.checked'))->toBeTrue();
+    expect((string) data_get($note->content, 'content.0.content.0.attrs.completedAt'))->not->toBe('');
 
     $this
         ->actingAs($user)
@@ -894,8 +978,68 @@ test('task checkbox can be toggled and undone via stable task reference', functi
         ->first();
 
     expect(data_get($note->content, 'content.0.content.0.attrs.checked'))->toBeFalse();
+    expect(data_get($note->content, 'content.0.content.0.attrs.completedAt'))->toBeNull();
     expect($reindexedTask)->not->toBeNull();
     expect($reindexedTask?->checked)->toBeFalse();
+    expect($reindexedTask?->completed_at)->toBeNull();
+});
+
+test('backlog task promotion clears backlog status and stores promotion timestamp', function () {
+    $user = User::factory()->create();
+
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Backlog promotion note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'taskList',
+                    'content' => [
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'id' => 'task-backlog-promote-1',
+                                'checked' => false,
+                                'taskStatus' => 'backlog',
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [['type' => 'text', 'text' => '? Review scope']],
+                            ]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch('/tasks/checked', [
+            'note_id' => $note->id,
+            'block_id' => 'task-backlog-promote-1',
+            'position' => 1,
+            'checked' => true,
+            'promote_backlog' => true,
+        ])
+        ->assertRedirect();
+
+    $note->refresh();
+    $attrs = data_get($note->content, 'content.0.content.0.attrs', []);
+    $reindexedTask = NoteTask::query()
+        ->where('note_id', $note->id)
+        ->where('block_id', 'task-backlog-promote-1')
+        ->first();
+
+    expect(data_get($attrs, 'checked'))->toBeFalse();
+    expect(data_get($attrs, 'taskStatus'))->toBeNull();
+    expect((string) data_get($attrs, 'backlogPromotedAt'))->not->toBe('');
+    expect((string) data_get($note->content, 'content.0.content.0.content.0.content.0.text'))->toBe('Review scope');
+    expect($reindexedTask)->not->toBeNull();
+    expect($reindexedTask?->checked)->toBeFalse();
+    expect($reindexedTask?->task_status)->toBeNull();
+    expect($reindexedTask?->backlog_promoted_at)->not->toBeNull();
 });
 
 test('migrate targets endpoint returns journal presets and workspace notes', function () {

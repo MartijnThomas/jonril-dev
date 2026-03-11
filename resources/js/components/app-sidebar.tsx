@@ -90,7 +90,7 @@ export function AppSidebar() {
                 <WorkspaceSwitcher />
             </SidebarHeader>
 
-            <SidebarContent>
+            <SidebarContent className="group-data-[collapsible=icon]:pt-3">
                 <NavMain items={mainNavItems} />
                 <NavJournalLinks />
                 <NavNotesTree />

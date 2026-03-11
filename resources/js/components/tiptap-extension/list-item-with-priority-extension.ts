@@ -4,9 +4,10 @@ export type TaskPriority = 'high' | 'medium' | 'normal' | null;
 export type ListItemTaskStatus =
     | 'canceled'
     | 'assigned'
+    | 'in_progress'
     | 'migrated'
     | 'starred'
-    | 'question'
+    | 'backlog'
     | null;
 
 export const ListItemWithPriority = ListItem.extend({

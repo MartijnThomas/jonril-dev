@@ -495,6 +495,42 @@ export const TaskItemWithDates = TaskItem.extend({
                         ? { 'data-task-status': attributes.taskStatus }
                         : {},
             },
+            backlogPromotedAt: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-backlog-promoted-at'),
+                renderHTML: (attributes: { backlogPromotedAt?: string | null }) =>
+                    attributes.backlogPromotedAt
+                        ? { 'data-backlog-promoted-at': attributes.backlogPromotedAt }
+                        : {},
+            },
+            canceledAt: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-canceled-at'),
+                renderHTML: (attributes: { canceledAt?: string | null }) =>
+                    attributes.canceledAt
+                        ? { 'data-canceled-at': attributes.canceledAt }
+                        : {},
+            },
+            completedAt: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-completed-at'),
+                renderHTML: (attributes: { completedAt?: string | null }) =>
+                    attributes.completedAt
+                        ? { 'data-completed-at': attributes.completedAt }
+                        : {},
+            },
+            startedAt: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-started-at'),
+                renderHTML: (attributes: { startedAt?: string | null }) =>
+                    attributes.startedAt
+                        ? { 'data-started-at': attributes.startedAt }
+                        : {},
+            },
             migratedToNoteId: {
                 default: null,
                 parseHTML: (element: HTMLElement) =>

@@ -203,7 +203,7 @@ export function EditorBubbleToolbar({ editor }: EditorBubbleToolbarProps) {
 
                 return editor.isEditable;
             }}
-            className="rounded-lg border border-border bg-background/95 p-1 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/80"
+            className="relative z-[90] rounded-lg border border-border bg-background/95 p-1 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/80"
         >
             <Toolbar>
                 <MainToolbarContent

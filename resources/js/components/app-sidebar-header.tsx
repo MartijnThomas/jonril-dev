@@ -239,12 +239,13 @@ export function AppSidebarHeader({
 
     const mobileTitle = breadcrumbs.at(-1)?.title ?? '';
     const showMobileBreadcrumbToggle = isMobile && breadcrumbs.length > 1;
+    const headerIconClassName = 'size-[18px]';
 
     return (
         <div ref={mobileHeaderRef} className="sticky top-0 z-20">
             <header className="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 backdrop-blur-lg transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 supports-[backdrop-filter]:bg-background/90 md:px-4">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <SidebarTrigger className="-ml-1" />
+                    <SidebarTrigger className="-ml-1 [&>svg]:!size-[18px]" />
                     {showMobileBreadcrumbToggle ? (
                         <button
                             type="button"
@@ -257,9 +258,13 @@ export function AppSidebarHeader({
                         >
                             <span className="truncate">{mobileTitle}</span>
                             {mobileBreadcrumbsOpen ? (
-                                <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <ChevronUp
+                                    className={`${headerIconClassName} shrink-0 text-muted-foreground`}
+                                />
                             ) : (
-                                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <ChevronDown
+                                    className={`${headerIconClassName} shrink-0 text-muted-foreground`}
+                                />
                             )}
                         </button>
                     ) : (
@@ -277,7 +282,7 @@ export function AppSidebarHeader({
                                 onClick={() => navigateJournal(-1)}
                                 aria-label="Previous journal note"
                             >
-                                <ChevronLeft className="h-4 w-4" />
+                                <ChevronLeft className={headerIconClassName} />
                             </Button>
                             <Button
                                 type="button"
@@ -287,7 +292,7 @@ export function AppSidebarHeader({
                                 onClick={() => navigateJournal(1)}
                                 aria-label="Next journal note"
                             >
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronRight className={headerIconClassName} />
                             </Button>
                         </div>
                     )}
@@ -303,6 +308,8 @@ export function AppSidebarHeader({
                             canDelete={Boolean(pageProps.noteActions.canDelete)}
                             canClear={Boolean(pageProps.noteActions.canClear)}
                             dropdownSide="left"
+                            enablePropertiesToggle
+                            triggerIconClassName={headerIconClassName}
                         />
                     ) : null}
                     {rightSidebarEnabled && (
@@ -315,9 +322,9 @@ export function AppSidebarHeader({
                             aria-label="Toggle right sidebar"
                         >
                             {rightSidebarOpen ? (
-                                <PanelRightClose className="h-4 w-4" />
+                                <PanelRightClose className={headerIconClassName} />
                             ) : (
-                                <PanelRightOpen className="h-4 w-4" />
+                                <PanelRightOpen className={headerIconClassName} />
                             )}
                         </Button>
                     )}

@@ -13,13 +13,14 @@ export function NavMain({ items = [] }: { items: NavItem[] }) {
 
     return (
         <SidebarGroup className="px-2 py-0">
-            <SidebarMenu>
+            <SidebarMenu className="group-data-[collapsible=icon]:gap-2">
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
                         <SidebarMenuButton
                             asChild
                             isActive={isCurrentUrl(item.href)}
                             tooltip={{ children: item.title }}
+                            className="group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                         >
                             <Link
                                 href={item.href}
@@ -28,7 +29,7 @@ export function NavMain({ items = [] }: { items: NavItem[] }) {
                                 {item.icon && (
                                     <item.icon className={item.iconClassName} />
                                 )}
-                                <span>{item.title}</span>
+                                <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

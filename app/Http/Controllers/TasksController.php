@@ -65,7 +65,7 @@ class TasksController extends Controller
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
             'status' => ['nullable', 'array'],
-            'status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'starred', 'question'])],
+            'status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog', 'question'])],
             'show_completed' => ['nullable', 'boolean'],
             'group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
             'sort' => ['nullable', Rule::in(['updated', 'due', 'deadline', 'note', 'position'])],
@@ -113,6 +113,7 @@ class TasksController extends Controller
 
         $selectedStatuses = collect($filters['status'] ?? [])
             ->map(fn ($status) => is_string($status) ? trim(strtolower($status)) : '')
+            ->map(fn (string $status) => $status === 'question' ? 'backlog' : $status)
             ->filter(fn (string $status) => $status !== '')
             ->unique()
             ->values();
@@ -126,8 +127,9 @@ class TasksController extends Controller
                     'canceled',
                     'migrated',
                     'assigned',
+                    'in_progress',
                     'starred',
-                    'question',
+                    'backlog',
                 ]);
             } else {
                 $selectedStatuses = collect(['open']);
@@ -147,8 +149,10 @@ class TasksController extends Controller
                         'canceled' => $inner->where('task_status', 'canceled'),
                         'migrated' => $inner->where('task_status', 'migrated'),
                         'assigned' => $inner->where('task_status', 'assigned'),
+                        'in_progress' => $inner->where('task_status', 'in_progress'),
                         'starred' => $inner->where('task_status', 'starred'),
-                        'question' => $inner->where('task_status', 'question'),
+                        'backlog' => $inner->whereIn('task_status', ['backlog', 'question']),
+                        'question' => $inner->whereIn('task_status', ['backlog', 'question']),
                         default => $inner->whereRaw('1 = 0'),
                     };
                 });
@@ -232,9 +236,34 @@ class TasksController extends Controller
 
         $tasks = $query
             ->paginate(50)
-            ->withQueryString()
-            ->through(function (NoteTask $task) {
+            ->withQueryString();
+
+        $migrationNoteIds = $tasks->getCollection()
+            ->flatMap(fn (NoteTask $task) => [$task->migrated_to_note_id, $task->migrated_from_note_id])
+            ->filter(fn ($id) => is_string($id) && trim($id) !== '')
+            ->map(fn (string $id) => trim($id))
+            ->unique()
+            ->values()
+            ->all();
+
+        /** @var array<string, Note> $migrationNotesById */
+        $migrationNotesById = Note::query()
+            ->whereIn('id', $migrationNoteIds)
+            ->get(['id', 'workspace_id', 'slug', 'type', 'journal_granularity', 'journal_date', 'title'])
+            ->keyBy('id')
+            ->all();
+
+        $tasks->setCollection(
+            $tasks->getCollection()->map(function (NoteTask $task) use ($migrationNotesById, $workspaceNamesById): array {
                 $note = $task->note;
+                $migratedToNoteId = is_string($task->migrated_to_note_id)
+                    ? trim($task->migrated_to_note_id)
+                    : '';
+                $migratedFromNoteId = is_string($task->migrated_from_note_id)
+                    ? trim($task->migrated_from_note_id)
+                    : '';
+                $migratedToNote = $migratedToNoteId !== '' ? ($migrationNotesById[$migratedToNoteId] ?? null) : null;
+                $migratedFromNote = $migratedFromNoteId !== '' ? ($migrationNotesById[$migratedFromNoteId] ?? null) : null;
 
                 return [
                     'id' => $task->id,
@@ -242,6 +271,10 @@ class TasksController extends Controller
                     'position' => $task->position,
                     'checked' => $task->checked,
                     'task_status' => $task->task_status,
+                    'canceled_at' => $task->canceled_at?->toIso8601String(),
+                    'completed_at' => $task->completed_at?->toIso8601String(),
+                    'started_at' => $task->started_at?->toIso8601String(),
+                    'backlog_promoted_at' => $task->backlog_promoted_at?->toIso8601String(),
                     'priority' => $task->priority,
                     'content' => $task->content_text,
                     'render_fragments' => $task->render_fragments ?? [],
@@ -250,6 +283,16 @@ class TasksController extends Controller
                     'journal_date' => $task->journal_date?->toDateString(),
                     'mentions' => $task->mentions ?? [],
                     'hashtags' => $task->hashtags ?? [],
+                    'migrated_to_note' => $migratedToNote ? [
+                        'id' => $migratedToNote->id,
+                        'title' => $migratedToNote->display_title,
+                        'href' => $this->noteSlugService->urlFor($migratedToNote),
+                    ] : null,
+                    'migrated_from_note' => $migratedFromNote ? [
+                        'id' => $migratedFromNote->id,
+                        'title' => $migratedFromNote->display_title,
+                        'href' => $this->noteSlugService->urlFor($migratedFromNote),
+                    ] : null,
                     'note' => [
                         'id' => $task->note_id,
                         'title' => $task->note_title ?? 'Untitled',
@@ -263,7 +306,8 @@ class TasksController extends Controller
                     'updated_at' => $task->updated_at?->toIso8601String(),
                     'created_at' => $task->created_at?->toIso8601String(),
                 ];
-            });
+            }),
+        );
 
         $notes = Note::query()
             ->whereIn('workspace_id', $workspaceIds)
@@ -334,6 +378,7 @@ class TasksController extends Controller
 
         $data = $request->validate([
             'checked' => ['required', 'boolean'],
+            'promote_backlog' => ['nullable', 'boolean'],
         ]);
 
         $note = Note::query()
@@ -348,12 +393,20 @@ class TasksController extends Controller
             abort(422, 'Note content is invalid.');
         }
 
+        $promoteBacklog = (bool) ($data['promote_backlog'] ?? false);
+        if (! $promoteBacklog && (bool) $data['checked'] && $task->task_status === 'backlog' && ! $task->checked) {
+            $promoteBacklog = true;
+        }
+        $promotionTimestamp = Carbon::now()->toIso8601String();
+
         $updated = false;
         if (is_string($task->block_id) && $task->block_id !== '') {
             $updated = $this->updateTaskItemCheckedByBlockId(
                 $content,
                 $task->block_id,
                 (bool) $data['checked'],
+                $promoteBacklog,
+                $promotionTimestamp,
             );
         }
 
@@ -362,6 +415,8 @@ class TasksController extends Controller
                 $content,
                 (int) $task->position,
                 (bool) $data['checked'],
+                $promoteBacklog,
+                $promotionTimestamp,
             );
         }
 
@@ -396,6 +451,7 @@ class TasksController extends Controller
             'block_id' => ['nullable', 'string', 'max:255'],
             'position' => ['required_without:block_id', 'integer', 'min:1'],
             'checked' => ['required', 'boolean'],
+            'promote_backlog' => ['nullable', 'boolean'],
         ]);
 
         $note = Note::query()
@@ -410,12 +466,17 @@ class TasksController extends Controller
             abort(422, 'Note content is invalid.');
         }
 
+        $promoteBacklog = (bool) ($data['promote_backlog'] ?? false);
+        $promotionTimestamp = Carbon::now()->toIso8601String();
+
         $updated = false;
         if (is_string($data['block_id'] ?? null) && trim((string) $data['block_id']) !== '') {
             $updated = $this->updateTaskItemCheckedByBlockId(
                 $content,
                 trim((string) $data['block_id']),
                 (bool) $data['checked'],
+                $promoteBacklog,
+                $promotionTimestamp,
             );
         }
 
@@ -426,6 +487,8 @@ class TasksController extends Controller
                     $content,
                     $position,
                     (bool) $data['checked'],
+                    $promoteBacklog,
+                    $promotionTimestamp,
                 );
             }
         }
@@ -1004,19 +1067,37 @@ class TasksController extends Controller
     /**
      * @param  array<string, mixed>  $content
      */
-    private function updateTaskItemCheckedByBlockId(array &$content, string $blockId, bool $checked): bool
+    private function updateTaskItemCheckedByBlockId(
+        array &$content,
+        string $blockId,
+        bool $checked,
+        bool $promoteBacklog,
+        string $promotionTimestamp,
+    ): bool
     {
         if (! isset($content['content']) || ! is_array($content['content'])) {
             return false;
         }
 
-        return $this->walkAndUpdateByBlockId($content['content'], $blockId, $checked);
+        return $this->walkAndUpdateByBlockId(
+            $content['content'],
+            $blockId,
+            $checked,
+            $promoteBacklog,
+            $promotionTimestamp,
+        );
     }
 
     /**
      * @param  array<int, mixed>  $nodes
      */
-    private function walkAndUpdateByBlockId(array &$nodes, string $blockId, bool $checked): bool
+    private function walkAndUpdateByBlockId(
+        array &$nodes,
+        string $blockId,
+        bool $checked,
+        bool $promoteBacklog,
+        string $promotionTimestamp,
+    ): bool
     {
         foreach ($nodes as &$node) {
             if (! is_array($node)) {
@@ -1024,14 +1105,24 @@ class TasksController extends Controller
             }
 
             if (($node['type'] ?? null) === 'taskItem' && (($node['attrs']['id'] ?? null) === $blockId)) {
-                $node['attrs'] = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
-                $node['attrs']['checked'] = $checked;
+                $this->applyTaskCheckedUpdate(
+                    $node,
+                    $checked,
+                    $promoteBacklog,
+                    $promotionTimestamp,
+                );
 
                 return true;
             }
 
             if (isset($node['content']) && is_array($node['content'])) {
-                if ($this->walkAndUpdateByBlockId($node['content'], $blockId, $checked)) {
+                if ($this->walkAndUpdateByBlockId(
+                    $node['content'],
+                    $blockId,
+                    $checked,
+                    $promoteBacklog,
+                    $promotionTimestamp,
+                )) {
                     return true;
                 }
             }
@@ -1043,7 +1134,13 @@ class TasksController extends Controller
     /**
      * @param  array<string, mixed>  $content
      */
-    private function updateTaskItemCheckedByPosition(array &$content, int $targetPosition, bool $checked): bool
+    private function updateTaskItemCheckedByPosition(
+        array &$content,
+        int $targetPosition,
+        bool $checked,
+        bool $promoteBacklog,
+        string $promotionTimestamp,
+    ): bool
     {
         if (! isset($content['content']) || ! is_array($content['content'])) {
             return false;
@@ -1051,13 +1148,27 @@ class TasksController extends Controller
 
         $position = 0;
 
-        return $this->walkAndUpdateByPosition($content['content'], $targetPosition, $position, $checked);
+        return $this->walkAndUpdateByPosition(
+            $content['content'],
+            $targetPosition,
+            $position,
+            $checked,
+            $promoteBacklog,
+            $promotionTimestamp,
+        );
     }
 
     /**
      * @param  array<int, mixed>  $nodes
      */
-    private function walkAndUpdateByPosition(array &$nodes, int $targetPosition, int &$position, bool $checked): bool
+    private function walkAndUpdateByPosition(
+        array &$nodes,
+        int $targetPosition,
+        int &$position,
+        bool $checked,
+        bool $promoteBacklog,
+        string $promotionTimestamp,
+    ): bool
     {
         foreach ($nodes as &$node) {
             if (! is_array($node)) {
@@ -1067,20 +1178,102 @@ class TasksController extends Controller
             if (($node['type'] ?? null) === 'taskItem') {
                 $position++;
                 if ($position === $targetPosition) {
-                    $node['attrs'] = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
-                    $node['attrs']['checked'] = $checked;
+                    $this->applyTaskCheckedUpdate(
+                        $node,
+                        $checked,
+                        $promoteBacklog,
+                        $promotionTimestamp,
+                    );
 
                     return true;
                 }
             }
 
             if (isset($node['content']) && is_array($node['content'])) {
-                if ($this->walkAndUpdateByPosition($node['content'], $targetPosition, $position, $checked)) {
+                if ($this->walkAndUpdateByPosition(
+                    $node['content'],
+                    $targetPosition,
+                    $position,
+                    $checked,
+                    $promoteBacklog,
+                    $promotionTimestamp,
+                )) {
                     return true;
                 }
             }
         }
 
         return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $taskItem
+     */
+    private function applyTaskCheckedUpdate(
+        array &$taskItem,
+        bool $checked,
+        bool $promoteBacklog,
+        string $promotionTimestamp,
+    ): void {
+        $attrs = is_array($taskItem['attrs'] ?? null) ? $taskItem['attrs'] : [];
+        $status = strtolower(trim((string) ($attrs['taskStatus'] ?? '')));
+        $isOpenBacklog = in_array($status, ['backlog', 'question'], true)
+            && ! (bool) ($attrs['checked'] ?? false);
+        $shouldPromote = $isOpenBacklog && ($promoteBacklog || $checked);
+
+        if ($shouldPromote) {
+            $attrs['checked'] = false;
+            $attrs['taskStatus'] = null;
+            $attrs['backlogPromotedAt'] = $promotionTimestamp;
+            $attrs['completedAt'] = null;
+            $taskItem['attrs'] = $attrs;
+            $this->stripLeadingBacklogMarkerFromTaskItem($taskItem);
+
+            return;
+        }
+
+        $attrs['checked'] = $checked;
+        $attrs['completedAt'] = $checked ? $promotionTimestamp : null;
+        $taskItem['attrs'] = $attrs;
+    }
+
+    /**
+     * @param  array<string, mixed>  $taskItem
+     */
+    private function stripLeadingBacklogMarkerFromTaskItem(array &$taskItem): void
+    {
+        if (! isset($taskItem['content']) || ! is_array($taskItem['content'])) {
+            return;
+        }
+
+        $removed = false;
+        $walk = function (array &$nodes) use (&$walk, &$removed): void {
+            foreach ($nodes as &$node) {
+                if ($removed || ! is_array($node)) {
+                    continue;
+                }
+
+                if (($node['type'] ?? null) === 'text' && is_string($node['text'] ?? null)) {
+                    $text = (string) $node['text'];
+                    $updated = preg_replace('/^(\s*)\?\s+/u', '$1', $text, 1, $count);
+                    if ($count > 0 && is_string($updated)) {
+                        $node['text'] = $updated;
+                        $removed = true;
+
+                        return;
+                    }
+                }
+
+                $children = $node['content'] ?? null;
+                if (is_array($children)) {
+                    $walk($children);
+                    $node['content'] = $children;
+                }
+            }
+        };
+
+        $content = $taskItem['content'];
+        $walk($content);
+        $taskItem['content'] = $content;
     }
 }

@@ -28,9 +28,14 @@ function CalendarBadgeIcon({
     icon: Icon = Calendar,
 }: BadgeIconProps & { badge: string; icon?: LucideIcon }) {
     return (
-        <span className={cn('relative inline-flex h-4 w-4 items-center justify-center', className)}>
-            <Icon className="size-4" />
-            <span className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[8px] leading-none font-medium">
+        <span
+            className={cn(
+                'relative inline-flex h-4 w-4 items-center justify-center group-data-[collapsible=icon]:!h-5 group-data-[collapsible=icon]:!w-5',
+                className,
+            )}
+        >
+            <Icon className="size-4 group-data-[collapsible=icon]:!size-5" />
+            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[8px] leading-none font-medium">
                 {badge}
             </span>
         </span>
@@ -108,6 +113,7 @@ export function NavJournalLinks() {
     const yearlyColorClass = getColorTextClass(
         pageProps.auth?.user?.settings?.editor?.journal_icon_colors?.yearly ?? 'default',
     );
+    const collapsedIconSizeClass = 'group-data-[collapsible=icon]:!size-5';
 
     const items = [
         {
@@ -139,7 +145,7 @@ export function NavJournalLinks() {
     return (
         <SidebarGroup className="px-2 py-0">
             <SidebarGroupLabel>{t('journal_nav.group_label', 'Journals')}</SidebarGroupLabel>
-            <SidebarMenu>
+            <SidebarMenu className="group-data-[collapsible=icon]:gap-2">
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
                         <SidebarMenuButton
@@ -147,9 +153,20 @@ export function NavJournalLinks() {
                             isActive={isCurrentUrl(item.href)}
                             tooltip={{ children: item.title }}
                         >
-                            <Link href={item.href} prefetch>
-                                <item.icon className={item.iconClassName} />
-                                <span>{item.title}</span>
+                            <Link
+                                href={item.href}
+                                prefetch
+                                className="group-data-[collapsible=icon]:justify-center"
+                            >
+                                <item.icon
+                                    className={cn(
+                                        item.iconClassName,
+                                        collapsedIconSizeClass,
+                                    )}
+                                />
+                                <span className="group-data-[collapsible=icon]:hidden">
+                                    {item.title}
+                                </span>
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

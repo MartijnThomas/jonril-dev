@@ -56,6 +56,27 @@ class NoteTaskIndexer
                 $taskStatusFromAttrs = $this->normalizeTaskStatus(
                     Arr::get($attrs, 'taskStatus'),
                 );
+                $backlogPromotedAt = $this->normalizeTimestampValue(
+                    Arr::get($attrs, 'backlogPromotedAt'),
+                );
+                $completedAt = $this->normalizeTimestampValue(
+                    Arr::get($attrs, 'completedAt'),
+                );
+                $startedAt = $this->normalizeTimestampValue(
+                    Arr::get($attrs, 'startedAt'),
+                );
+                $canceledAt = $this->normalizeTimestampValue(
+                    Arr::get($attrs, 'canceledAt'),
+                );
+                $migratedToNoteId = $this->normalizeUuidValue(
+                    Arr::get($attrs, 'migratedToNoteId'),
+                );
+                $migratedFromNoteId = $this->normalizeUuidValue(
+                    Arr::get($attrs, 'migratedFromNoteId'),
+                );
+                $taskStatus = $backlogPromotedAt !== null
+                    ? null
+                    : ($taskStatusFromAttrs ?? $this->extractTaskStatusFromText($text));
 
                 $rows[] = [
                     'workspace_id' => $note->workspace_id,
@@ -66,7 +87,13 @@ class NoteTaskIndexer
                     'parent_note_title' => $note->parent?->title,
                     'position' => $position,
                     'checked' => (bool) Arr::get($attrs, 'checked', false),
-                    'task_status' => $taskStatusFromAttrs ?? $this->extractTaskStatusFromText($text),
+                    'task_status' => $taskStatus,
+                    'canceled_at' => $canceledAt,
+                    'completed_at' => $completedAt,
+                    'started_at' => $startedAt,
+                    'backlog_promoted_at' => $backlogPromotedAt,
+                    'migrated_to_note_id' => $migratedToNoteId,
+                    'migrated_from_note_id' => $migratedFromNoteId,
                     'priority' => $priorityFromAttrs ?? $this->extractPriorityFromText($text),
                     'content_text' => $text,
                     'render_fragments' => json_encode($fragments),
@@ -332,7 +359,7 @@ class NoteTaskIndexer
     private function splitTaskDateTokens(string $text): array
     {
         $leadingFragments = [];
-        if (preg_match('/^(\s*)(—|<|\*|\?)(?=\s|$)/u', $text, $statusMatch)) {
+        if (preg_match('/^(\s*)(—|<|\*|\?|\/)(?=\s|$)/u', $text, $statusMatch)) {
             $leading = (string) ($statusMatch[1] ?? '');
             $token = (string) ($statusMatch[2] ?? '');
             $taskStatus = $this->taskStatusFromToken($token);
@@ -465,7 +492,7 @@ class NoteTaskIndexer
 
     private function extractPriorityFromText(string $text): ?string
     {
-        if (! preg_match('/^\s*(?:—|<|\*|\?)?\s*(!{1,3})(?=\s|$)/u', $text, $match)) {
+        if (! preg_match('/^\s*(?:—|<|\*|\?|\/)?\s*(!{1,3})(?=\s|$)/u', $text, $match)) {
             return null;
         }
 
@@ -474,7 +501,7 @@ class NoteTaskIndexer
 
     private function extractTaskStatusFromText(string $text): ?string
     {
-        if (! preg_match('/^\s*(—|<|\*|\?)(?=\s|$)/u', $text, $match)) {
+        if (! preg_match('/^\s*(—|<|\*|\?|\/)(?=\s|$)/u', $text, $match)) {
             return null;
         }
 
@@ -509,8 +536,9 @@ class NoteTaskIndexer
         return match ($token) {
             '—' => 'canceled',
             '<' => 'assigned',
+            '/' => 'in_progress',
             '*' => 'starred',
-            '?' => 'question',
+            '?' => 'backlog',
             default => null,
         };
     }
@@ -524,11 +552,35 @@ class NoteTaskIndexer
         return match (strtolower(trim($value))) {
             'canceled' => 'canceled',
             'assigned' => 'assigned',
+            'in_progress' => 'in_progress',
             'migrated' => 'migrated',
             'starred' => 'starred',
-            'question' => 'question',
+            'backlog' => 'backlog',
+            'question' => 'backlog',
             default => null,
         };
+    }
+
+    private function normalizeTimestampValue(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = trim($value);
+
+        return $normalized !== '' ? $normalized : null;
+    }
+
+    private function normalizeUuidValue(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = trim($value);
+
+        return $normalized !== '' ? $normalized : null;
     }
 
     /**

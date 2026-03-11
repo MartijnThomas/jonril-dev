@@ -5,12 +5,13 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 export type TaskStatus =
     | 'canceled'
     | 'assigned'
+    | 'in_progress'
     | 'migrated'
     | 'starred'
-    | 'question'
+    | 'backlog'
     | null;
 
-const TASK_STATUS_TOKEN_REGEX = /^(\s*)(—|<|\*|\?)(?=\s|$)/u;
+const TASK_STATUS_TOKEN_REGEX = /^(\s*)(—|<|\*|\?|\/)(?=\s|$)/u;
 
 function statusFromToken(token: string): TaskStatus {
     if (token === '—') {
@@ -26,7 +27,11 @@ function statusFromToken(token: string): TaskStatus {
     }
 
     if (token === '?') {
-        return 'question';
+        return 'backlog';
+    }
+
+    if (token === '/') {
+        return 'in_progress';
     }
 
     return null;
@@ -274,11 +279,35 @@ export const TaskItemStatusExtension = Extension.create({
                                   ? node.attrs.migratedFromBlockId.trim()
                                   : '')
                             : '';
+                        const backlogPromotedAt = isTaskNode
+                            ? (typeof node.attrs.backlogPromotedAt === 'string'
+                                  ? node.attrs.backlogPromotedAt.trim()
+                                  : '')
+                            : '';
+                        const completedAt = isTaskNode
+                            ? (typeof node.attrs.completedAt === 'string'
+                                  ? node.attrs.completedAt.trim()
+                                  : '')
+                            : '';
+                        const canceledAt = isTaskNode
+                            ? (typeof node.attrs.canceledAt === 'string'
+                                  ? node.attrs.canceledAt.trim()
+                                  : '')
+                            : '';
+                        const startedAt = isTaskNode
+                            ? (typeof node.attrs.startedAt === 'string'
+                                  ? node.attrs.startedAt.trim()
+                                  : '')
+                            : '';
                         let resolvedStatus = nextStatus;
                         let resolvedChecked = Boolean(node.attrs.checked);
                         let resolvedMigratedToNoteId = migratedToNoteId;
                         let resolvedMigratedFromNoteId = migratedFromNoteId;
                         let resolvedMigratedFromBlockId = migratedFromBlockId;
+                        let resolvedBacklogPromotedAt = backlogPromotedAt;
+                        let resolvedCompletedAt = completedAt;
+                        let resolvedCanceledAt = canceledAt;
+                        let resolvedStartedAt = startedAt;
 
                         if (
                             isTaskNode &&
@@ -310,6 +339,26 @@ export const TaskItemStatusExtension = Extension.create({
                             }
                         }
 
+                        // Clicking an open backlog task should promote it to a
+                        // regular open task instead of completing it.
+                        if (
+                            isTaskNode &&
+                            resolvedStatus === 'backlog' &&
+                            resolvedChecked
+                        ) {
+                            const tokenRange = findFirstStatusTokenRange(node, pos);
+                            if (tokenRange?.status === 'backlog') {
+                                tr.insertText('', tokenRange.from, tokenRange.to);
+                            }
+
+                            resolvedStatus = null;
+                            resolvedChecked = false;
+                            resolvedBacklogPromotedAt =
+                                resolvedBacklogPromotedAt !== ''
+                                    ? resolvedBacklogPromotedAt
+                                    : new Date().toISOString();
+                        }
+
                         if (
                             isTaskNode &&
                             (migratedToNoteId !== '' ||
@@ -324,13 +373,46 @@ export const TaskItemStatusExtension = Extension.create({
                             resolvedMigratedFromBlockId = '';
                         }
 
+                        if (isTaskNode) {
+                            if (resolvedChecked) {
+                                resolvedCompletedAt =
+                                    resolvedCompletedAt !== ''
+                                        ? resolvedCompletedAt
+                                        : new Date().toISOString();
+                            } else {
+                                resolvedCompletedAt = '';
+                            }
+
+                            if (resolvedStatus === 'canceled') {
+                                resolvedCanceledAt =
+                                    resolvedCanceledAt !== ''
+                                        ? resolvedCanceledAt
+                                        : new Date().toISOString();
+                            } else {
+                                resolvedCanceledAt = '';
+                            }
+
+                            if (resolvedStatus === 'in_progress') {
+                                resolvedStartedAt =
+                                    resolvedStartedAt !== ''
+                                        ? resolvedStartedAt
+                                        : new Date().toISOString();
+                            } else {
+                                resolvedStartedAt = '';
+                            }
+                        }
+
                         if (
                             currentStatus === resolvedStatus &&
                             (!isTaskNode ||
                                 (Boolean(node.attrs.checked) === resolvedChecked &&
                                     migratedToNoteId === resolvedMigratedToNoteId &&
                                     migratedFromNoteId === resolvedMigratedFromNoteId &&
-                                    migratedFromBlockId === resolvedMigratedFromBlockId))
+                                    migratedFromBlockId === resolvedMigratedFromBlockId &&
+                                    backlogPromotedAt === resolvedBacklogPromotedAt &&
+                                    completedAt === resolvedCompletedAt &&
+                                    canceledAt === resolvedCanceledAt &&
+                                    startedAt === resolvedStartedAt))
                         ) {
                             return;
                         }
@@ -350,6 +432,22 @@ export const TaskItemStatusExtension = Extension.create({
                             migratedFromBlockId:
                                 resolvedMigratedFromBlockId !== ''
                                     ? resolvedMigratedFromBlockId
+                                    : null,
+                            backlogPromotedAt:
+                                resolvedBacklogPromotedAt !== ''
+                                    ? resolvedBacklogPromotedAt
+                                    : null,
+                            completedAt:
+                                resolvedCompletedAt !== ''
+                                    ? resolvedCompletedAt
+                                    : null,
+                            canceledAt:
+                                resolvedCanceledAt !== ''
+                                    ? resolvedCanceledAt
+                                    : null,
+                            startedAt:
+                                resolvedStartedAt !== ''
+                                    ? resolvedStartedAt
                                     : null,
                         });
                         changed = true;
