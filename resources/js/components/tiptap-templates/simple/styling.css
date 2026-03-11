@@ -655,6 +655,7 @@
     letter-spacing: inherit !important;
     line-height: inherit !important;
     color: color-mix(in srgb, currentColor 84%, transparent);
+    white-space: normal;
 }
 
 .simple-editor-content
@@ -939,6 +940,8 @@
 .md-task-date-display {
     user-select: none;
     pointer-events: none;
+    white-space: nowrap;
+    margin-left: 0.2ch;
 }
 
 .md-task-date-ghost {
