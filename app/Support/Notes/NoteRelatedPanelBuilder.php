@@ -52,6 +52,7 @@ class NoteRelatedPanelBuilder
 
         $targetDate = $note->journal_date->toDateString();
         $targetHref = $this->noteSlugService->urlFor($note);
+        $contextMentions = $this->contextMentionsForNote($note);
 
         return NoteTask::query()
             ->where('workspace_id', $note->workspace_id)
@@ -64,11 +65,13 @@ class NoteRelatedPanelBuilder
             ->orderBy('deadline_date')
             ->orderBy('updated_at', 'desc')
             ->get()
-            ->filter(function (NoteTask $task) use ($targetDate, $note, $targetHref): bool {
+            ->filter(function (NoteTask $task) use ($targetDate, $note, $targetHref, $contextMentions): bool {
                 $matchesDate = $task->due_date?->toDateString() === $targetDate
                     || $task->deadline_date?->toDateString() === $targetDate;
 
-                return $matchesDate || $this->taskHasWikiLinkToNote($task, $note->id, $targetHref);
+                return $matchesDate
+                    || $this->taskHasWikiLinkToNote($task, $note->id, $targetHref)
+                    || $this->taskHasContextMention($task, $contextMentions);
             })
             ->map(fn (NoteTask $task) => $this->mapTaskForPanel($task))
             ->values()
@@ -81,6 +84,7 @@ class NoteRelatedPanelBuilder
     private function relatedTasksForRegularNote(Note $note): array
     {
         $targetHref = $this->noteSlugService->urlFor($note);
+        $contextMentions = $this->contextMentionsForNote($note);
 
         return NoteTask::query()
             ->where('workspace_id', $note->workspace_id)
@@ -89,7 +93,8 @@ class NoteRelatedPanelBuilder
             ->orderBy('checked')
             ->orderBy('updated_at', 'desc')
             ->get()
-            ->filter(fn (NoteTask $task) => $this->taskHasWikiLinkToNote($task, $note->id, $targetHref))
+            ->filter(fn (NoteTask $task) => $this->taskHasWikiLinkToNote($task, $note->id, $targetHref)
+                || $this->taskHasContextMention($task, $contextMentions))
             ->map(fn (NoteTask $task) => $this->mapTaskForPanel($task))
             ->values()
             ->all();
@@ -139,6 +144,56 @@ class NoteRelatedPanelBuilder
 
             $href = trim((string) ($fragment['href'] ?? ''));
             if ($href !== '' && $href === $targetHref) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function contextMentionsForNote(Note $note): array
+    {
+        $rawContext = trim((string) ($note->context ?? ''));
+        if ($rawContext === '') {
+            return [];
+        }
+
+        $parts = preg_split('/[\s,]+/u', $rawContext);
+        if (! is_array($parts)) {
+            return [];
+        }
+
+        return collect($parts)
+            ->map(fn (string $part) => ltrim(trim($part), '@'))
+            ->filter(fn (string $part) => $part !== '')
+            ->map(fn (string $part) => mb_strtolower($part))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, string>  $contextMentions
+     */
+    private function taskHasContextMention(NoteTask $task, array $contextMentions): bool
+    {
+        if ($contextMentions === []) {
+            return false;
+        }
+
+        $taskMentions = is_array($task->mentions) ? $task->mentions : [];
+        if ($taskMentions === []) {
+            return false;
+        }
+
+        $contextLookup = array_fill_keys($contextMentions, true);
+
+        foreach ($taskMentions as $mention) {
+            $normalized = mb_strtolower(trim((string) $mention));
+            if ($normalized !== '' && isset($contextLookup[$normalized])) {
                 return true;
             }
         }

@@ -339,9 +339,9 @@ export function SimpleEditor({
         editorProps: {
             attributes: {
                 autocomplete: 'off',
-                autocorrect: 'off',
-                autocapitalize: 'off',
-                spellcheck: 'false',
+                autocorrect: 'on',
+                autocapitalize: 'sentences',
+                spellcheck: 'true',
                 'aria-label': 'Main content area, start typing to enter text.',
                 class: 'simple-editor',
             },
