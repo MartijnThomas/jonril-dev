@@ -1,6 +1,13 @@
 import { TaskItem } from '@tiptap/extension-list';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import {
+    createDefaultNestedBulletInTaskItem,
+    isInsideRegularNestedListInTaskItem,
+    joinTaskParagraphOnBackspace,
+    shouldLiftRegularNestedListItemOnBackspace,
+    toggleNestedListInTaskItem,
+} from '@/lib/task-item-nested-list';
 
 declare module '@tiptap/extension-list' {
     interface TaskItemOptions {
@@ -604,6 +611,83 @@ export const TaskItemWithDates = TaskItem.extend({
                                   attributes.deadlineDateMode,
                           }
                         : {},
+            },
+        };
+    },
+
+    addKeyboardShortcuts() {
+        const parentShortcuts = this.parent?.() ?? {};
+        const parentShiftTab = parentShortcuts['Shift-Tab'];
+        const parentModShiftTab = parentShortcuts['Mod-Shift-Tab'];
+        const { 'Shift-Tab': _ignoredShiftTab, 'Mod-Shift-Tab': _ignoredModShiftTab, ...restParentShortcuts } = parentShortcuts;
+        void _ignoredShiftTab;
+        void _ignoredModShiftTab;
+
+        return {
+            ...restParentShortcuts,
+            Tab: () => {
+                if (!this.editor.isActive('taskItem')) {
+                    return false;
+                }
+
+                if (isInsideRegularNestedListInTaskItem(this.editor)) {
+                    return false;
+                }
+
+                return createDefaultNestedBulletInTaskItem(this.editor);
+            },
+            'Shift-Tab': () => {
+                if (
+                    this.editor.isActive('taskItem') &&
+                    isInsideRegularNestedListInTaskItem(this.editor)
+                ) {
+                    return this.editor
+                        .chain()
+                        .focus()
+                        .liftListItem('listItem')
+                        .run();
+                }
+
+                return typeof parentShiftTab === 'function'
+                    ? parentShiftTab()
+                    : false;
+            },
+            'Mod-Shift-Tab': () => {
+                if (
+                    this.editor.isActive('taskItem') &&
+                    isInsideRegularNestedListInTaskItem(this.editor)
+                ) {
+                    return this.editor
+                        .chain()
+                        .focus()
+                        .liftListItem('listItem')
+                        .run();
+                }
+
+                return typeof parentModShiftTab === 'function'
+                    ? parentModShiftTab()
+                    : false;
+            },
+            Backspace: () => {
+                if (!shouldLiftRegularNestedListItemOnBackspace(this.editor)) {
+                    return joinTaskParagraphOnBackspace(this.editor);
+                }
+
+                return this.editor.chain().focus().liftListItem('listItem').run();
+            },
+            'Mod-Shift-8': () => {
+                if (!this.editor.isActive('taskItem')) {
+                    return false;
+                }
+
+                return toggleNestedListInTaskItem(this.editor, 'bulletList');
+            },
+            'Mod-Shift-7': () => {
+                if (!this.editor.isActive('taskItem')) {
+                    return false;
+                }
+
+                return toggleNestedListInTaskItem(this.editor, 'orderedList');
             },
         };
     },

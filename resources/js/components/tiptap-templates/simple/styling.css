@@ -194,6 +194,12 @@
     font-weight: 600;
 }
 
+.simple-editor-content .tiptap.ProseMirror.simple-editor li > ul,
+.simple-editor-content .tiptap.ProseMirror.simple-editor li > ol {
+    margin-top: 0.08em;
+    margin-bottom: 0;
+}
+
 .simple-editor-content .tiptap.ProseMirror.simple-editor li > p,
 .simple-editor-content .tiptap.ProseMirror.simple-editor li > div > p {
     margin: 0;
@@ -218,6 +224,47 @@
     li {
     margin: 0.12em 0;
     padding-left: 0;
+}
+
+/* Nested regular lists inside a task item should keep normal list markers. */
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li
+    > div
+    :is(ul:not([data-type='taskList']), ol)
+    li {
+    display: list-item !important;
+    align-items: normal;
+    position: relative;
+    margin: 0.05em 0;
+    padding-left: 0.7em;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
+    color: inherit;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li
+    > div
+    ul:not([data-type='taskList'])
+    > li {
+    list-style-type: disc !important;
+}
+
+.simple-editor-content
+    .tiptap.ProseMirror.simple-editor
+    ul[data-type='taskList']
+    li
+    > div
+    ol
+    > li {
+    list-style-type: decimal !important;
 }
 
 .simple-editor-content

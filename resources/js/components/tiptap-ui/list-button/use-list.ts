@@ -11,6 +11,11 @@ import { ListIcon } from "@/components/tiptap-icons/list-icon"
 import { ListOrderedIcon } from "@/components/tiptap-icons/list-ordered-icon"
 import { ListTodoIcon } from "@/components/tiptap-icons/list-todo-icon"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
+import {
+  canHandleNestedListInTaskItem,
+  shouldHandleNestedListInTaskItem,
+  toggleNestedListInTaskItem,
+} from "@/lib/task-item-nested-list"
 
 // --- Lib ---
 import {
@@ -76,6 +81,18 @@ export function canToggleList(
   if (!editor || !editor.isEditable) return false
   if (!isNodeInSchema(type, editor) || isNodeTypeSelected(editor, ["image"]))
     return false
+
+  // Inside task items, bullet/ordered lists should be handled as nested
+  // context lists (or conversion from nested subtasks), not lifted to top-level.
+  if (type !== "taskList" && shouldHandleNestedListInTaskItem(editor)) {
+    if (canHandleNestedListInTaskItem(editor, type)) {
+      return true
+    }
+
+    return type === "bulletList"
+      ? editor.can().toggleBulletList()
+      : editor.can().toggleOrderedList()
+  }
 
   if (!turnInto) {
     switch (type) {
@@ -147,6 +164,14 @@ export function toggleList(editor: Editor | null, type: ListType): boolean {
   if (!canToggleList(editor, type)) return false
 
   try {
+    if (type !== "taskList" && shouldHandleNestedListInTaskItem(editor)) {
+      const didHandle = toggleNestedListInTaskItem(editor, type)
+      if (didHandle) {
+        editor.chain().focus().selectTextblockEnd().run()
+        return true
+      }
+    }
+
     const view = editor.view
     let state = view.state
     let tr = state.tr
