@@ -21,24 +21,38 @@ class NoteRelatedPanelBuilder
      */
     public function build(Note $note): array
     {
+        return [
+            'tasks' => $this->tasks($note),
+            'backlinks' => $this->backlinks($note),
+        ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function tasks(Note $note): array
+    {
         if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity === Note::JOURNAL_DAILY) {
-            return [
-                'tasks' => $this->tasksForDailyNote($note),
-                'backlinks' => [],
-            ];
+            return $this->tasksForDailyNote($note);
         }
 
         if ($note->type === Note::TYPE_JOURNAL) {
-            return [
-                'tasks' => [],
-                'backlinks' => [],
-            ];
+            return [];
         }
 
-        return [
-            'tasks' => $this->relatedTasksForRegularNote($note),
-            'backlinks' => $this->backlinksForRegularNote($note),
-        ];
+        return $this->relatedTasksForRegularNote($note);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function backlinks(Note $note): array
+    {
+        if ($note->type === Note::TYPE_JOURNAL) {
+            return [];
+        }
+
+        return $this->backlinksForRegularNote($note);
     }
 
     /**

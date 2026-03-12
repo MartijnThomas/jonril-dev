@@ -1,11 +1,14 @@
 'use client';
 
-import { router } from '@inertiajs/react';
+import { Deferred, router } from '@inertiajs/react';
 import type { Editor } from '@tiptap/core';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { NoteRelatedPanel } from '@/components/note-related-panel';
+import {
+    NoteRelatedPanel,
+    NoteRelatedPanelPlaceholder,
+} from '@/components/note-related-panel';
 import { TaskMigratePicker } from '@/components/task-migrate-picker';
 import { NOTE_TITLE_ICON_PLUGIN_KEY } from '@/components/tiptap-extension/note-title-icon-extension';
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
@@ -705,12 +708,17 @@ export function SimpleEditor({
                 />
                 {showRelatedPanel ? (
                     <div className="w-full md:mx-auto md:mt-4 md:max-w-3xl md:px-8">
-                        <NoteRelatedPanel
-                            key={id}
-                            relatedTasks={relatedTasks}
-                            backlinks={backlinks}
-                            language={language}
-                        />
+                        <Deferred
+                            data={['relatedTasks', 'backlinks']}
+                            fallback={<NoteRelatedPanelPlaceholder language={language} />}
+                        >
+                            <NoteRelatedPanel
+                                key={id}
+                                relatedTasks={relatedTasks}
+                                backlinks={backlinks}
+                                language={language}
+                            />
+                        </Deferred>
                     </div>
                 ) : null}
 

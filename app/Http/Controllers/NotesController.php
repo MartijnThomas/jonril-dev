@@ -495,8 +495,6 @@ class NotesController extends Controller
         }
 
         $breadcrumbs = $this->buildBreadcrumbs($note, $noteTrail, $noteById, $this->currentWorkspace());
-        $relatedPanel = $this->noteRelatedPanelBuilder->build($note);
-
         [$noteActionIcon, $noteActionIconColor] = $this->resolveNoteActionIconPayload($note);
 
         return Inertia::render('notes/show', [
@@ -531,8 +529,12 @@ class NotesController extends Controller
             'moveParentOptions' => $moveParentOptions,
             'breadcrumbs' => $breadcrumbs,
             'language' => $this->userLanguage(),
-            'relatedTasks' => $relatedPanel['tasks'],
-            'backlinks' => $relatedPanel['backlinks'],
+            'relatedTasks' => Inertia::defer(function () use ($note) {
+                return $this->noteRelatedPanelBuilder->tasks($note);
+            }, 'related-panel'),
+            'backlinks' => Inertia::defer(function () use ($note) {
+                return $this->noteRelatedPanelBuilder->backlinks($note);
+            }, 'related-panel'),
             'workspaceSuggestions' => [
                 'mentions' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->mention_suggestions),
                 'hashtags' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->hashtag_suggestions),

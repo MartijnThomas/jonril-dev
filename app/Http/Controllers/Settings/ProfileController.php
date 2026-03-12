@@ -27,6 +27,10 @@ class ProfileController extends Controller
             'dateLongFormat' => $request->user()?->longDateFormatPreference() ?? 'weekday_day_month_year',
             'dateShortFormat' => $request->user()?->shortDateFormatPreference() ?? 'weekday_day_month_short_year',
             'timeFormat' => $request->user()?->timeFormatPreference() ?? '24h',
+            'timezone' => $request->user()?->timezonePreference() ?? 'UTC',
+            'hasTimezoneSetting' => is_string(data_get($request->user()?->settings, 'timezone'))
+                && trim((string) data_get($request->user()?->settings, 'timezone')) !== '',
+            'timezoneOptions' => timezone_identifiers_list(),
         ]);
     }
 
@@ -56,6 +60,9 @@ class ProfileController extends Controller
         }
         if (isset($validated['time_format'])) {
             $settings['time_format'] = $validated['time_format'];
+        }
+        if (isset($validated['timezone'])) {
+            $settings['timezone'] = $validated['timezone'];
         }
 
         $request->user()->settings = $settings;

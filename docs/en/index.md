@@ -38,3 +38,7 @@ Tasks are embedded in notes and can be filtered, grouped, migrated, and tracked 
 ## Next
 
 This documentation section is rendered from markdown files in the `docs/` directory and currently ships in English.
+
+## Development
+
+- [Deferred props plan + payload inventory](/docs/development/deferred-props-plan-and-payload-inventory)

@@ -1,5 +1,6 @@
 import { Transition } from '@headlessui/react';
 import { Form, Head, Link, usePage } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/delete-user';
 import Heading from '@/components/heading';
@@ -21,6 +22,9 @@ export default function Profile({
     dateLongFormat,
     dateShortFormat,
     timeFormat,
+    timezone,
+    hasTimezoneSetting,
+    timezoneOptions,
 }: {
     mustVerifyEmail: boolean;
     status?: string;
@@ -28,6 +32,9 @@ export default function Profile({
     dateLongFormat: string;
     dateShortFormat: string;
     timeFormat: string;
+    timezone: string;
+    hasTimezoneSetting: boolean;
+    timezoneOptions: string[];
 }) {
     const { auth } = usePage().props;
     const { t } = useI18n();
@@ -37,6 +44,23 @@ export default function Profile({
             href: edit(),
         },
     ];
+    const [selectedTimezone, setSelectedTimezone] = useState(timezone);
+
+    useEffect(() => {
+        if (hasTimezoneSetting) {
+            return;
+        }
+
+        const browserTimezone =
+            Intl.DateTimeFormat().resolvedOptions().timeZone ?? '';
+
+        if (
+            browserTimezone !== '' &&
+            timezoneOptions.includes(browserTimezone)
+        ) {
+            setSelectedTimezone(browserTimezone);
+        }
+    }, [hasTimezoneSetting, timezoneOptions]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -233,6 +257,34 @@ export default function Profile({
                                     <InputError
                                         className="mt-2"
                                         message={errors.time_format}
+                                    />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="timezone">
+                                        {t('settings_profile.timezone', 'Timezone')}
+                                    </Label>
+                                    <select
+                                        id="timezone"
+                                        name="timezone"
+                                        value={selectedTimezone}
+                                        onChange={(event) =>
+                                            setSelectedTimezone(event.target.value)
+                                        }
+                                        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-[3px] focus-visible:outline-none"
+                                    >
+                                        {timezoneOptions.map((timezoneOption) => (
+                                            <option
+                                                key={timezoneOption}
+                                                value={timezoneOption}
+                                            >
+                                                {timezoneOption}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.timezone}
                                     />
                                 </div>
 

@@ -51,6 +51,24 @@ test('profile language preference can be updated', function () {
     expect(data_get($user->fresh()->settings, 'language'))->toBe('en');
 });
 
+test('profile timezone preference can be updated', function () {
+    $user = User::factory()->create();
+
+    $response = $this
+        ->actingAs($user)
+        ->patch(route('profile.update'), [
+            'name' => $user->name,
+            'email' => $user->email,
+            'timezone' => 'Europe/Amsterdam',
+        ]);
+
+    $response
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('profile.edit'));
+
+    expect(data_get($user->fresh()->settings, 'timezone'))->toBe('Europe/Amsterdam');
+});
+
 test('email verification status is unchanged when the email address is unchanged', function () {
     $user = User::factory()->create();
 

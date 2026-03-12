@@ -8,11 +8,12 @@ import {
     ChevronsLeft,
     ChevronsRight,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RightSidebarTodayEvents } from '@/components/right-sidebar-today-events';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { PREFETCH_CACHE_FOR_MS, PREFETCH_HOVER_DELAY_MS } from '@/lib/prefetch';
 import { cn } from '@/lib/utils';
 
 type JournalPageProps = {
@@ -25,6 +26,7 @@ type JournalPageProps = {
                 language?: string;
                 date_long_format?: string;
                 time_format?: string;
+                timezone?: string;
             };
         };
     };
@@ -40,6 +42,7 @@ type JournalPageProps = {
         note_id: string | null;
         starts_at: string | null;
         ends_at: string | null;
+        timezone?: string | null;
         location: string | null;
         task_block_id: string | null;
         task_checked: boolean | null;
@@ -178,6 +181,7 @@ function isValidJournalPeriod(granularity: string, period: string): boolean {
 
 export function RightSidebarCalendar() {
     const pageProps = usePage().props as JournalPageProps;
+    const prefetchTimeoutRef = useRef<number | null>(null);
     const workspaceSlug = pageProps.currentWorkspace?.slug?.trim() ?? '';
     const language = pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
     const workspaceColor = pageProps.currentWorkspace?.color ?? 'slate';
@@ -240,6 +244,63 @@ export function RightSidebarCalendar() {
 
         router.get(path, {}, { preserveScroll: true, preserveState: false });
     };
+
+    const prefetchJournal = (granularity: string, period: unknown) => {
+        if (typeof period !== 'string') {
+            return;
+        }
+
+        const normalizedPeriod = period.trim();
+        if (
+            normalizedPeriod === '' ||
+            !isValidJournalPeriod(granularity, normalizedPeriod)
+        ) {
+            return;
+        }
+
+        const path =
+            workspaceSlug !== ''
+                ? `/w/${workspaceSlug}/journal/${granularity}/${normalizedPeriod}`
+                : `/journal/${granularity}/${normalizedPeriod}`;
+
+        if (typeof (router as unknown as { prefetch?: unknown }).prefetch !== 'function') {
+            return;
+        }
+
+        (
+            router as unknown as {
+                prefetch: (
+                    url: string,
+                    data?: Record<string, unknown>,
+                    options?: { cacheFor?: number },
+                ) => void;
+            }
+        ).prefetch(path, {}, { cacheFor: PREFETCH_CACHE_FOR_MS });
+    };
+
+    const clearPrefetchTimeout = () => {
+        if (prefetchTimeoutRef.current === null) {
+            return;
+        }
+
+        window.clearTimeout(prefetchTimeoutRef.current);
+        prefetchTimeoutRef.current = null;
+    };
+
+    const schedulePrefetchJournal = (granularity: string, period: unknown) => {
+        clearPrefetchTimeout();
+
+        prefetchTimeoutRef.current = window.setTimeout(() => {
+            prefetchJournal(granularity, period);
+            prefetchTimeoutRef.current = null;
+        }, PREFETCH_HOVER_DELAY_MS);
+    };
+
+    useEffect(() => {
+        return () => {
+            clearPrefetchTimeout();
+        };
+    }, []);
 
     return (
         <section className="space-y-1 overflow-hidden">
@@ -389,6 +450,10 @@ export function RightSidebarCalendar() {
                     day_button: selectedDayClass,
                 }}
                 selected={activeDailyDate}
+                onDayMouseEnter={(day) =>
+                    schedulePrefetchJournal('daily', format(day, 'yyyy-MM-dd'))
+                }
+                onDayMouseLeave={clearPrefetchTimeout}
                 onDayClick={(day) =>
                     visitJournal('daily', format(day, 'yyyy-MM-dd'))
                 }
@@ -420,6 +485,29 @@ export function RightSidebarCalendar() {
                                         'inline-flex h-(--cell-size) w-(--cell-size) cursor-pointer items-center justify-center rounded-full text-center text-sm font-light hover:bg-muted',
                                         isActive && selectedWeekClass,
                                     )}
+                                    onMouseEnter={() => {
+                                        if (!anchor) {
+                                            return;
+                                        }
+
+                                        const isoYear = getISOWeekYear(anchor);
+                                        const isoWeek = String(
+                                            getISOWeek(anchor),
+                                        ).padStart(2, '0');
+                                        schedulePrefetchJournal('weekly', `${isoYear}-W${isoWeek}`);
+                                    }}
+                                    onMouseLeave={clearPrefetchTimeout}
+                                    onFocus={() => {
+                                        if (!anchor) {
+                                            return;
+                                        }
+
+                                        const isoYear = getISOWeekYear(anchor);
+                                        const isoWeek = String(
+                                            getISOWeek(anchor),
+                                        ).padStart(2, '0');
+                                        prefetchJournal('weekly', `${isoYear}-W${isoWeek}`);
+                                    }}
                                     onClick={() => {
                                         if (!anchor) {
                                             return;
@@ -449,6 +537,7 @@ export function RightSidebarCalendar() {
                 workspaceColor={pageProps.currentWorkspace?.color ?? null}
                 dateLongFormat={pageProps.auth?.user?.settings?.date_long_format ?? null}
                 timeFormat={pageProps.auth?.user?.settings?.time_format ?? null}
+                timezone={pageProps.auth?.user?.settings?.timezone ?? null}
             />
         </section>
     );

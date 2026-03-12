@@ -25,6 +25,7 @@ class ProfileUpdateRequest extends FormRequest
             'date_long_format' => ['sometimes', 'string', Rule::in(User::LONG_DATE_FORMAT_OPTIONS)],
             'date_short_format' => ['sometimes', 'string', Rule::in(User::SHORT_DATE_FORMAT_OPTIONS)],
             'time_format' => ['sometimes', 'string', Rule::in(User::TIME_FORMAT_OPTIONS)],
+            'timezone' => ['sometimes', 'string', 'timezone'],
         ];
     }
 }

@@ -1698,14 +1698,16 @@ test('daily journal note includes due and deadline tasks for that day excluding 
         ->get('/journal/daily/2026-03-07')
         ->assertInertia(fn (Assert $page) => $page
             ->where('noteId', $currentDaily->id)
-            ->has('relatedTasks', 3)
-            ->where('relatedTasks.0.note_id', $dueNote->id)
-            ->where('relatedTasks.0.content', 'Due today')
-            ->where('relatedTasks.0.due_date', '2026-03-07')
-            ->where('relatedTasks.1.note_id', $deadlineNote->id)
-            ->where('relatedTasks.1.content', 'Deadline today')
-            ->where('relatedTasks.1.deadline_date', '2026-03-07')
-            ->where('relatedTasks.2.note_id', $wikiOnlyNote->id),
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('relatedTasks', 3)
+                ->where('relatedTasks.0.note_id', $dueNote->id)
+                ->where('relatedTasks.0.content', 'Due today')
+                ->where('relatedTasks.0.due_date', '2026-03-07')
+                ->where('relatedTasks.1.note_id', $deadlineNote->id)
+                ->where('relatedTasks.1.content', 'Deadline today')
+                ->where('relatedTasks.1.deadline_date', '2026-03-07')
+                ->where('relatedTasks.2.note_id', $wikiOnlyNote->id),
+            ),
         );
 });
 
@@ -1763,9 +1765,11 @@ test('toggling a daily task updates persisted checked state reflected on daily n
         ->actingAs($user)
         ->get('/journal/daily/2026-03-07')
         ->assertInertia(fn (Assert $page) => $page
-            ->has('relatedTasks', 1)
-            ->where('relatedTasks.0.note_id', $taskNote->id)
-            ->where('relatedTasks.0.checked', true),
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('relatedTasks', 1)
+                ->where('relatedTasks.0.note_id', $taskNote->id)
+                ->where('relatedTasks.0.checked', true),
+            ),
         );
 });
 
@@ -1843,10 +1847,12 @@ test('regular note includes related tasks that link to it', function () {
         ->actingAs($user)
         ->get("/notes/{$target->id}")
         ->assertInertia(fn (Assert $page) => $page
-            ->has('relatedTasks', 1)
-            ->where('relatedTasks.0.note_id', $sourceWithLink->id)
-            ->where('relatedTasks.0.block_id', 'related-task-1')
-            ->where('relatedTasks.0.checked', false),
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('relatedTasks', 1)
+                ->where('relatedTasks.0.note_id', $sourceWithLink->id)
+                ->where('relatedTasks.0.block_id', 'related-task-1')
+                ->where('relatedTasks.0.checked', false),
+            ),
         );
 });
 
@@ -1899,13 +1905,15 @@ test('regular note includes backlinks with snippet', function () {
         ->actingAs($user)
         ->get("/notes/{$target->id}")
         ->assertInertia(fn (Assert $page) => $page
-            ->has('backlinks', 1)
-            ->where('backlinks.0.block_id', 'p-source')
-            ->where('backlinks.0.render_fragments.1.type', 'wikilink')
-            ->where('backlinks.0.render_fragments.1.text', 'Target note')
-            ->where('backlinks.0.note.id', $source->id)
-            ->where('backlinks.0.note.title', 'Source note')
-            ->where('backlinks.0.href', scoped_note_url($workspace, $source->id).'#p-source'),
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('backlinks', 1)
+                ->where('backlinks.0.block_id', 'p-source')
+                ->where('backlinks.0.render_fragments.1.type', 'wikilink')
+                ->where('backlinks.0.render_fragments.1.text', 'Target note')
+                ->where('backlinks.0.note.id', $source->id)
+                ->where('backlinks.0.note.title', 'Source note')
+                ->where('backlinks.0.href', scoped_note_url($workspace, $source->id).'#p-source'),
+            ),
         );
 });
 
@@ -1982,12 +1990,14 @@ test('backlinks omit task blocks that already appear in related tasks', function
         ->actingAs($user)
         ->get("/notes/{$target->id}")
         ->assertInertia(fn (Assert $page) => $page
-            ->has('relatedTasks', 1)
-            ->where('relatedTasks.0.note_id', $source->id)
-            ->where('relatedTasks.0.block_id', 'task-mixed')
-            ->has('backlinks', 1)
-            ->where('backlinks.0.block_id', 'p-mixed')
-            ->where('backlinks.0.note.id', $source->id),
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('relatedTasks', 1)
+                ->where('relatedTasks.0.note_id', $source->id)
+                ->where('relatedTasks.0.block_id', 'task-mixed')
+                ->has('backlinks', 1)
+                ->where('backlinks.0.block_id', 'p-mixed')
+                ->where('backlinks.0.note.id', $source->id),
+            ),
         );
 });
 

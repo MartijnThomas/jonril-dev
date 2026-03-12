@@ -11,9 +11,15 @@ use Illuminate\Support\Facades\DB;
 
 class TimeblockIndexer
 {
-    public function reindexNote(Note $note, int $defaultDurationMinutes = 60): void
+    public function reindexNote(
+        Note $note,
+        int $defaultDurationMinutes = 60,
+        ?string $userTimezone = null,
+    ): void
     {
-        DB::transaction(function () use ($note, $defaultDurationMinutes): void {
+        $resolvedTimezone = $this->resolveTimezone($userTimezone);
+
+        DB::transaction(function () use ($note, $defaultDurationMinutes, $resolvedTimezone): void {
             $this->deleteNoteTimeblocks($note);
 
             if (
@@ -34,8 +40,8 @@ class TimeblockIndexer
 
             $this->walkNodes(
                 Arr::get($content, 'content', []),
-                function (array $node) use ($note, $defaultDurationMinutes, &$timeblocks, &$events): void {
-                    $parsed = $this->parseTimeblockNode($node, $note, $defaultDurationMinutes);
+                function (array $node) use ($note, $defaultDurationMinutes, $resolvedTimezone, &$timeblocks, &$events): void {
+                    $parsed = $this->parseTimeblockNode($node, $note, $defaultDurationMinutes, $resolvedTimezone);
                     if ($parsed === null) {
                         return;
                     }
@@ -129,7 +135,12 @@ class TimeblockIndexer
     /**
      * @return array<string, mixed>|null
      */
-    private function parseTimeblockNode(array $node, Note $note, int $defaultDurationMinutes): ?array
+    private function parseTimeblockNode(
+        array $node,
+        Note $note,
+        int $defaultDurationMinutes,
+        string $timezone,
+    ): ?array
     {
         $fragments = $this->nodeInlineFragments($node);
         if ($fragments === []) {
@@ -149,23 +160,27 @@ class TimeblockIndexer
             return null;
         }
 
-        $journalDate = CarbonImmutable::parse($note->journal_date);
+        $journalDate = CarbonImmutable::createFromFormat(
+            'Y-m-d',
+            $note->journal_date->toDateString(),
+            $timezone,
+        )->startOfDay();
         $startHour = (int) $matches['start'];
         $startMinute = (int) $matches['start_min'];
-        $startAt = $journalDate->setTime($startHour, $startMinute);
+        $startAtLocal = $journalDate->setTime($startHour, $startMinute);
 
         $hasExplicitEnd = isset($matches['end']) && $matches['end'] !== '';
         if ($hasExplicitEnd) {
             $endHour = (int) $matches['end'];
             $endMinute = (int) $matches['end_min'];
-            $endAt = $journalDate->setTime($endHour, $endMinute);
+            $endAtLocal = $journalDate->setTime($endHour, $endMinute);
 
-            if ($endAt->lessThanOrEqualTo($startAt)) {
+            if ($endAtLocal->lessThanOrEqualTo($startAtLocal)) {
                 return null;
             }
         } else {
             $safeDuration = max(5, min(12 * 60, $defaultDurationMinutes));
-            $endAt = $startAt->addMinutes($safeDuration);
+            $endAtLocal = $startAtLocal->addMinutes($safeDuration);
         }
 
         $restText = trim((string) ($matches['rest'] ?? ''));
@@ -184,12 +199,15 @@ class TimeblockIndexer
         $blockId = Arr::get($attrs, 'id');
         $isTaskItem = (($node['type'] ?? null) === 'taskItem');
 
+        $startAtUtc = $startAtLocal->timezone('UTC');
+        $endAtUtc = $endAtLocal->timezone('UTC');
+
         return [
             'block_id' => $blockId,
             'title' => $titleText,
-            'starts_at' => $startAt,
-            'ends_at' => $endAt,
-            'timezone' => config('app.timezone', 'UTC'),
+            'starts_at' => $startAtUtc,
+            'ends_at' => $endAtUtc,
+            'timezone' => $timezone,
             'location' => $locationText !== '' ? $locationText : null,
             'task_block_id' => $isTaskItem ? $blockId : null,
             'task_checked' => $isTaskItem ? (bool) Arr::get($attrs, 'checked', false) : null,
@@ -198,6 +216,19 @@ class TimeblockIndexer
             'meta' => null,
             'has_explicit_end' => $hasExplicitEnd,
         ];
+    }
+
+    private function resolveTimezone(?string $timezone): string
+    {
+        if (
+            is_string($timezone)
+            && $timezone !== ''
+            && in_array($timezone, timezone_identifiers_list(), true)
+        ) {
+            return $timezone;
+        }
+
+        return config('app.timezone', 'UTC');
     }
 
     /**

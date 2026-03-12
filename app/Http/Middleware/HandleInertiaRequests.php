@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Event;
 use App\Models\Note;
 use App\Models\Timeblock;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Notes\NoteSlugService;
 use Carbon\Carbon;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -49,6 +51,7 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $this->hydrateUserTimezonePreferenceFromCookie($request);
         $locale = $this->resolveLocale($request);
         App::setLocale($locale);
         $cachedSidebarEventsPayload = null;
@@ -75,9 +78,47 @@ class HandleInertiaRequests extends Middleware
             'todayEventsDate' => fn () => $sidebarEventsPayload()['date'],
             'locale' => $locale,
             'translations' => fn () => [
-                'ui' => Lang::get('ui', [], $locale),
+                'ui' => $this->cachedUiTranslations($request, $locale),
             ],
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function cachedUiTranslations(Request $request, string $locale): array
+    {
+        // Keep locale translation edits hot-reload friendly while developing.
+        if (app()->isLocal()) {
+            return Lang::get('ui', [], $locale);
+        }
+
+        $cacheKey = sprintf(
+            'i18n:ui:%s:%s',
+            $locale,
+            $this->translationCacheSignature($request, $locale),
+        );
+
+        return Cache::remember($cacheKey, now()->addHours(12), function () use ($locale): array {
+            return Lang::get('ui', [], $locale);
+        });
+    }
+
+    private function translationCacheSignature(Request $request, string $locale): string
+    {
+        $assetVersion = (string) ($this->version($request) ?? '');
+        if ($assetVersion !== '') {
+            return md5($assetVersion);
+        }
+
+        $path = lang_path($locale.DIRECTORY_SEPARATOR.'ui.php');
+        if (! is_file($path)) {
+            return 'missing';
+        }
+
+        $mtime = @filemtime($path);
+
+        return $mtime === false ? 'unknown' : (string) $mtime;
     }
 
     private function resolveLocale(Request $request): string
@@ -85,6 +126,44 @@ class HandleInertiaRequests extends Middleware
         $language = strtolower((string) data_get($request->user()?->settings, 'language', app()->getLocale()));
 
         return in_array($language, ['nl', 'en'], true) ? $language : 'en';
+    }
+
+    private function resolveUserTimezone(Request $request): string
+    {
+        $user = $request->user();
+        if ($user instanceof User) {
+            return $user->timezonePreference();
+        }
+
+        return config('app.timezone', 'UTC');
+    }
+
+    private function hydrateUserTimezonePreferenceFromCookie(Request $request): void
+    {
+        $user = $request->user();
+        if (! $user instanceof User) {
+            return;
+        }
+
+        $storedTimezone = trim((string) data_get($user->settings, 'timezone', ''));
+        if ($storedTimezone !== '') {
+            return;
+        }
+
+        $cookieTimezone = trim((string) $request->cookie('user_tz', ''));
+        if (
+            $cookieTimezone === ''
+            || ! in_array($cookieTimezone, timezone_identifiers_list(), true)
+        ) {
+            return;
+        }
+
+        $settings = is_array($user->settings) ? $user->settings : [];
+        $settings['timezone'] = $cookieTimezone;
+
+        $user->forceFill([
+            'settings' => $settings,
+        ])->saveQuietly();
     }
 
     private function sidebarDefaultOpenState(Request $request, string $side): bool
@@ -289,6 +368,7 @@ class HandleInertiaRequests extends Middleware
      *     note_id:string|null,
      *     starts_at:string|null,
      *     ends_at:string|null,
+     *     timezone:string|null,
      *     location:string|null,
      *     task_block_id:string|null,
      *     task_checked:bool|null,
@@ -301,6 +381,7 @@ class HandleInertiaRequests extends Middleware
     private function sidebarEventsPayload(Request $request): array
     {
         $workspace = $this->resolvedWorkspace($request);
+        $userTimezone = $this->resolveUserTimezone($request);
         $anchorDate = $this->resolveSidebarEventsDate($request);
 
         if (! $workspace) {
@@ -310,18 +391,25 @@ class HandleInertiaRequests extends Middleware
             ];
         }
 
-        $startOfDay = $anchorDate->copy()->timezone(config('app.timezone'))->startOfDay();
-        $endOfDay = (clone $startOfDay)->endOfDay();
+        $startOfDayUtc = $anchorDate->copy()->timezone($userTimezone)->startOfDay()->timezone('UTC');
+        $endOfDayUtc = $anchorDate->copy()->timezone($userTimezone)->endOfDay()->timezone('UTC');
 
         $events = Event::query()
             ->with(['eventable', 'note:id,title,slug,type,journal_granularity,journal_date,workspace_id,parent_id,properties'])
             ->where('workspace_id', $workspace->id)
-            ->where('starts_at', '<=', $endOfDay)
-            ->where('ends_at', '>=', $startOfDay)
+            ->where('starts_at', '<=', $endOfDayUtc)
+            ->where('ends_at', '>=', $startOfDayUtc)
             ->orderBy('starts_at')
             ->orderBy('ends_at')
             ->get()
-            ->map(function (Event $event): array {
+            ->filter(function (Event $event) use ($anchorDate): bool {
+                if ($event->eventable_type !== Timeblock::class) {
+                    return true;
+                }
+
+                return (string) $event->journal_date?->toDateString() === $anchorDate->toDateString();
+            })
+            ->map(function (Event $event) use ($userTimezone): array {
                 $isTimeblock = $event->eventable_type === Timeblock::class;
                 $timeblock = $isTimeblock ? $event->eventable : null;
 
@@ -330,14 +418,15 @@ class HandleInertiaRequests extends Middleware
                     'type' => $isTimeblock ? 'timeblock' : 'event',
                     'title' => (string) $event->title,
                     'note_id' => $event->note_id,
-                    'starts_at' => $event->starts_at?->toIso8601String(),
-                    'ends_at' => $event->ends_at?->toIso8601String(),
+                    'starts_at' => $event->starts_at?->copy()->timezone($userTimezone)->toIso8601String(),
+                    'ends_at' => $event->ends_at?->copy()->timezone($userTimezone)->toIso8601String(),
                     'location' => $timeblock instanceof Timeblock ? $timeblock->location : null,
                     'task_block_id' => $timeblock instanceof Timeblock ? $timeblock->task_block_id : null,
                     'task_checked' => $timeblock instanceof Timeblock ? $timeblock->task_checked : null,
                     'task_status' => $timeblock instanceof Timeblock ? $timeblock->task_status : null,
                     'note_title' => $event->note?->display_title,
                     'href' => $event->note ? $this->noteSlugService->urlFor($event->note) : null,
+                    'timezone' => $userTimezone,
                 ];
             })
             ->values()
@@ -351,6 +440,7 @@ class HandleInertiaRequests extends Middleware
 
     private function resolveSidebarEventsDate(Request $request): CarbonInterface
     {
+        $userTimezone = $this->resolveUserTimezone($request);
         $granularity = $request->route('granularity');
         $period = $request->route('period');
 
@@ -360,12 +450,12 @@ class HandleInertiaRequests extends Middleware
             preg_match('/^\d{4}-\d{2}-\d{2}$/', $period) === 1
         ) {
             try {
-                return Carbon::createFromFormat('Y-m-d', $period, config('app.timezone'))->startOfDay();
+                return Carbon::createFromFormat('Y-m-d', $period, $userTimezone)->startOfDay();
             } catch (\Throwable) {
                 // Fall back to "today" below.
             }
         }
 
-        return now(config('app.timezone'))->startOfDay();
+        return now($userTimezone)->startOfDay();
     }
 }

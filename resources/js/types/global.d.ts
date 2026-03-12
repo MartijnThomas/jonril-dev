@@ -42,6 +42,7 @@ declare module '@inertiajs/core' {
                 note_id: string | null;
                 starts_at: string | null;
                 ends_at: string | null;
+                timezone?: string | null;
                 location: string | null;
                 task_block_id: string | null;
                 task_checked: boolean | null;

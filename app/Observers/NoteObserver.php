@@ -21,9 +21,10 @@ class NoteObserver
     public function saved(Note $note): void
     {
         $defaultDurationMinutes = Auth::user()?->defaultTimeblockDurationMinutes() ?? 60;
+        $userTimezone = Auth::user()?->timezonePreference();
 
         $this->noteTaskIndexer->reindexNote($note);
-        $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes);
+        $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes, $userTimezone);
         $this->noteHeadingIndexer->reindexNote($note);
 
         if ($note->wasChanged('title')) {
@@ -69,9 +70,10 @@ class NoteObserver
             });
 
         $defaultDurationMinutes = Auth::user()?->defaultTimeblockDurationMinutes() ?? 60;
+        $userTimezone = Auth::user()?->timezonePreference();
 
         $this->noteTaskIndexer->reindexNote($note);
-        $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes);
+        $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes, $userTimezone);
         $this->noteHeadingIndexer->reindexNote($note);
     }
 }

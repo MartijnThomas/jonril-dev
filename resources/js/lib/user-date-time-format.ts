@@ -125,3 +125,21 @@ export function formatClockTime(
 ): string {
     return format(date, TIME_PATTERNS[formatKey]);
 }
+
+export function formatClockTimeInTimeZone(
+    date: Date,
+    formatKey: TimeFormatKey,
+    timeZone: string,
+    language: AppLanguage,
+): string {
+    const locale = language === 'en' ? 'en-US' : 'nl-NL';
+
+    const formatter = new Intl.DateTimeFormat(locale, {
+        timeZone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: formatKey === '12h',
+    });
+
+    return formatter.format(date);
+}

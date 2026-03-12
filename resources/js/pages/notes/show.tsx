@@ -21,7 +21,7 @@ type Props = {
         mentions: string[];
         hashtags: string[];
     };
-    relatedTasks: {
+    relatedTasks?: {
         id: number;
         note_id: string;
         block_id: string | null;
@@ -50,7 +50,7 @@ type Props = {
             href: string;
         };
     }[];
-    backlinks: {
+    backlinks?: {
         id: string;
         block_id: string;
         excerpt: string;
@@ -90,8 +90,8 @@ export default function Dashboard({
     journalDate,
     defaultTimeblockDurationMinutes,
     workspaceSuggestions,
-    relatedTasks,
-    backlinks,
+    relatedTasks = [],
+    backlinks = [],
 }: Props) {
     const page = usePage();
     const isAdmin = page.props.auth?.user?.role === 'admin';

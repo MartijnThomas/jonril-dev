@@ -34,6 +34,11 @@ class User extends Authenticatable
         '12h',
     ];
 
+    public const DEFAULT_TIMEZONE_BY_LANGUAGE = [
+        'nl' => 'Europe/Amsterdam',
+        'en' => 'America/New_York',
+    ];
+
     /**
      * The attributes that are mass assignable.
      *
@@ -206,5 +211,15 @@ class User extends Authenticatable
         }
 
         return $this->languagePreference() === 'en' ? '12h' : '24h';
+    }
+
+    public function timezonePreference(): string
+    {
+        $value = trim((string) data_get($this->settings, 'timezone', ''));
+        if ($value !== '' && in_array($value, timezone_identifiers_list(), true)) {
+            return $value;
+        }
+
+        return self::DEFAULT_TIMEZONE_BY_LANGUAGE[$this->languagePreference()] ?? 'UTC';
     }
 }

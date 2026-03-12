@@ -10,6 +10,7 @@ import {
 } from '@/components/color-swatch-picker';
 import {
     formatClockTime,
+    formatClockTimeInTimeZone,
     formatLongDate,
     resolveLongDateFormat,
     resolveTimeFormat,
@@ -23,6 +24,7 @@ type SidebarTodayEvent = {
     note_id: string | null;
     starts_at: string | null;
     ends_at: string | null;
+    timezone?: string | null;
     location: string | null;
     task_block_id: string | null;
     task_checked: boolean | null;
@@ -39,12 +41,15 @@ type RightSidebarTodayEventsProps = {
     workspaceColor?: string | null;
     dateLongFormat?: string | null;
     timeFormat?: string | null;
+    timezone?: string | null;
 };
 
 function formatTimeRange(
     startsAt: string | null,
     endsAt: string | null,
     preferredTimeFormat: '24h' | '12h',
+    language: 'nl' | 'en',
+    timezone?: string | null,
 ): string {
     if (!startsAt || !endsAt) {
         return '--:--';
@@ -55,6 +60,10 @@ function formatTimeRange(
 
     if (!isValid(start) || !isValid(end)) {
         return '--:--';
+    }
+
+    if (timezone) {
+        return `${formatClockTimeInTimeZone(start, preferredTimeFormat, timezone, language)}-${formatClockTimeInTimeZone(end, preferredTimeFormat, timezone, language)}`;
     }
 
     return `${formatClockTime(start, preferredTimeFormat)}-${formatClockTime(end, preferredTimeFormat)}`;
@@ -154,6 +163,7 @@ export function RightSidebarTodayEvents({
     workspaceColor = null,
     dateLongFormat = null,
     timeFormat = null,
+    timezone = null,
 }: RightSidebarTodayEventsProps) {
     const capitalizeFirst = (value: string): string =>
         value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value;
@@ -277,6 +287,8 @@ export function RightSidebarTodayEvents({
                             event.starts_at,
                             event.ends_at,
                             preferredTimeFormat,
+                            language,
+                            timezone ?? event.timezone ?? null,
                         );
                         const isTimeblock = event.type === 'timeblock';
                         const hasLinkedTask = isTimeblock && !!event.task_block_id;

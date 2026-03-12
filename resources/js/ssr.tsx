@@ -2,6 +2,7 @@ import { createInertiaApp } from '@inertiajs/react';
 import createServer from '@inertiajs/react/server';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import ReactDOMServer from 'react-dom/server';
+import { PREFETCH_CACHE_FOR, PREFETCH_HOVER_DELAY_MS } from '@/lib/prefetch';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -17,6 +18,12 @@ createServer((page) =>
             ),
         setup: ({ App, props }) => {
             return <App {...props} />;
+        },
+        defaults: {
+            prefetch: {
+                cacheFor: PREFETCH_CACHE_FOR,
+                hoverDelay: PREFETCH_HOVER_DELAY_MS,
+            },
         },
     }),
 );

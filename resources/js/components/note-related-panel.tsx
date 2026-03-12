@@ -59,6 +59,48 @@ type NoteRelatedPanelProps = {
     language: 'nl' | 'en';
 };
 
+type NoteRelatedPanelPlaceholderProps = {
+    language: 'nl' | 'en';
+};
+
+export function NoteRelatedPanelPlaceholder({
+    language,
+}: NoteRelatedPanelPlaceholderProps) {
+    const relatedTitle = language === 'en' ? 'Related' : 'Gerelateerd';
+    const relatedTasksTitle = language === 'en' ? 'Tasks' : 'Taken';
+    const backlinksTitle = language === 'en' ? 'Backlinks' : 'Backlinks';
+
+    return (
+        <section className="editor-ui-font mb-0 rounded-md bg-muted/20 px-8 pt-4 pb-2 transition-colors duration-200 md:mb-2 md:px-2 md:py-2">
+            <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5 text-[0.78em] font-bold tracking-wide text-muted-foreground uppercase md:font-semibold">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                    <span>{relatedTitle}</span>
+                </span>
+            </div>
+
+            <div className="pt-2 pl-0 md:pl-4">
+                <div className="flex items-center gap-1.5 text-[0.78em] font-semibold tracking-wide text-muted-foreground uppercase">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                    <span>{relatedTasksTitle}</span>
+                </div>
+                <div className="space-y-2 pt-2 pl-2 md:pl-5">
+                    <div className="h-3 w-40 animate-pulse rounded bg-muted" />
+                    <div className="h-3 w-52 animate-pulse rounded bg-muted" />
+                </div>
+
+                <div className="mt-3 flex items-center gap-1.5 text-[0.78em] font-semibold tracking-wide text-muted-foreground uppercase">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                    <span>{backlinksTitle}</span>
+                </div>
+                <div className="space-y-2 pt-2 pl-2 md:pl-5">
+                    <div className="h-3 w-44 animate-pulse rounded bg-muted" />
+                </div>
+            </div>
+        </section>
+    );
+}
+
 export function NoteRelatedPanel({
     relatedTasks,
     backlinks,

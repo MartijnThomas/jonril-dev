@@ -73,14 +73,14 @@ export function AppSidebar() {
             href: '/notes/list',
             icon: NotesIcon,
             iconClassName: notesColorClass,
-            prefetch: false,
+            prefetch: true,
         },
         {
             title: 'Tasks',
             href: '/tasks',
             icon: TasksIcon,
             iconClassName: tasksColorClass,
-            prefetch: false,
+            prefetch: true,
         },
     ];
 
