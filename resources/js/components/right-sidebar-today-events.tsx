@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import {
     COLOR_SWATCH_THEME_BG_CLASS,
     COLOR_SWATCH_THEME_BORDER_CLASS,
+    COLOR_SWATCH_TEXT_CLASS,
 } from '@/components/color-swatch-picker';
 import {
     formatClockTime,
@@ -155,6 +156,61 @@ function formatGapLabel(
     return `${minutes}m between`;
 }
 
+function formatStartsSoonLabel(
+    startsAt: string | null,
+    language: 'nl' | 'en',
+    now: Date,
+): string | null {
+    if (!startsAt) {
+        return null;
+    }
+
+    const start = parseISO(startsAt);
+    if (!isValid(start)) {
+        return null;
+    }
+
+    const diffMinutes = Math.ceil((start.getTime() - now.getTime()) / 60000);
+    if (diffMinutes <= 0 || diffMinutes > 15) {
+        return null;
+    }
+
+    if (language === 'nl') {
+        return `Start over ${diffMinutes} min`;
+    }
+
+    return `Starts in ${diffMinutes} min`;
+}
+
+function resolveTimingState(
+    startsAt: string | null,
+    endsAt: string | null,
+    now: Date,
+): {
+    isActiveNow: boolean;
+    hasPassed: boolean;
+} {
+    if (!startsAt || !endsAt) {
+        return { isActiveNow: false, hasPassed: false };
+    }
+
+    const start = parseISO(startsAt);
+    const end = parseISO(endsAt);
+
+    if (!isValid(start) || !isValid(end)) {
+        return { isActiveNow: false, hasPassed: false };
+    }
+
+    const nowMs = now.getTime();
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+
+    return {
+        isActiveNow: nowMs >= startMs && nowMs < endMs,
+        hasPassed: nowMs >= endMs,
+    };
+}
+
 export function RightSidebarTodayEvents({
     events,
     language,
@@ -182,10 +238,20 @@ export function RightSidebarTodayEvents({
     );
     const [eventItems, setEventItems] = useState<SidebarTodayEvent[]>(events);
     const [pendingTaskBlockIds, setPendingTaskBlockIds] = useState<string[]>([]);
+    const [now, setNow] = useState<Date>(() => new Date());
 
     useEffect(() => {
         setEventItems(events);
     }, [events]);
+    useEffect(() => {
+        const intervalId = window.setInterval(() => {
+            setNow(new Date());
+        }, 60_000);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, []);
     const emptyLabel =
         language === 'en' ? 'No events planned for this day.' : 'Geen events gepland voor deze dag.';
     const normalizedTimeblockColor = (
@@ -202,6 +268,8 @@ export function RightSidebarTodayEvents({
         ?? COLOR_SWATCH_THEME_BORDER_CLASS.sky;
     const workspaceBorder = (COLOR_SWATCH_THEME_BORDER_CLASS as Record<string, string>)[normalizedWorkspaceColor]
         ?? COLOR_SWATCH_THEME_BORDER_CLASS.slate;
+    const workspaceText = (COLOR_SWATCH_TEXT_CLASS as Record<string, string>)[normalizedWorkspaceColor]
+        ?? COLOR_SWATCH_TEXT_CLASS.slate;
     const neutralCardClass = 'bg-zinc-100 dark:bg-zinc-900';
 
     return (
@@ -293,11 +361,29 @@ export function RightSidebarTodayEvents({
                         const isTimeblock = event.type === 'timeblock';
                         const hasLinkedTask = isTimeblock && !!event.task_block_id;
                         const isLinkedTaskCompleted = hasLinkedTask && Boolean(event.task_checked);
+                        const { isActiveNow, hasPassed } = resolveTimingState(
+                            event.starts_at,
+                            event.ends_at,
+                            now,
+                        );
+                        const shouldDimPassedTimeblock =
+                            isTimeblock && !hasLinkedTask && hasPassed;
                         const checkboxBorderClass = isTimeblock ? timeblockBorder : workspaceBorder;
                         const checkboxAccentClass = isTimeblock ? timeblockAccent : workspaceAccent;
                         const durationLabel = isTimeblock
                             ? formatDurationLabel(event.starts_at, event.ends_at, language)
                             : null;
+                        const startsSoonLabel = formatStartsSoonLabel(
+                            event.starts_at,
+                            language,
+                            now,
+                        );
+                        const happeningNowLabel =
+                            isTimeblock && isActiveNow
+                                ? language === 'nl'
+                                    ? 'Nu bezig'
+                                    : 'Happening now'
+                                : null;
                         const nextEvent = events[index + 1] ?? null;
                         const gapLabel = nextEvent
                             ? formatGapLabel(event.ends_at, nextEvent.starts_at, language)
@@ -311,6 +397,13 @@ export function RightSidebarTodayEvents({
                                             neutralCardClass,
                                             !isTimeblock && 'border border-sidebar-border/60',
                                             isLinkedTaskCompleted && 'opacity-70',
+                                            shouldDimPassedTimeblock && 'opacity-60',
+                                            isTimeblock &&
+                                                isActiveNow &&
+                                                cn(
+                                                    'border-2 shadow-[0_0_0_1px_rgba(0,0,0,0.02)]',
+                                                    timeblockBorder,
+                                                ),
                                         )}
                                     >
                                         <div className="flex items-center gap-3">
@@ -324,6 +417,27 @@ export function RightSidebarTodayEvents({
                                                 />
                                             ) : null}
                                             <div className="min-w-0">
+                                                {happeningNowLabel ? (
+                                                    <p
+                                                        className={cn(
+                                                            'mb-0.5 truncate text-[0.68rem] font-semibold uppercase tracking-wide',
+                                                            workspaceText,
+                                                            hasLinkedTask && 'ml-[1.625rem]',
+                                                        )}
+                                                    >
+                                                        {happeningNowLabel}
+                                                    </p>
+                                                ) : startsSoonLabel ? (
+                                                    <p
+                                                        className={cn(
+                                                            'mb-0.5 truncate text-[0.68rem] font-semibold uppercase tracking-wide',
+                                                            workspaceText,
+                                                            hasLinkedTask && 'ml-[1.625rem]',
+                                                        )}
+                                                    >
+                                                        {startsSoonLabel}
+                                                    </p>
+                                                ) : null}
                                                 <div className="flex items-center gap-2">
                                                     {hasLinkedTask ? (
                                                         <button
