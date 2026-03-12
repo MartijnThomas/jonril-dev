@@ -713,6 +713,7 @@ export function SimpleEditor({
                             fallback={<NoteRelatedPanelPlaceholder language={language} />}
                         >
                             <NoteRelatedPanel
+                                noteId={id}
                                 key={id}
                                 relatedTasks={relatedTasks}
                                 backlinks={backlinks}

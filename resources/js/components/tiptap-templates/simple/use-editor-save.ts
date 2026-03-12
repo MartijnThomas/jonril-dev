@@ -289,6 +289,7 @@ export function useEditorSave({
                     preserveScroll: true,
                     preserveState: true,
                     replace: true,
+                    except: ['relatedTasks', 'backlinks'],
                     showProgress: force,
                     onSuccess: () => {
                         markSaveSuccess();

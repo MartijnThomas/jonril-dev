@@ -1,4 +1,4 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, useRemember } from '@inertiajs/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -54,6 +54,7 @@ type BacklinkItem = {
 };
 
 type NoteRelatedPanelProps = {
+    noteId: string;
     relatedTasks: RelatedTaskItem[];
     backlinks: BacklinkItem[];
     language: 'nl' | 'en';
@@ -102,6 +103,7 @@ export function NoteRelatedPanelPlaceholder({
 }
 
 export function NoteRelatedPanel({
+    noteId,
     relatedTasks,
     backlinks,
     language,
@@ -111,10 +113,22 @@ export function NoteRelatedPanel({
         task.task_status !== 'canceled' &&
         task.task_status !== 'migrated';
     const hasOpenRelatedTasks = relatedTasks.some((task) => isOpenTask(task));
-    const [panelOpen, setPanelOpen] = useState(hasOpenRelatedTasks);
-    const [tasksOpen, setTasksOpen] = useState(hasOpenRelatedTasks);
-    const [backlinksOpen, setBacklinksOpen] = useState(false);
-    const [onlyOpenTasks, setOnlyOpenTasks] = useState(true);
+    const [panelOpen, setPanelOpen] = useRemember(
+        hasOpenRelatedTasks,
+        `note-related-panel:${noteId}:panel-open`,
+    );
+    const [tasksOpen, setTasksOpen] = useRemember(
+        hasOpenRelatedTasks,
+        `note-related-panel:${noteId}:tasks-open`,
+    );
+    const [backlinksOpen, setBacklinksOpen] = useRemember(
+        false,
+        `note-related-panel:${noteId}:backlinks-open`,
+    );
+    const [onlyOpenTasks, setOnlyOpenTasks] = useRemember(
+        true,
+        `note-related-panel:${noteId}:only-open`,
+    );
     const [taskItems, setTaskItems] = useState(relatedTasks);
     const [stickyVisibleTaskIds, setStickyVisibleTaskIds] = useState<number[]>([]);
     const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
