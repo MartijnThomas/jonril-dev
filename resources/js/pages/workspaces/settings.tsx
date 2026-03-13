@@ -14,6 +14,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import SettingsLayout from '@/layouts/settings/layout';
@@ -33,6 +40,7 @@ type Props = {
         name: string;
         color: string;
         timeblock_color?: string | null;
+        editor_mode: 'legacy' | 'block' | string;
         icon: string;
         owner_id: number;
     };
@@ -81,6 +89,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
         name: workspace.name,
         color: workspace.color || 'slate',
         timeblock_color: workspace.timeblock_color || '',
+        editor_mode: workspace.editor_mode || 'legacy',
         icon: workspace.icon || DEFAULT_WORKSPACE_ICON,
     });
     const colorSwatchPreview = getColorSwatchPreviewClasses(nameForm.data.color);
@@ -223,6 +232,59 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
 
                                         <InputError message={nameForm.errors.icon} />
                                         <InputError message={nameForm.errors.color} />
+                                    </div>
+
+                                    <div className="grid gap-3">
+                                        <div className="grid items-center gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+                                            <Label htmlFor="workspace-editor-mode">
+                                                {t(
+                                                    'workspace_settings.editor_mode_label',
+                                                    'Editor mode',
+                                                )}
+                                            </Label>
+
+                                            <div className="space-y-2">
+                                                <Select
+                                                    value={nameForm.data.editor_mode}
+                                                    onValueChange={(value) =>
+                                                        nameForm.setData('editor_mode', value)
+                                                    }
+                                                    disabled={nameForm.processing}
+                                                >
+                                                    <SelectTrigger id="workspace-editor-mode">
+                                                        <SelectValue
+                                                            placeholder={t(
+                                                                'workspace_settings.editor_mode_label',
+                                                                'Editor mode',
+                                                            )}
+                                                        />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="legacy">
+                                                            {t(
+                                                                'workspace_settings.editor_mode_legacy',
+                                                                'Legacy',
+                                                            )}
+                                                        </SelectItem>
+                                                        <SelectItem value="block">
+                                                            {t(
+                                                                'workspace_settings.editor_mode_block',
+                                                                'Block',
+                                                            )}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+
+                                                <p className="text-sm text-muted-foreground">
+                                                    {t(
+                                                        'workspace_settings.editor_mode_description',
+                                                        'Choose which editor behavior model this workspace uses.',
+                                                    )}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <InputError message={nameForm.errors.editor_mode} />
                                     </div>
 
                                     <div className="grid gap-3">

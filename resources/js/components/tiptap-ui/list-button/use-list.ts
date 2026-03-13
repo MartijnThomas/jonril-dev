@@ -3,6 +3,9 @@
 import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import type {Editor} from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react"
+import {
+  isBlockTreeSchema,
+} from "@/components/tiptap-templates/simple/block-tree/block-tree-model"
 
 // --- Hooks ---
 
@@ -83,6 +86,9 @@ export function canToggleList(
   turnInto: boolean = true
 ): boolean {
   if (!editor || !editor.isEditable) return false
+  if (isBlockTreeSchema(editor)) {
+    return false
+  }
   if (!isNodeInSchema(type, editor) || isNodeTypeSelected(editor, ["image"]))
     return false
 
@@ -155,6 +161,9 @@ export function canToggleList(
  */
 export function isListActive(editor: Editor | null, type: ListType): boolean {
   if (!editor || !editor.isEditable) return false
+  if (isBlockTreeSchema(editor)) {
+    return false
+  }
 
   switch (type) {
     case "bulletList":
@@ -176,6 +185,10 @@ export function isListActive(editor: Editor | null, type: ListType): boolean {
 export function toggleList(editor: Editor | null, type: ListType): boolean {
   if (!editor || !editor.isEditable) return false
   if (!canToggleList(editor, type)) return false
+
+  if (isBlockTreeSchema(editor)) {
+    return false
+  }
 
   try {
     if (type === "taskList" && editor.isActive("taskItem")) {

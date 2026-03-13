@@ -19,12 +19,22 @@ class Workspace extends Model
 
     public const DEFAULT_ICON = 'briefcase';
 
+    public const EDITOR_MODE_LEGACY = 'legacy';
+
+    public const EDITOR_MODE_BLOCK = 'block';
+
+    public const EDITOR_MODES = [
+        self::EDITOR_MODE_LEGACY,
+        self::EDITOR_MODE_BLOCK,
+    ];
+
     protected $fillable = [
         'owner_id',
         'name',
         'slug',
         'color',
         'timeblock_color',
+        'editor_mode',
         'icon',
         'mention_suggestions',
         'hashtag_suggestions',
@@ -41,6 +51,10 @@ class Workspace extends Model
             if (! is_string($rawIcon) || trim($rawIcon) === '') {
                 $workspace->icon = self::DEFAULT_ICON;
             }
+            $rawEditorMode = $workspace->getAttributeFromArray('editor_mode');
+            if (! is_string($rawEditorMode) || ! in_array(trim($rawEditorMode), self::EDITOR_MODES, true)) {
+                $workspace->editor_mode = self::EDITOR_MODE_LEGACY;
+            }
 
             $workspace->slug = self::buildUniqueSlug(
                 (string) ($workspace->name ?: 'workspace'),
@@ -55,6 +69,10 @@ class Workspace extends Model
             $rawIcon = $workspace->getAttributeFromArray('icon');
             if (! is_string($rawIcon) || trim($rawIcon) === '') {
                 $workspace->icon = self::DEFAULT_ICON;
+            }
+            $rawEditorMode = $workspace->getAttributeFromArray('editor_mode');
+            if (! is_string($rawEditorMode) || ! in_array(trim($rawEditorMode), self::EDITOR_MODES, true)) {
+                $workspace->editor_mode = self::EDITOR_MODE_LEGACY;
             }
 
             if (! $workspace->isDirty('name') && filled($workspace->slug)) {
@@ -106,6 +124,15 @@ class Workspace extends Model
             get: fn (?string $value): string => ($value !== null && trim($value) !== '')
                 ? trim($value)
                 : self::DEFAULT_ICON,
+        );
+    }
+
+    protected function editorMode(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value): string => ($value !== null && in_array(trim($value), self::EDITOR_MODES, true))
+                ? trim($value)
+                : self::EDITOR_MODE_LEGACY,
         );
     }
 

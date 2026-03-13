@@ -12,7 +12,8 @@ test('workspace owner can view workspace settings page', function () {
         ->get(route('workspaces.settings.edit', ['workspace' => $workspace?->id], absolute: false))
         ->assertInertia(fn (Assert $page) => $page
             ->component('workspaces/settings')
-            ->where('workspace.id', $workspace?->id),
+            ->where('workspace.id', $workspace?->id)
+            ->where('workspace.editor_mode', 'legacy'),
         );
 });
 
@@ -45,6 +46,42 @@ test('workspace owner can update workspace timeblock color', function () {
         ->assertRedirect();
 
     expect($workspace?->fresh()?->timeblock_color)->toBe('emerald');
+});
+
+test('workspace owner can update workspace editor mode', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+
+    $this
+        ->actingAs($owner)
+        ->patch(route('workspaces.settings.update', ['workspace' => $workspace?->id], absolute: false), [
+            'name' => $workspace?->name,
+            'color' => $workspace?->color,
+            'icon' => $workspace?->icon,
+            'timeblock_color' => $workspace?->timeblock_color,
+            'editor_mode' => 'block',
+        ])
+        ->assertRedirect();
+
+    expect($workspace?->fresh()?->editor_mode)->toBe('block');
+});
+
+test('workspace owner cannot update workspace editor mode to deprecated block tree', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+
+    $this
+        ->actingAs($owner)
+        ->patch(route('workspaces.settings.update', ['workspace' => $workspace?->id], absolute: false), [
+            'name' => $workspace?->name,
+            'color' => $workspace?->color,
+            'icon' => $workspace?->icon,
+            'timeblock_color' => $workspace?->timeblock_color,
+            'editor_mode' => 'block_tree',
+        ])
+        ->assertSessionHasErrors('editor_mode');
+
+    expect($workspace?->fresh()?->editor_mode)->toBe('legacy');
 });
 
 test('workspace owner can add and remove members', function () {

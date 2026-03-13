@@ -17,6 +17,7 @@ type UseEditorSaveProps = {
     properties?: DocumentPropertiesValue;
     idleMs?: number;
     includeTimeblocks?: boolean;
+    saveTransport?: 'auto' | 'json' | 'inertia';
 };
 
 function getCookie(name: string): string | null {
@@ -129,6 +130,7 @@ export function useEditorSave({
     properties = {},
     idleMs = 1500,
     includeTimeblocks = false,
+    saveTransport = 'auto',
 }: UseEditorSaveProps) {
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSavedContentRef = useRef<string>('');
@@ -195,7 +197,9 @@ export function useEditorSave({
                     : {}),
                 save_mode: force ? 'manual' : 'auto',
             };
-            const saveFlow = resolveEditorSaveFlow(lastSavedTitleRef.current, json);
+            const saveFlow = saveTransport === 'auto'
+                ? resolveEditorSaveFlow(lastSavedTitleRef.current, json)
+                : saveTransport;
             const xsrfToken = getCookie('XSRF-TOKEN');
 
             const finishSave = () => {

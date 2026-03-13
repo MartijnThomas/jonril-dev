@@ -48,3 +48,5 @@ This documentation section is rendered from markdown files in the `docs/` direct
 ## Development
 
 - [Deferred props plan + payload inventory](/docs/development/deferred-props-plan-and-payload-inventory)
+- [Custom task and checklist architecture](/docs/development/custom-task-checklist-architecture)
+- [Block-tree editor](/docs/development/block-tree-editor)

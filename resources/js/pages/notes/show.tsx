@@ -1,5 +1,5 @@
-import { Head, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head } from '@inertiajs/react';
+import { useCallback, useState } from 'react';
 import { StatusBarTaskCounter } from '@/components/status-bar-task-counter';
 import { SimpleEditor } from '@/components/tiptap-templates/simple/simple-editor';
 import AppLayout from '@/layouts/app-layout';
@@ -17,6 +17,7 @@ type Props = {
     journalGranularity: string | null;
     journalDate: string | null;
     defaultTimeblockDurationMinutes: number;
+    editorMode: 'legacy' | 'block';
     workspaceSuggestions: {
         mentions: string[];
         hashtags: string[];
@@ -89,16 +90,13 @@ export default function Dashboard({
     journalGranularity,
     journalDate,
     defaultTimeblockDurationMinutes,
+    editorMode,
     workspaceSuggestions,
     relatedTasks = [],
     backlinks = [],
 }: Props) {
-    const page = usePage();
-    const isAdmin = page.props.auth?.user?.role === 'admin';
     const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('ready');
     const [saveLastSavedAt, setSaveLastSavedAt] = useState<number | null>(null);
-    const [editorJson, setEditorJson] = useState<string>('');
-    const [jsonOpen, setJsonOpen] = useState(false);
     const [contentStats, setContentStats] = useState<{
         words: number;
         characters: number;
@@ -119,6 +117,24 @@ export default function Dashboard({
         tasksOpen: 0,
     });
     const pageTitle = breadcrumbs.at(-1)?.title ?? 'Note';
+    const handleContentStatsChange = useCallback((next: typeof contentStats) => {
+        setContentStats((current) => {
+            if (
+                current.words === next.words &&
+                current.characters === next.characters &&
+                current.tasksTotal === next.tasksTotal &&
+                current.tasksClosed === next.tasksClosed &&
+                current.tasksCompleted === next.tasksCompleted &&
+                current.tasksCanceled === next.tasksCanceled &&
+                current.tasksMigrated === next.tasksMigrated &&
+                current.tasksOpen === next.tasksOpen
+            ) {
+                return current;
+            }
+
+            return next;
+        });
+    }, []);
 
     return (
         <AppLayout
@@ -141,30 +157,14 @@ export default function Dashboard({
                             }}
                         />
                     </div>
-                    {isAdmin ? (
-                        <button
-                            type="button"
-                            className="ml-auto hover:text-foreground transition-colors"
-                            onClick={() => setJsonOpen((value) => !value)}
-                        >
-                            JSON
-                        </button>
-                    ) : null}
+                    <div className="ml-auto flex items-center gap-3">
+                        {editorMode === 'block' ? (
+                            <span className="text-[11px] font-bold tracking-[0.16em] uppercase text-foreground/80">
+                                BLOCK MODE
+                            </span>
+                        ) : null}
+                    </div>
                 </div>
-            }
-            bottomPane={
-                isAdmin && jsonOpen ? (
-                    <section className="border-t border-sidebar-border/50 bg-background/95">
-                        <div className="h-[33svh] overflow-auto px-4 py-3">
-                            <div className="mb-2 text-xs font-medium text-muted-foreground">
-                                Editor JSON
-                            </div>
-                            <pre className="text-xs leading-5 break-words whitespace-pre-wrap">
-                                <code>{editorJson}</code>
-                            </pre>
-                        </div>
-                    </section>
-                ) : null
             }
         >
             <Head title={pageTitle} />
@@ -186,10 +186,10 @@ export default function Dashboard({
                 journalGranularity={journalGranularity}
                 journalDate={journalDate}
                 defaultTimeblockDurationMinutes={defaultTimeblockDurationMinutes}
+                editorMode={editorMode}
                 onSaveStatusChange={setSaveStatus}
                 onLastSavedAtChange={setSaveLastSavedAt}
-                onDebugJsonChange={isAdmin ? setEditorJson : undefined}
-                onContentStatsChange={setContentStats}
+                onContentStatsChange={handleContentStatsChange}
             />
         </AppLayout>
     );

@@ -4,11 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\Workspace;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -46,6 +46,7 @@ class WorkspaceController extends Controller
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
             'timeblock_color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
+            'editor_mode' => ['nullable', Rule::in(Workspace::EDITOR_MODES)],
             'icon' => ['nullable', 'regex:/^[a-z][a-z0-9_]*$/'],
         ]);
 
@@ -54,6 +55,7 @@ class WorkspaceController extends Controller
             'name' => trim($data['name']),
             'color' => array_key_exists('color', $data) ? $data['color'] : null,
             'timeblock_color' => array_key_exists('timeblock_color', $data) ? $data['timeblock_color'] : null,
+            'editor_mode' => array_key_exists('editor_mode', $data) ? ($data['editor_mode'] ?: Workspace::EDITOR_MODE_LEGACY) : Workspace::EDITOR_MODE_LEGACY,
             'icon' => array_key_exists('icon', $data) ? $data['icon'] : null,
         ]);
 
@@ -98,6 +100,7 @@ class WorkspaceController extends Controller
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
             'timeblock_color' => ['nullable', Rule::in(self::WORKSPACE_COLORS)],
+            'editor_mode' => ['nullable', Rule::in(Workspace::EDITOR_MODES)],
             'icon' => ['nullable', 'regex:/^[a-z][a-z0-9_]*$/'],
         ]);
 
@@ -107,6 +110,9 @@ class WorkspaceController extends Controller
         }
         if (array_key_exists('timeblock_color', $data)) {
             $workspace->timeblock_color = $data['timeblock_color'] ?: null;
+        }
+        if (array_key_exists('editor_mode', $data)) {
+            $workspace->editor_mode = $data['editor_mode'] ?: Workspace::EDITOR_MODE_LEGACY;
         }
         if (array_key_exists('icon', $data)) {
             $workspace->icon = $data['icon'] ?: null;
@@ -233,7 +239,7 @@ class WorkspaceController extends Controller
 
     /**
      * @return array{
-     *     workspace: array{id: string, name: string, color: string, timeblock_color: string|null, icon: string, owner_id: int},
+     *     workspace: array{id: string, name: string, color: string, timeblock_color: string|null, editor_mode: string, icon: string, owner_id: int},
      *     members: array<int, array{id: int, name: string, email: string, role: string}>
      * }
      */
@@ -259,6 +265,7 @@ class WorkspaceController extends Controller
                 'name' => $workspace->name,
                 'color' => $workspace->color,
                 'timeblock_color' => $workspace->timeblock_color,
+                'editor_mode' => $workspace->editor_mode,
                 'icon' => $workspace->icon,
                 'owner_id' => (int) $workspace->owner_id,
             ],

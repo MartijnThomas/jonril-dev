@@ -104,6 +104,10 @@ export default function AppSidebarLayout({
     bottomPane,
 }: AppLayoutProps) {
     const { rightSidebarOpen: defaultRightSidebarOpen } = usePage().props;
+    const shouldRenderStatusBar =
+        statusBarContent !== undefined ||
+        saveStatus !== null ||
+        saveLastSavedAt !== null;
     const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(() => {
         if (typeof document !== 'undefined') {
             const value = document.cookie
@@ -144,12 +148,14 @@ export default function AppSidebarLayout({
                             {children}
                         </div>
                         {bottomPane}
-                        <AppStatusBar
-                            saveStatus={saveStatus}
-                            lastSavedAt={saveLastSavedAt}
-                        >
-                            {statusBarContent}
-                        </AppStatusBar>
+                        {shouldRenderStatusBar ? (
+                            <AppStatusBar
+                                saveStatus={saveStatus}
+                                lastSavedAt={saveLastSavedAt}
+                            >
+                                {statusBarContent}
+                            </AppStatusBar>
+                        ) : null}
                     </div>
                 </div>
             </AppContent>

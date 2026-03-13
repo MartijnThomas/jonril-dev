@@ -3,7 +3,7 @@
 import { Deferred, router } from '@inertiajs/react';
 import type { Editor } from '@tiptap/core';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
     NoteRelatedPanel,
@@ -13,6 +13,14 @@ import { TaskMigratePicker } from '@/components/task-migrate-picker';
 import { NOTE_TITLE_ICON_PLUGIN_KEY } from '@/components/tiptap-extension/note-title-icon-extension';
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
 import type { DocumentPropertiesValue } from '@/components/tiptap-properties/document-properties';
+import { BlockNodeToolbar } from '@/components/tiptap-templates/simple/block-tree/block-node-toolbar';
+import { BlockTaskStatusMenu } from '@/components/tiptap-templates/simple/block-tree/block-task-status-menu';
+import { BlockTokenSuggestionMenu } from '@/components/tiptap-templates/simple/block-tree/block-token-suggestion-menu';
+import {
+    createEmptyBlockDocument,
+    isBlockTreeDocument,
+    setParagraphTaskStatusAtPos,
+} from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
 import {
     EditorBubbleToolbar,
     MobileEditorToolbar,
@@ -70,6 +78,19 @@ const hasVisibleProperties = (properties: DocumentPropertiesValue): boolean => {
     }
 
     return false;
+};
+
+const resolveEditorLanguage = (
+    properties: DocumentPropertiesValue,
+    fallbackLanguage: 'nl' | 'en',
+): string => {
+    const propertyLanguage = properties.language;
+
+    if (typeof propertyLanguage === 'string' && propertyLanguage.trim() !== '') {
+        return propertyLanguage.trim();
+    }
+
+    return fallbackLanguage;
 };
 
 function serializeEditorContent(content: SimpleEditorContent): string {
@@ -213,9 +234,9 @@ type SimpleEditorProps = {
     journalGranularity?: string | null;
     journalDate?: string | null;
     defaultTimeblockDurationMinutes?: number;
+    editorMode?: 'legacy' | 'block';
     onSaveStatusChange?: (status: EditorSaveStatus) => void;
     onLastSavedAtChange?: (timestamp: number | null) => void;
-    onDebugJsonChange?: (json: string) => void;
     onContentStatsChange?: (stats: {
         words: number;
         characters: number;
@@ -228,7 +249,7 @@ type SimpleEditorProps = {
     }) => void;
 };
 
-export function SimpleEditor({
+function SimpleEditorComponent({
     id,
     noteUpdateUrl,
     content = '',
@@ -243,9 +264,9 @@ export function SimpleEditor({
     journalGranularity = null,
     journalDate = null,
     defaultTimeblockDurationMinutes = 60,
+    editorMode = 'legacy',
     onSaveStatusChange,
     onLastSavedAtChange,
-    onDebugJsonChange,
     onContentStatsChange,
 }: SimpleEditorProps) {
     const isMobileBreakpoint = useIsBreakpoint();
@@ -267,11 +288,28 @@ export function SimpleEditor({
         position: null,
         anchorPoint: null,
     });
+    const [blockTaskStatusMenu, setBlockTaskStatusMenu] = useState<{
+        open: boolean;
+        x: number;
+        y: number;
+        pos: number | null;
+        status: 'backlog' | 'in_progress' | 'canceled' | null;
+    }>({
+        open: false,
+        x: 0,
+        y: 0,
+        pos: null,
+        status: null,
+    });
 
     const [documentProperties, setDocumentProperties] =
         useState<DocumentPropertiesValue>(properties);
     const [showDocumentProperties, setShowDocumentProperties] = useState(
         hasVisibleProperties(properties),
+    );
+    const editorLanguage = useMemo(
+        () => resolveEditorLanguage(documentProperties, language),
+        [documentProperties, language],
     );
     const noteIconProp = documentProperties.icon;
     const noteIconColorProp = documentProperties['icon-color'];
@@ -304,9 +342,20 @@ export function SimpleEditor({
                 journalGranularity,
                 journalDate,
                 defaultTimeblockDurationMinutes,
+                editorMode,
+                onBlockTaskStatusMenuRequest: (payload) => {
+                    setBlockTaskStatusMenu({
+                        open: true,
+                        x: payload.x,
+                        y: payload.y,
+                        pos: payload.pos,
+                        status: payload.status,
+                    });
+                },
             }),
         [
             defaultTimeblockDurationMinutes,
+            editorMode,
             journalDate,
             journalGranularity,
             noteIconBgProp,
@@ -321,6 +370,12 @@ export function SimpleEditor({
     );
 
     const initialContent = useMemo(() => {
+        if (editorMode === 'block') {
+            return isBlockTreeDocument(content)
+                ? content
+                : createEmptyBlockDocument();
+        }
+
         if (typeof content === 'string') {
             return content;
         }
@@ -335,24 +390,28 @@ export function SimpleEditor({
         }
 
         return '';
-    }, [content]);
+    }, [content, editorMode]);
 
-    const editor = useEditor({
-        immediatelyRender: false,
-        editorProps: {
-            attributes: {
-                autocomplete: 'off',
-                autocorrect: 'on',
-                autocapitalize: 'sentences',
-                spellcheck: 'true',
-                'aria-label': 'Main content area, start typing to enter text.',
-                class: 'simple-editor',
+    const editor = useEditor(
+        {
+            immediatelyRender: false,
+            editorProps: {
+                attributes: {
+                    autocomplete: 'off',
+                    autocorrect: 'on',
+                    autocapitalize: 'sentences',
+                    spellcheck: 'true',
+                    lang: language,
+                    'aria-label': 'Main content area, start typing to enter text.',
+                    'data-editor-mode': editorMode,
+                    class: 'simple-editor',
+                },
             },
+            extensions,
+            content: initialContent,
         },
-        extensions,
-        contentType: 'json',
-        content: initialContent,
-    });
+        [id, editorMode, extensions, initialContent],
+    );
 
     useEffect(() => {
         setDocumentProperties(properties);
@@ -409,6 +468,10 @@ export function SimpleEditor({
                 return;
             }
 
+            if (editorMode === 'block') {
+                return;
+            }
+
             // Staging can normalize/reshape JSON on save responses.
             // Never replace the current focused document for same-note updates,
             // otherwise selection jumps to the end during autosave.
@@ -421,6 +484,14 @@ export function SimpleEditor({
             }
         }
     }, [editor, id, initialContent]);
+
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+
+        editor.view.dom.setAttribute('lang', editorLanguage);
+    }, [editor, editorLanguage]);
 
     useEffect(() => {
         if (!editor) {
@@ -454,6 +525,10 @@ export function SimpleEditor({
     }, [editor]);
 
     useEffect(() => {
+        if (editorMode === 'block') {
+            return;
+        }
+
         const openTaskMigratePicker = (event: Event) => {
             const customEvent = event as CustomEvent<{
                 blockId?: string | null;
@@ -494,15 +569,14 @@ export function SimpleEditor({
                 openTaskMigratePicker as EventListener,
             );
         };
-    }, []);
+    }, [editorMode]);
 
     useEffect(() => {
         if (!editor) {
             return;
         }
 
-        // eslint-disable-next-line react-hooks/immutability
-        editor.isMobile = isMobile;
+        (editor as Editor & { isMobile?: boolean }).isMobile = isMobile;
     }, [editor, isMobile]);
 
     useEffect(() => {
@@ -547,7 +621,9 @@ export function SimpleEditor({
             noteType === 'journal' &&
             journalGranularity === 'daily' &&
             typeof journalDate === 'string' &&
-            journalDate.trim() !== '',
+            journalDate.trim() !== '' &&
+            editorMode !== 'block',
+        saveTransport: editorMode === 'block' ? 'json' : 'auto',
     });
 
     useEffect(() => {
@@ -557,32 +633,6 @@ export function SimpleEditor({
     useEffect(() => {
         onLastSavedAtChange?.(lastSavedAt);
     }, [lastSavedAt, onLastSavedAtChange]);
-
-    useEffect(() => {
-        if (!editor || !onDebugJsonChange) {
-            return;
-        }
-
-        const emit = () => {
-            onDebugJsonChange(
-                JSON.stringify(
-                    {
-                        content: editor.getJSON(),
-                        timeblocks: editor.storage.timeblock?.timeblocks ?? [],
-                    },
-                    null,
-                    2,
-                ),
-            );
-        };
-
-        emit();
-        editor.on('update', emit);
-
-        return () => {
-            editor.off('update', emit);
-        };
-    }, [editor, onDebugJsonChange]);
 
     useEffect(() => {
         if (!editor || !onContentStatsChange) {
@@ -605,7 +655,12 @@ export function SimpleEditor({
             let tasksOpen = 0;
 
             editor.state.doc.descendants((node) => {
-                if (node.type.name !== 'taskItem') {
+                const isLegacyTask = node.type.name === 'taskItem';
+                const isBlockTask =
+                    node.type.name === 'paragraph' &&
+                    node.attrs.blockStyle === 'task';
+
+                if (!isLegacyTask && !isBlockTask) {
                     return true;
                 }
 
@@ -683,29 +738,32 @@ export function SimpleEditor({
     return (
         <div className="w-full">
             <EditorContext.Provider value={{ editor }}>
-                <TaskMigratePicker
-                    open={taskMigratePicker.open}
-                    sourceNoteId={id}
-                    blockId={taskMigratePicker.blockId}
-                    position={taskMigratePicker.position}
-                    anchorPoint={taskMigratePicker.anchorPoint}
-                    language={language}
-                    onClose={() =>
-                        setTaskMigratePicker({
-                            open: false,
-                            blockId: null,
-                            position: null,
-                            anchorPoint: null,
-                        })
-                    }
-                    onMigrated={() => {
-                        router.reload({
-                            only: ['content', 'relatedTasks', 'backlinks'],
-                            preserveScroll: true,
-                            preserveState: false,
-                        });
-                    }}
-                />
+                {editorMode !== 'block' ? (
+                    <TaskMigratePicker
+                        open={taskMigratePicker.open}
+                        sourceNoteId={id}
+                        blockId={taskMigratePicker.blockId}
+                        position={taskMigratePicker.position}
+                        anchorPoint={taskMigratePicker.anchorPoint}
+                        language={language}
+                        onClose={() =>
+                            setTaskMigratePicker({
+                                open: false,
+                                blockId: null,
+                                position: null,
+                                anchorPoint: null,
+                            })
+                        }
+                        onMigrated={() => {
+                            router.visit(window.location.href, {
+                                only: ['content', 'relatedTasks', 'backlinks'],
+                                preserveScroll: true,
+                                preserveState: false,
+                                replace: true,
+                            });
+                        }}
+                    />
+                ) : null}
                 {showRelatedPanel ? (
                     <div className="w-full md:mx-auto md:mt-4 md:max-w-3xl md:px-8">
                         <Deferred
@@ -744,9 +802,55 @@ export function SimpleEditor({
                 ) : null}
 
                 <div className="mx-auto w-full max-w-3xl">
-                    {editor && !isMobile && <EditorBubbleToolbar editor={editor} />}
+                    {editor && editorMode === 'block' ? (
+                        <BlockNodeToolbar editor={editor} />
+                    ) : null}
 
-                    {isMobile && (
+                    {editor && editorMode === 'block' ? (
+                        <BlockTokenSuggestionMenu
+                            editor={editor}
+                            workspaceSuggestions={{
+                                mentions: mentionSuggestions,
+                                hashtags: hashtagSuggestions,
+                            }}
+                        />
+                    ) : null}
+
+                    {editor && editorMode === 'block' ? (
+                        <BlockTaskStatusMenu
+                            open={blockTaskStatusMenu.open}
+                            x={blockTaskStatusMenu.x}
+                            y={blockTaskStatusMenu.y}
+                            status={blockTaskStatusMenu.status}
+                            onClose={() => {
+                                setBlockTaskStatusMenu((current) => ({
+                                    ...current,
+                                    open: false,
+                                }));
+                            }}
+                            onSelect={(status) => {
+                                if (blockTaskStatusMenu.pos === null) {
+                                    return;
+                                }
+
+                                editor.commands.command(({ editor: commandEditor, state, dispatch }) => {
+                                    return setParagraphTaskStatusAtPos(
+                                        commandEditor,
+                                        blockTaskStatusMenu.pos!,
+                                        status,
+                                        state,
+                                        dispatch,
+                                    );
+                                });
+                            }}
+                        />
+                    ) : null}
+
+                    {editor && !isMobile && editorMode !== 'block' ? (
+                        <EditorBubbleToolbar editor={editor} />
+                    ) : null}
+
+                    {isMobile && editorMode !== 'block' && (
                         <MobileEditorToolbar
                             mobileView={mobileView}
                             onBack={() => setMobileView('main')}
@@ -773,3 +877,5 @@ export function SimpleEditor({
         </div>
     );
 }
+
+export const SimpleEditor = memo(SimpleEditorComponent);

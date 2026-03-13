@@ -509,6 +509,7 @@ class NotesController extends Controller
                 ? $this->journalNoteService->periodFor($note->journal_granularity, $note->journal_date)
                 : null,
             'defaultTimeblockDurationMinutes' => Auth::user()?->defaultTimeblockDurationMinutes() ?? 60,
+            'editorMode' => $this->currentWorkspace()->editor_mode,
             'noteActions' => [
                 'id' => $note->id,
                 'title' => (string) ($note->getRawOriginal('title') ?: $note->title ?: 'Untitled'),
@@ -677,7 +678,6 @@ class NotesController extends Controller
     }
 
     /**
-     * @param  mixed  $value
      * @return array<int, string>
      */
     private function normalizeWorkspaceSuggestions(mixed $value): array
@@ -1247,7 +1247,6 @@ class NotesController extends Controller
     }
 
     /**
-     * @param  mixed  $value
      * @return array<int, string>
      */
     private function normalizePropertyTags(mixed $value): array
@@ -1372,6 +1371,7 @@ class NotesController extends Controller
 
             if (! $isValid) {
                 unset($properties[$key]);
+
                 continue;
             }
 

@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Note;
-use App\Models\NoteTask;
 use App\Models\NoteRevision;
+use App\Models\NoteTask;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -46,6 +46,50 @@ test('show resolves notes by slug', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('noteId', $note->id)
             ->where('noteUpdateUrl', scoped_note_url($workspace, $note->id)),
+        );
+});
+
+test('show includes the workspace editor mode', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'editor_mode' => 'block',
+    ])->save();
+
+    $note = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Editor mode note',
+        'slug' => 'editor-mode-note',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $note->slug))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('notes/show')
+            ->where('noteId', $note->id)
+            ->where('editorMode', 'block'),
+        );
+});
+
+test('show includes the user language for the editor', function () {
+    $user = User::factory()->create([
+        'settings' => ['language' => 'en'],
+    ]);
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Language note',
+        'slug' => 'language-note',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $note->slug))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('notes/show')
+            ->where('language', 'en'),
         );
 });
 

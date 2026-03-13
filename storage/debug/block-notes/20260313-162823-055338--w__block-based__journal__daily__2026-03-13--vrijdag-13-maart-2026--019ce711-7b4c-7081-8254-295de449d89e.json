@@ -1,0 +1,178 @@
+{
+    "saved_at": "2026-03-13T16:28:23+00:00",
+    "note_id": "019ce711-7b4c-7081-8254-295de449d89e",
+    "note_title": "Vrijdag 13 maart 2026",
+    "note_url": "/w/block-based/journal/daily/2026-03-13",
+    "workspace": {
+        "id": "019ce711-7a6f-70a8-841b-ecab6b10c404",
+        "slug": "block-based",
+        "editor_mode": "block"
+    },
+    "content": {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {
+                    "level": 1,
+                    "id": null
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Dit is een h1"
+                    }
+                ]
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 0,
+                    "blockStyle": "paragraph"
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Hier een korte paragraaf! Nu even meer dan 1 zin krijgen zodat ik ook een idee heb hoe langere tekst er uit komt te zien en of er een verschil is tussen een soft and hard line breaks."
+                    }
+                ]
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 0,
+                    "blockStyle": "paragraph"
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Kijk ja er is een verschil tussen soft and hard line breaks. This is something to take into account."
+                    }
+                ]
+            },
+            {
+                "type": "heading",
+                "attrs": {
+                    "level": 2,
+                    "id": null
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "dit is een tweede test."
+                    }
+                ]
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 0,
+                    "blockStyle": "paragraph"
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "This is te base level"
+                    }
+                ]
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 1,
+                    "blockStyle": "bullet"
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "This is a paragraph indented to indent 1."
+                    }
+                ]
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 0,
+                    "blockStyle": "bullet"
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "This is a list item in indent 0."
+                    }
+                ]
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 1,
+                    "blockStyle": "bullet"
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "List item in indent 1"
+                    },
+                    {
+                        "type": "hardBreak"
+                    },
+                    {
+                        "type": "text",
+                        "text": "test in the block"
+                    }
+                ]
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 1,
+                    "blockStyle": "paragraph"
+                }
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 3,
+                    "blockStyle": "quote"
+                },
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Thi sis a block"
+                    },
+                    {
+                        "type": "hardBreak"
+                    },
+                    {
+                        "type": "text",
+                        "text": "yes this seems to work.  "
+                    },
+                    {
+                        "type": "hardBreak"
+                    },
+                    {
+                        "type": "text",
+                        "text": "  "
+                    }
+                ]
+            },
+            {
+                "type": "paragraph",
+                "attrs": {
+                    "id": null,
+                    "indent": 0,
+                    "blockStyle": "paragraph"
+                }
+            }
+        ]
+    },
+    "properties": []
+}
