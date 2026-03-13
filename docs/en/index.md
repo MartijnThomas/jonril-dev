@@ -39,6 +39,12 @@ Tasks are embedded in notes and can be filtered, grouped, migrated, and tracked 
 
 This documentation section is rendered from markdown files in the `docs/` directory and currently ships in English.
 
+## Editor
+
+- [Tasks](/docs/editor/tasks)
+- [Editor Slash Commands](/docs/editor/commands)
+- [Command Palette](/docs/editor/command-palette)
+
 ## Development
 
 - [Deferred props plan + payload inventory](/docs/development/deferred-props-plan-and-payload-inventory)
