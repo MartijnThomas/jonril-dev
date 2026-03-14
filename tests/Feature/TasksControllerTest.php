@@ -1158,3 +1158,88 @@ test('migrating a task marks source as migrated and appends cloned task to targe
 
     expect($sourceIndexed?->task_status)->toBe('migrated');
 });
+
+test('migrating a block task marks source as migrated and appends cloned block task to target note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $source = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Block source note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'attrs' => [
+                    'id' => 'block-task-migrate-source-1',
+                    'blockStyle' => 'task',
+                    'checked' => false,
+                    'taskStatus' => null,
+                ],
+                'content' => [['type' => 'text', 'text' => 'Prepare block migration']],
+            ]],
+        ],
+    ]);
+
+    $target = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Block target note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'attrs' => [
+                    'blockStyle' => 'paragraph',
+                ],
+                'content' => [['type' => 'text', 'text' => 'Existing content']],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->post('/tasks/migrate', [
+            'source_note_id' => $source->id,
+            'block_id' => 'block-task-migrate-source-1',
+            'target_note_id' => $target->id,
+        ])
+        ->assertRedirect();
+
+    $source->refresh();
+    $target->refresh();
+
+    $sourceTask = data_get($source->content, 'content.0');
+    expect(data_get($sourceTask, 'type'))->toBe('paragraph');
+    expect(data_get($sourceTask, 'attrs.blockStyle'))->toBe('task');
+    expect(data_get($sourceTask, 'attrs.taskStatus'))->toBe('migrated');
+    expect(data_get($sourceTask, 'attrs.checked'))->toBeFalse();
+    expect((string) data_get($sourceTask, 'attrs.migratedAt'))->not->toBe('');
+    expect(data_get($sourceTask, 'attrs.migratedToNoteId'))->toBe($target->id);
+    expect(data_get($sourceTask, 'attrs.migratedFromNoteId'))->toBeNull();
+    expect(data_get($sourceTask, 'attrs.migratedFromBlockId'))->toBeNull();
+
+    $targetTask = collect((array) data_get($target->content, 'content'))
+        ->last(fn ($node) => is_array($node) && (($node['type'] ?? null) === 'paragraph'));
+    expect(data_get($targetTask, 'attrs.blockStyle'))->toBe('task');
+    expect((string) data_get($targetTask, 'attrs.id'))->not->toBe('block-task-migrate-source-1');
+    expect(data_get($targetTask, 'attrs.checked'))->toBeFalse();
+    expect(data_get($targetTask, 'attrs.taskStatus'))->toBeNull();
+    expect((string) data_get($targetTask, 'attrs.migratedAt'))->not->toBe('');
+    expect(data_get($targetTask, 'attrs.migratedFromNoteId'))->toBe($source->id);
+    expect(data_get($targetTask, 'attrs.migratedFromBlockId'))->toBe('block-task-migrate-source-1');
+    expect(data_get($targetTask, 'attrs.migratedToNoteId'))->toBeNull();
+
+    $sourceIndexed = NoteTask::query()
+        ->where('note_id', $source->id)
+        ->where('block_id', 'block-task-migrate-source-1')
+        ->first();
+    expect($sourceIndexed?->task_status)->toBe('migrated');
+    expect($sourceIndexed?->migrated_to_note_id)->toBe($target->id);
+
+    $targetIndexed = NoteTask::query()
+        ->where('note_id', $target->id)
+        ->where('migrated_from_note_id', $source->id)
+        ->first();
+    expect($targetIndexed)->not->toBeNull();
+    expect($targetIndexed?->task_status)->toBeNull();
+});

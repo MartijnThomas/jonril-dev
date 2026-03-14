@@ -3,6 +3,11 @@ export type WikiLinkNote = {
     title: string;
     path?: string;
     href?: string;
+    headings?: {
+        id: string;
+        title: string;
+        level: number | null;
+    }[];
 };
 
 export type BlockTaskStatusMenuPayload = {

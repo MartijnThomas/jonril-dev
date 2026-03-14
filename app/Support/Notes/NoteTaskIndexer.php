@@ -82,9 +82,15 @@ class NoteTaskIndexer
                 $migratedFromNoteId = $this->normalizeUuidValue(
                     Arr::get($attrs, 'migratedFromNoteId'),
                 );
-                $taskStatus = $backlogPromotedAt !== null
-                    ? null
-                    : ($taskStatusFromAttrs ?? $this->extractTaskStatusFromText($text));
+                $taskStatus = $taskStatusFromAttrs ?? $this->extractTaskStatusFromText($text);
+
+                if (
+                    $backlogPromotedAt !== null &&
+                    $taskStatusFromAttrs === null &&
+                    $taskStatus === 'backlog'
+                ) {
+                    $taskStatus = null;
+                }
 
                 $rows[] = [
                     'workspace_id' => $note->workspace_id,
@@ -135,7 +141,7 @@ class NoteTaskIndexer
                 continue;
             }
 
-            if (($node['type'] ?? null) === 'taskItem') {
+            if ($this->isTaskNode($node)) {
                 $onTaskItem($node);
             }
 
@@ -144,6 +150,20 @@ class NoteTaskIndexer
                 $this->walkNodes($children, $onTaskItem);
             }
         }
+    }
+
+    private function isTaskNode(array $node): bool
+    {
+        $type = (string) ($node['type'] ?? '');
+        if ($type === 'taskItem') {
+            return true;
+        }
+
+        if ($type !== 'paragraph') {
+            return false;
+        }
+
+        return (string) Arr::get($node, 'attrs.blockStyle', '') === 'task';
     }
 
     /**
@@ -174,6 +194,7 @@ class NoteTaskIndexer
                 ) {
                     $normalized[$lastIndex]['text'] =
                         (string) ($normalized[$lastIndex]['text'] ?? '').$text;
+
                     continue;
                 }
 
@@ -181,6 +202,7 @@ class NoteTaskIndexer
                     'type' => 'text',
                     'text' => $text,
                 ];
+
                 continue;
             }
 
@@ -323,6 +345,7 @@ class NoteTaskIndexer
             $type = $fragment['type'] ?? null;
             if ($type === 'text') {
                 $parts[] = (string) ($fragment['text'] ?? '');
+
                 continue;
             }
 
@@ -331,6 +354,7 @@ class NoteTaskIndexer
                 if ($label !== '') {
                     $parts[] = "@{$label}";
                 }
+
                 continue;
             }
 
@@ -339,11 +363,13 @@ class NoteTaskIndexer
                 if ($label !== '') {
                     $parts[] = "#{$label}";
                 }
+
                 continue;
             }
 
             if ($type === 'wikilink') {
                 $parts[] = (string) ($fragment['text'] ?? '');
+
                 continue;
             }
 
@@ -352,6 +378,7 @@ class NoteTaskIndexer
                 if ($date !== '') {
                     $parts[] = ">{$date}";
                 }
+
                 continue;
             }
 
@@ -369,6 +396,7 @@ class NoteTaskIndexer
                 if ($value !== '') {
                     $parts[] = $value;
                 }
+
                 continue;
             }
 
@@ -556,6 +584,7 @@ class NoteTaskIndexer
                     'type' => 'deadline_date_token',
                     'date' => $matches[1],
                 ];
+
                 continue;
             }
 
@@ -564,6 +593,7 @@ class NoteTaskIndexer
                     'type' => 'due_date_token',
                     'date' => $matches[1],
                 ];
+
                 continue;
             }
 

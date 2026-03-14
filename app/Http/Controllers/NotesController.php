@@ -48,12 +48,33 @@ class NotesController extends Controller
 
         $workspace = $this->currentWorkspace();
         $title = trim((string) ($data['title'] ?? ''));
+        $initialContent = null;
+        $initialWordCount = 0;
+
+        if ($workspace->editor_mode === Workspace::EDITOR_MODE_BLOCK) {
+            $headingText = $title !== '' ? $title : '';
+            $initialContent = [
+                'type' => 'doc',
+                'content' => [
+                    [
+                        'type' => 'heading',
+                        'attrs' => ['level' => 1],
+                        'content' => [
+                            ['type' => 'text', 'text' => $headingText],
+                        ],
+                    ],
+                ],
+            ];
+            $initialWordCount = $this->noteWordCountExtractor->count($initialContent);
+        }
 
         /** @var Note $note */
         $note = $workspace->notes()->create([
             'type' => Note::TYPE_NOTE,
             'parent_id' => $data['parent_id'] ?? null,
             'title' => $title !== '' ? $title : null,
+            'content' => $initialContent,
+            'word_count' => $initialWordCount,
         ]);
 
         $this->noteSlugService->syncSingleNote($note);
@@ -439,6 +460,7 @@ class NotesController extends Controller
                 'slug',
                 'title',
                 'properties',
+                'meta',
                 'parent_id',
                 'type',
                 'journal_granularity',
@@ -503,6 +525,7 @@ class NotesController extends Controller
                     ? $resolvePath($linkableNote->parent_id)
                     : null,
                 'href' => $this->noteSlugService->urlFor($linkableNote),
+                'headings' => $this->extractLinkableHeadings($linkableNote),
             ])
             ->values();
 
@@ -616,6 +639,41 @@ class NotesController extends Controller
             $note->icon,
             $note->icon_color,
         ];
+    }
+
+    /**
+     * @return array<int, array{id: string, title: string, level: int|null}>
+     */
+    private function extractLinkableHeadings(Note $note): array
+    {
+        $meta = is_array($note->meta) ? $note->meta : [];
+        $navigation = is_array($meta['navigation'] ?? null)
+            ? $meta['navigation']
+            : [];
+
+        return collect($navigation)
+            ->filter(fn ($entry) => is_array($entry))
+            ->filter(fn (array $entry) => ($entry['type'] ?? null) === 'heading')
+            ->map(function (array $entry): ?array {
+                $id = trim((string) ($entry['html_id'] ?? ''));
+                $title = trim((string) ($entry['text'] ?? ''));
+                $level = is_numeric($entry['level'] ?? null)
+                    ? max(1, min(6, (int) $entry['level']))
+                    : null;
+
+                if ($id === '' || $title === '') {
+                    return null;
+                }
+
+                return [
+                    'id' => $id,
+                    'title' => $title,
+                    'level' => $level,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     /**

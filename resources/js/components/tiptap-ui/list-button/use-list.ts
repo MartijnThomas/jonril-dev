@@ -3,9 +3,6 @@
 import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import type {Editor} from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react"
-import {
-  isBlockTreeSchema,
-} from "@/components/tiptap-templates/simple/block-tree/block-tree-model"
 
 // --- Hooks ---
 
@@ -13,6 +10,9 @@ import {
 import { ListIcon } from "@/components/tiptap-icons/list-icon"
 import { ListOrderedIcon } from "@/components/tiptap-icons/list-ordered-icon"
 import { ListTodoIcon } from "@/components/tiptap-icons/list-todo-icon"
+import {
+  isBlockTreeSchema,
+} from "@/components/tiptap-templates/simple/block-tree/block-tree-model"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 import {
   canHandleNestedListInTaskItem,

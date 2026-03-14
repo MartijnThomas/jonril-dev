@@ -7,8 +7,8 @@ import { TextAlign } from '@tiptap/extension-text-align';
 import { Typography } from '@tiptap/extension-typography';
 import UniqueID from '@tiptap/extension-unique-id';
 import { CharacterCount, Selection } from '@tiptap/extensions';
-import { StarterKit } from '@tiptap/starter-kit';
 import type { Extensions } from '@tiptap/react';
+import { StarterKit } from '@tiptap/starter-kit';
 import { HeadingAnchorIdExtension } from '@/components/tiptap-extension/heading-anchor-id-extension';
 import {
     NoteTitleIconExtension,
@@ -21,8 +21,8 @@ import { InlineCommands } from '@/components/tiptap-inline-commands/InlineComman
 import { createWorkspaceTokenSuggestion } from '@/components/tiptap-mention/workspace-token-suggestion';
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension';
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
-import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils';
 import type { CreateSimpleEditorExtensionsOptions } from '@/components/tiptap-templates/simple/simple-editor-extension-options';
+import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils';
 
 type WorkspaceTokenKind = 'mention' | 'hashtag';
 

@@ -6,6 +6,7 @@ use App\Models\Note;
 use App\Models\NoteHeading;
 use App\Models\NoteTask;
 use App\Support\Notes\NoteHeadingIndexer;
+use App\Support\Notes\NoteMetaExtractor;
 use App\Support\Notes\NoteTaskIndexer;
 use App\Support\Notes\TimeblockIndexer;
 use Illuminate\Support\Facades\Auth;
@@ -16,7 +17,13 @@ class NoteObserver
         private readonly NoteTaskIndexer $noteTaskIndexer,
         private readonly NoteHeadingIndexer $noteHeadingIndexer,
         private readonly TimeblockIndexer $timeblockIndexer,
+        private readonly NoteMetaExtractor $noteMetaExtractor,
     ) {}
+
+    public function saving(Note $note): void
+    {
+        $note->meta = $this->noteMetaExtractor->extract($note->content);
+    }
 
     public function saved(Note $note): void
     {

@@ -3,16 +3,22 @@ export type BlockWikiLinkNote = {
     title: string;
     path?: string;
     href?: string;
+    headings?: {
+        id: string;
+        title: string;
+        level: number | null;
+    }[];
 };
 
 export type BlockWikiLinkSuggestionItem = {
     id: string;
     title: string;
     targetPath: string;
+    targetBlockId?: string | null;
     noteId?: string | null;
     href?: string | null;
     subtitle?: string;
-    kind: 'note' | 'journal' | 'create';
+    kind: 'note' | 'journal' | 'create' | 'heading';
     insertText: string;
 };
 
@@ -42,8 +48,12 @@ export function encodeWikiTargetPath(path: string): string {
 export function fallbackBlockWikiHrefFromTargetPath(
     targetPath: string,
     noteId?: string | null,
+    targetBlockId?: string | null,
 ): string {
     const normalizedTargetPath = targetPath.trim().replace(/^\/+|\/+$/g, '');
+    const hash = typeof targetBlockId === 'string' && targetBlockId.trim() !== ''
+        ? `#${encodeURIComponent(targetBlockId.trim())}`
+        : '';
 
     if (typeof window !== 'undefined') {
         const workspaceSlug = workspaceSlugFromPathname(window.location.pathname);
@@ -54,19 +64,17 @@ export function fallbackBlockWikiHrefFromTargetPath(
                     /^journal\/(daily|weekly|monthly|yearly)\/(.+)$/,
                 );
                 if (journalMatch) {
-                    const granularity = journalMatch[1] ?? '';
                     const period = encodeWikiTargetPath(journalMatch[2] ?? '');
-
-                    return `/w/${workspaceSlug}/journal/${granularity}/${period}`;
+                    return `/w/${workspaceSlug}/journal/${period}${hash}`;
                 }
             }
 
-            return `/w/${workspaceSlug}/notes/${encodeWikiTargetPath(normalizedTargetPath)}`;
+            return `/w/${workspaceSlug}/notes/${encodeWikiTargetPath(normalizedTargetPath)}${hash}`;
         }
     }
 
     if (noteId) {
-        return `/notes/${noteId}`;
+        return `/notes/${noteId}${hash}`;
     }
 
     if (normalizedTargetPath.startsWith('journal/')) {
@@ -75,19 +83,28 @@ export function fallbackBlockWikiHrefFromTargetPath(
         );
 
         if (journalMatch) {
-            const granularity = journalMatch[1] ?? '';
             const period = encodeWikiTargetPath(journalMatch[2] ?? '');
-
-            return `/journal/${granularity}/${period}`;
+            return `/journal/${period}${hash}`;
         }
     }
 
-    return `/notes/${encodeWikiTargetPath(normalizedTargetPath)}`;
+    return `/notes/${encodeWikiTargetPath(normalizedTargetPath)}${hash}`;
 }
 
 export function deriveTargetPathFromNote(note: BlockWikiLinkNote): string {
     const href = (note.href ?? '').trim();
     if (href !== '') {
+        const periodJournalMatch = href.match(/\/journal\/([^/?#]+)/);
+        if (periodJournalMatch) {
+            const normalized = normalizeJournalTargetPath(
+                `journal/${decodeURIComponent(periodJournalMatch[1] ?? '')}`,
+            );
+
+            if (normalized) {
+                return normalized;
+            }
+        }
+
         const journalMatch = href.match(/\/journal\/(daily|weekly|monthly|yearly)\/([^?#]+)/);
         if (journalMatch) {
             const granularity = journalMatch[1] ?? '';
@@ -288,18 +305,45 @@ export function displayTitleFromTargetPath(
 
 export function parseWikiLinkQuery(query: string): {
     rawPath: string;
+    rawHeading: string;
 } {
     const trimmed = query.trim();
     const dividerIndex = trimmed.indexOf('|');
-    if (dividerIndex === -1) {
+    const pathAndHeading =
+        dividerIndex === -1
+            ? trimmed
+            : trimmed.slice(0, dividerIndex).trim();
+    const headingDividerIndex = pathAndHeading.indexOf('#');
+
+    if (headingDividerIndex === -1) {
         return {
-            rawPath: trimmed,
+            rawPath: pathAndHeading.trim(),
+            rawHeading: '',
         };
     }
 
     return {
-        rawPath: trimmed.slice(0, dividerIndex).trim(),
+        rawPath: pathAndHeading.slice(0, headingDividerIndex).trim(),
+        rawHeading: pathAndHeading.slice(headingDividerIndex + 1).trim(),
     };
+}
+
+export function normalizeHeadingText(value: string): string {
+    return value.trim().toLowerCase();
+}
+
+export function wikiLinkEditableQueryFromTarget(
+    targetPath: string,
+    headingTitle?: string | null,
+): string {
+    const editablePath = editableJournalPathFromTargetPath(targetPath) || targetPath;
+    const cleanHeading = (headingTitle ?? '').trim();
+
+    if (cleanHeading === '') {
+        return editablePath;
+    }
+
+    return `${editablePath}# ${cleanHeading}`;
 }
 
 export function findCompleteRawWikiLinks(text: string): RawWikiLinkMatch[] {

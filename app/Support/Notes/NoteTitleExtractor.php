@@ -100,6 +100,7 @@ class NoteTitleExtractor
             $childType = $child['type'] ?? null;
             if ($childType === 'hardBreak') {
                 $parts[] = "\n";
+
                 continue;
             }
 
@@ -159,7 +160,12 @@ class NoteTitleExtractor
             return null;
         }
 
-        $normalized = preg_replace('/\s+/u', ' ', trim($line));
+        $withoutHeadingPrefix = preg_replace('/^\s*#{1,6}\s+/u', '', $line);
+        if ($withoutHeadingPrefix === null) {
+            return null;
+        }
+
+        $normalized = preg_replace('/\s+/u', ' ', trim($withoutHeadingPrefix));
         if ($normalized === null || $normalized === '') {
             return null;
         }
@@ -167,4 +173,3 @@ class NoteTitleExtractor
         return $normalized;
     }
 }
-

@@ -1,6 +1,6 @@
 import { createLegacyListBehaviorExtensions } from '@/components/tiptap-templates/simple/legacy-list-behavior-extensions';
-import type { CreateSimpleEditorExtensionsOptions } from '@/components/tiptap-templates/simple/simple-editor-extension-options';
 import { createSharedEditorExtensions } from '@/components/tiptap-templates/simple/shared-editor-extensions';
+import type { CreateSimpleEditorExtensionsOptions } from '@/components/tiptap-templates/simple/simple-editor-extension-options';
 
 export type { CreateSimpleEditorExtensionsOptions };
 

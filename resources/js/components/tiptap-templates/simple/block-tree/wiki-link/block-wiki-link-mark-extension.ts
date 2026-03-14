@@ -5,18 +5,20 @@ import type { BlockWikiLinkNote } from '@/components/tiptap-templates/simple/blo
 import {
     displayTitleFromTargetPath,
     deriveTargetPathFromNote,
-    editableJournalPathFromTargetPath,
     fallbackBlockWikiHrefFromTargetPath,
     findCompleteRawWikiLinks,
+    normalizeHeadingText,
     normalizeJournalTargetPath,
     normalizeNoteTargetPath,
     parseWikiLinkQuery,
+    wikiLinkEditableQueryFromTarget,
 } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 
 export type BlockWikiLinkAttributes = {
     noteId?: string | null;
     href?: string | null;
     targetPath?: string | null;
+    targetBlockId?: string | null;
 };
 
 declare module '@tiptap/core' {
@@ -69,6 +71,14 @@ export const BlockWikiLinkMark = Mark.create<{
                     'data-target-path': attributes.targetPath,
                 }),
             },
+            targetBlockId: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-target-block-id'),
+                renderHTML: (attributes: BlockWikiLinkAttributes) => ({
+                    'data-target-block-id': attributes.targetBlockId,
+                }),
+            },
         };
     },
 
@@ -109,7 +119,17 @@ export const BlockWikiLinkMark = Mark.create<{
         const buildNotesByTargetPath = () => {
             const notesByTargetPath = new Map<
                 string,
-                { id: string; href?: string; title: string }
+                {
+                    id: string;
+                    href?: string;
+                    title: string;
+                    targetPath: string;
+                    headings: {
+                        id: string;
+                        title: string;
+                        level: number | null;
+                    }[];
+                }
             >();
 
             for (const note of this.options.notes) {
@@ -122,6 +142,8 @@ export const BlockWikiLinkMark = Mark.create<{
                     id: note.id,
                     href: note.href,
                     title: note.title,
+                    targetPath,
+                    headings: Array.isArray(note.headings) ? note.headings : [],
                 });
             }
 
@@ -224,18 +246,70 @@ export const BlockWikiLinkMark = Mark.create<{
             return event.key.length === 1;
         };
 
+        const resolveMarkHref = (mark: any): string => {
+            const targetPath = String(mark.attrs.targetPath || '').trim();
+            const noteId =
+                typeof mark.attrs.noteId === 'string'
+                    ? mark.attrs.noteId.trim()
+                    : null;
+            const targetBlockId =
+                typeof mark.attrs.targetBlockId === 'string'
+                    ? mark.attrs.targetBlockId.trim()
+                    : '';
+            const rawHref = String(mark.attrs.href || '').trim();
+            const fallbackHref = fallbackBlockWikiHrefFromTargetPath(
+                targetPath,
+                noteId,
+                targetBlockId || null,
+            );
+            const baseHref = rawHref || fallbackHref;
+
+            if (targetBlockId === '' || baseHref.includes('#')) {
+                return baseHref;
+            }
+
+            return `${baseHref}#${encodeURIComponent(targetBlockId)}`;
+        };
+
         const openWikiLinkForEditing = (
             view: any,
             range: { from: number; to: number },
             mark: any,
         ): void => {
+            const notesByTargetPath = buildNotesByTargetPath();
             const currentText = view.state.doc.textBetween(range.from, range.to);
-            const targetPath = String(
+            let targetPath = String(
                 mark.attrs.targetPath || mark.attrs.noteId || currentText,
             ).trim();
-            const editableTargetPath =
-                editableJournalPathFromTargetPath(targetPath) || targetPath;
-            const replacement = `[[${editableTargetPath || currentText}]]`;
+            const looksLikeUuid =
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                    targetPath,
+                );
+            if (looksLikeUuid && typeof mark.attrs.noteId === 'string') {
+                const resolvedById = Array.from(notesByTargetPath.values()).find(
+                    (note) => note.id === mark.attrs.noteId,
+                );
+                if (resolvedById) {
+                    targetPath = resolvedById.targetPath;
+                }
+            }
+            const targetBlockId =
+                typeof mark.attrs.targetBlockId === 'string'
+                    ? mark.attrs.targetBlockId.trim()
+                    : '';
+            const resolved = notesByTargetPath.get(targetPath.toLowerCase());
+            const headingTitle =
+                targetBlockId && resolved
+                    ? (resolved.headings ?? []).find(
+                          (heading) =>
+                              normalizeHeadingText(String(heading.id ?? '')) ===
+                              normalizeHeadingText(targetBlockId),
+                      )?.title ?? null
+                    : null;
+            const replacement = `[[${wikiLinkEditableQueryFromTarget(
+                targetPath || currentText,
+                headingTitle,
+            )}]]`;
             const tr = view.state.tr.insertText(replacement, range.from, range.to);
             tr.setSelection(
                 TextSelection.create(
@@ -274,7 +348,12 @@ export const BlockWikiLinkMark = Mark.create<{
                                     cursor,
                                 );
 
-                                if (wikiLinkAtCursor) {
+                                const cursorInsideWikiLink = wikiLinkAtCursor
+                                    ? cursor > wikiLinkAtCursor.range.from &&
+                                      cursor < wikiLinkAtCursor.range.to
+                                    : false;
+
+                                if (wikiLinkAtCursor && cursorInsideWikiLink) {
                                     openWikiLinkForEditing(
                                         view,
                                         wikiLinkAtCursor.range,
@@ -370,12 +449,7 @@ export const BlockWikiLinkMark = Mark.create<{
                             return false;
                         }
 
-                        const href =
-                            wikiLinkAtPosition.mark.attrs.href ||
-                            fallbackBlockWikiHrefFromTargetPath(
-                                wikiLinkAtPosition.mark.attrs.targetPath || '',
-                                wikiLinkAtPosition.mark.attrs.noteId,
-                            );
+                        const href = resolveMarkHref(wikiLinkAtPosition.mark);
 
                         if (!href) {
                             return false;
@@ -383,7 +457,7 @@ export const BlockWikiLinkMark = Mark.create<{
 
                         mouseEvent.preventDefault();
                         router.visit(href, {
-                            preserveScroll: true,
+                            preserveScroll: false,
                             preserveState: false,
                         });
 
@@ -414,6 +488,7 @@ export const BlockWikiLinkMark = Mark.create<{
                         to: number;
                         displayText: string;
                         targetPath: string;
+                        targetHeading: string;
                     }> = [];
 
                     newState.doc.descendants((node, pos) => {
@@ -421,7 +496,7 @@ export const BlockWikiLinkMark = Mark.create<{
                             const rawText = node.text ?? '';
                             if (rawText !== '') {
                                 for (const match of findCompleteRawWikiLinks(rawText)) {
-                                    const { rawPath } = parseWikiLinkQuery(
+                                    const { rawPath, rawHeading } = parseWikiLinkQuery(
                                         match.inner,
                                     );
                                     const trimmedRawPath = rawPath
@@ -456,6 +531,7 @@ export const BlockWikiLinkMark = Mark.create<{
                                             this.options.language,
                                         ),
                                         targetPath,
+                                        targetHeading: rawHeading,
                                     });
                                 }
                             }
@@ -486,12 +562,22 @@ export const BlockWikiLinkMark = Mark.create<{
                             return true;
                         }
 
+                        const targetBlockId =
+                            typeof wikiMark.attrs.targetBlockId === 'string'
+                                ? wikiMark.attrs.targetBlockId.trim()
+                                : '';
                         const expectedHref =
-                            resolved.href ||
-                            fallbackBlockWikiHrefFromTargetPath(
-                                targetPath,
-                                resolved.id,
-                            );
+                            targetBlockId !== ''
+                                ? fallbackBlockWikiHrefFromTargetPath(
+                                      targetPath,
+                                      resolved.id,
+                                      targetBlockId,
+                                  )
+                                : resolved.href ||
+                                  fallbackBlockWikiHrefFromTargetPath(
+                                      targetPath,
+                                      resolved.id,
+                                  );
                         const currentNoteId = wikiMark.attrs.noteId ?? null;
                         const currentHref = wikiMark.attrs.href ?? null;
 
@@ -513,6 +599,7 @@ export const BlockWikiLinkMark = Mark.create<{
                                 noteId: resolved.id,
                                 href: expectedHref,
                                 targetPath,
+                                targetBlockId: targetBlockId || null,
                             }),
                         );
                         changed = true;
@@ -529,14 +616,40 @@ export const BlockWikiLinkMark = Mark.create<{
                             const resolved = notesByTargetPath.get(
                                 pending.targetPath.toLowerCase(),
                             );
+                            const normalizedTargetHeading = normalizeHeadingText(
+                                pending.targetHeading ?? '',
+                            );
+                            const matchedHeading =
+                                normalizedTargetHeading && resolved
+                                    ? (resolved.headings ?? []).find(
+                                          (heading) =>
+                                              normalizeHeadingText(heading.title) ===
+                                              normalizedTargetHeading,
+                                      ) ?? null
+                                    : null;
+                            if (normalizedTargetHeading && !matchedHeading) {
+                                return;
+                            }
+                            const targetBlockId = matchedHeading?.id ?? null;
                             const href =
-                                resolved?.href ||
-                                fallbackBlockWikiHrefFromTargetPath(
-                                    pending.targetPath,
-                                    resolved?.id,
-                                );
+                                targetBlockId
+                                    ? fallbackBlockWikiHrefFromTargetPath(
+                                          pending.targetPath,
+                                          resolved?.id,
+                                          targetBlockId,
+                                      )
+                                    : resolved?.href ||
+                                      fallbackBlockWikiHrefFromTargetPath(
+                                          pending.targetPath,
+                                          resolved?.id,
+                                      );
                             const noteId = resolved?.id ?? null;
-                            const displayText = resolved?.title ?? pending.displayText;
+                            const displayText =
+                                matchedHeading && resolved
+                                    ? `${resolved.title} # ${matchedHeading.title}`
+                                    : matchedHeading?.title ??
+                                      resolved?.title ??
+                                      pending.displayText;
 
                             tr.insertText(displayText, pending.from, pending.to);
                             tr.addMark(
@@ -546,6 +659,7 @@ export const BlockWikiLinkMark = Mark.create<{
                                     noteId,
                                     href,
                                     targetPath: pending.targetPath,
+                                    targetBlockId,
                                 }),
                             );
                             changed = true;

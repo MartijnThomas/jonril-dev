@@ -31,6 +31,25 @@ test('start creates a note for the authenticated user and redirects to it', func
     $response->assertRedirect(scoped_note_url($workspace, $note->slug));
 });
 
+test('start initializes block mode notes with an h1 first block', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'editor_mode' => 'block',
+    ])->save();
+
+    $this->actingAs($user)->get(route('notes.start'));
+
+    $note = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->latest('created_at')
+        ->first();
+
+    expect($note)->not()->toBeNull();
+    expect(data_get($note->content, 'content.0.type'))->toBe('heading');
+    expect((int) data_get($note->content, 'content.0.attrs.level'))->toBe(1);
+});
+
 test('show resolves notes by slug', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
@@ -46,6 +65,55 @@ test('show resolves notes by slug', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('noteId', $note->id)
             ->where('noteUpdateUrl', scoped_note_url($workspace, $note->id)),
+        );
+});
+
+test('show includes linkable note headings metadata for wiki-link heading suggestions', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $target = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Target',
+        'slug' => 'target',
+    ]);
+    Note::query()->where('id', $target->id)->update([
+        'meta' => [
+            'navigation' => [
+                [
+                    'type' => 'heading',
+                    'html_id' => 'h-1',
+                    'level' => 1,
+                    'text' => 'First heading',
+                ],
+            ],
+        ],
+    ]);
+
+    $viewer = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Viewer',
+        'slug' => 'viewer',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $viewer->slug))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('linkableNotes', function ($linkableNotes) use ($target): bool {
+                $match = collect($linkableNotes)->first(
+                    fn (array $item) => ($item['id'] ?? null) === $target->id,
+                );
+                if (! is_array($match)) {
+                    return false;
+                }
+
+                return ($match['headings'] ?? null) === [[
+                    'id' => 'h-1',
+                    'title' => 'First heading',
+                    'level' => 1,
+                ]];
+            }),
         );
 });
 
@@ -1112,6 +1180,47 @@ test('update falls back to first text line when no h1 exists', function () {
     $note->refresh();
 
     expect($note->title)->toBe('First line');
+});
+
+test('update stores heading metadata only with clean heading titles', function () {
+    $user = User::factory()->create();
+    $note = $user->notes()->create([
+        'title' => null,
+    ]);
+
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1, 'id' => 'h-main'],
+                'content' => [
+                    ['type' => 'text', 'text' => '#### Roadmap #planning'],
+                ],
+            ],
+        ],
+    ];
+
+    $this
+        ->actingAs($user)
+        ->put(route('notes.update.legacy', ['note' => $note->id], absolute: false), [
+            'content' => $content,
+            'properties' => [],
+        ])
+        ->assertStatus(302);
+
+    $note->refresh();
+
+    expect($note->meta)->toBe([
+        'navigation' => [
+            [
+                'type' => 'heading',
+                'html_id' => 'h-main',
+                'level' => 1,
+                'text' => 'Roadmap',
+            ],
+        ],
+    ]);
 });
 
 test('json save returns updated slug url after h1 title change', function () {

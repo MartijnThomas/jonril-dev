@@ -11,9 +11,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
-use Illuminate\Support\Str;
 
 class TasksController extends Controller
 {
@@ -1042,6 +1042,51 @@ class TasksController extends Controller
                 }
             }
 
+            if ($this->isBlockTaskParagraphNode($node)) {
+                $counter += 1;
+                $nodeAttrs = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
+                $nodeBlockId = is_string($nodeAttrs['id'] ?? null) ? (string) $nodeAttrs['id'] : null;
+                $isMatch = ($blockId !== null && $blockId !== '' && $nodeBlockId === $blockId)
+                    || (($blockId === null || $blockId === '') && $targetPosition > 0 && $counter === $targetPosition);
+
+                if ($isMatch) {
+                    $sourceTaskBlockId = $nodeBlockId && $nodeBlockId !== ''
+                        ? $nodeBlockId
+                        : (string) Str::uuid();
+                    $migrationTimestamp = Carbon::now()->toIso8601String();
+
+                    $baseTask = $node;
+                    $baseAttrs = is_array($baseTask['attrs'] ?? null) ? $baseTask['attrs'] : [];
+                    $baseAttrs['id'] = $sourceTaskBlockId;
+
+                    $node = $baseTask;
+                    $node['attrs'] = array_merge($baseAttrs, [
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                        'taskStatus' => 'migrated',
+                        'migratedAt' => $migrationTimestamp,
+                        'migratedToNoteId' => (string) $targetNote->id,
+                        'migratedFromNoteId' => null,
+                        'migratedFromBlockId' => null,
+                    ]);
+
+                    $newTaskId = (string) Str::uuid();
+                    $clonedTask = $baseTask;
+                    $clonedTask['attrs'] = array_merge($baseAttrs, [
+                        'id' => $newTaskId,
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                        'taskStatus' => null,
+                        'migratedAt' => $migrationTimestamp,
+                        'migratedToNoteId' => null,
+                        'migratedFromNoteId' => (string) $sourceNote->id,
+                        'migratedFromBlockId' => $sourceTaskBlockId,
+                    ]);
+
+                    return true;
+                }
+            }
+
             if (isset($node['content']) && is_array($node['content'])) {
                 if ($this->walkAndMigrateTask(
                     $node['content'],
@@ -1204,6 +1249,12 @@ class TasksController extends Controller
      */
     private function appendTaskToDocumentEnd(array &$docContent, array $taskItem): void
     {
+        if ($this->isBlockTaskParagraphNode($taskItem)) {
+            $docContent[] = $taskItem;
+
+            return;
+        }
+
         $lastIndex = count($docContent) - 1;
         if (
             $lastIndex >= 0
@@ -1220,6 +1271,20 @@ class TasksController extends Controller
             'type' => 'taskList',
             'content' => [$taskItem],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $node
+     */
+    private function isBlockTaskParagraphNode(array $node): bool
+    {
+        if (($node['type'] ?? null) !== 'paragraph') {
+            return false;
+        }
+
+        $attrs = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
+
+        return ($attrs['blockStyle'] ?? null) === 'task';
     }
 
     private function isMigrationMetaParagraph(mixed $node): bool
@@ -1248,8 +1313,7 @@ class TasksController extends Controller
         bool $checked,
         bool $promoteBacklog,
         string $promotionTimestamp,
-    ): bool
-    {
+    ): bool {
         if (! isset($content['content']) || ! is_array($content['content'])) {
             return false;
         }
@@ -1272,8 +1336,7 @@ class TasksController extends Controller
         bool $checked,
         bool $promoteBacklog,
         string $promotionTimestamp,
-    ): bool
-    {
+    ): bool {
         foreach ($nodes as &$node) {
             if (! is_array($node)) {
                 continue;
@@ -1315,8 +1378,7 @@ class TasksController extends Controller
         bool $checked,
         bool $promoteBacklog,
         string $promotionTimestamp,
-    ): bool
-    {
+    ): bool {
         if (! isset($content['content']) || ! is_array($content['content'])) {
             return false;
         }
@@ -1343,8 +1405,7 @@ class TasksController extends Controller
         bool $checked,
         bool $promoteBacklog,
         string $promotionTimestamp,
-    ): bool
-    {
+    ): bool {
         foreach ($nodes as &$node) {
             if (! is_array($node)) {
                 continue;

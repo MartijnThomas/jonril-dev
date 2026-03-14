@@ -8,7 +8,7 @@ export type BlockTreeDoc = {
 };
 
 export type BlockParagraphStyle = 'paragraph' | 'bullet' | 'quote' | 'ordered' | 'task';
-export type BlockTaskStatus = 'backlog' | 'in_progress' | 'canceled' | null;
+export type BlockTaskStatus = 'backlog' | 'in_progress' | 'canceled' | 'migrated' | null;
 export type BlockParagraphAttrs = Record<string, unknown> & {
     indent: number;
     blockStyle: BlockParagraphStyle;
@@ -19,7 +19,12 @@ export type BlockParagraphAttrs = Record<string, unknown> & {
     deadlineDate: string | null;
     startedAt: string | null;
     completedAt: string | null;
+    canceledAt: string | null;
     backlogPromotedAt: string | null;
+    migratedAt: string | null;
+    migratedToNoteId: string | null;
+    migratedFromNoteId: string | null;
+    migratedFromBlockId: string | null;
 };
 
 type Dispatch = ((transaction: Transaction) => void) | undefined;
@@ -36,12 +41,16 @@ function normalizeNullableIsoDate(value: unknown): string | null {
     return typeof value === 'string' && isValidIsoDate(value) ? value : null;
 }
 
+function normalizeNullableIdentifier(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+}
+
 function nowIsoTimestamp(): string {
     return new Date().toISOString();
 }
 
 export function normalizeTaskStatus(value: unknown): BlockTaskStatus {
-    if (value === 'backlog' || value === 'in_progress' || value === 'canceled') {
+    if (value === 'backlog' || value === 'in_progress' || value === 'canceled' || value === 'migrated') {
         return value;
     }
 
@@ -64,13 +73,17 @@ export function taskStatusToken(status: BlockTaskStatus): string {
     return '';
 }
 
-export function taskStatusTextPrefix(status: BlockTaskStatus): '? ' | '/ ' | '' {
+export function taskStatusTextPrefix(status: BlockTaskStatus): '? ' | '/ ' | '- ' | '' {
     if (status === 'backlog') {
         return '? ';
     }
 
     if (status === 'in_progress') {
         return '/ ';
+    }
+
+    if (status === 'canceled') {
+        return '- ';
     }
 
     return '';
@@ -83,6 +96,10 @@ export function detectTaskStatusFromTextPrefix(text: string): BlockTaskStatus {
 
     if (text.startsWith('/ ')) {
         return 'in_progress';
+    }
+
+    if (text.startsWith('- ')) {
+        return 'canceled';
     }
 
     return null;
@@ -103,7 +120,7 @@ export type BlockTaskDateToken = {
 export type BlockTaskPriority = 'normal' | 'medium' | 'high' | null;
 
 const BLOCK_TASK_DATE_TOKEN_REGEX = /(>>?)(\d{4}-\d{2}-\d{2})/g;
-const BLOCK_TASK_PRIORITY_REGEX = /^(?:[?/]\s)?(!{1,3})(?=\s|$)/u;
+const BLOCK_TASK_PRIORITY_REGEX = /^(?:[?/-]\s)?(!{1,3})(?=\s|$)/u;
 
 export function headingTextPrefix(level: number): string {
     return `${'#'.repeat(Math.min(6, Math.max(1, level)))} `;
@@ -255,7 +272,12 @@ export function normalizeParagraphAttrs(attrs: unknown): BlockParagraphAttrs {
     const deadlineDate = normalizeNullableIsoDate(raw.deadlineDate);
     const startedAt = normalizeNullableTimestamp(raw.startedAt);
     const completedAt = normalizeNullableTimestamp(raw.completedAt);
+    const canceledAt = normalizeNullableTimestamp(raw.canceledAt);
     const backlogPromotedAt = normalizeNullableTimestamp(raw.backlogPromotedAt);
+    const migratedAt = normalizeNullableTimestamp(raw.migratedAt);
+    const migratedToNoteId = normalizeNullableIdentifier(raw.migratedToNoteId);
+    const migratedFromNoteId = normalizeNullableIdentifier(raw.migratedFromNoteId);
+    const migratedFromBlockId = normalizeNullableIdentifier(raw.migratedFromBlockId);
 
     return {
         ...raw,
@@ -268,7 +290,12 @@ export function normalizeParagraphAttrs(attrs: unknown): BlockParagraphAttrs {
         deadlineDate,
         startedAt,
         completedAt,
+        canceledAt,
         backlogPromotedAt,
+        migratedAt,
+        migratedToNoteId,
+        migratedFromNoteId,
+        migratedFromBlockId,
     };
 }
 
@@ -373,7 +400,11 @@ function updateTaskStatusTextPrefixInTransaction(
 
     const textContent = currentNode.textContent;
     const currentPrefixLength =
-        textContent.startsWith('? ') || textContent.startsWith('/ ') ? 2 : 0;
+        textContent.startsWith('? ') ||
+        textContent.startsWith('/ ') ||
+        textContent.startsWith('- ')
+            ? 2
+            : 0;
     const contentStart = pos + 1;
 
     if (currentPrefixLength > 0) {
@@ -463,6 +494,7 @@ export function setCurrentParagraphStyle(
         deadlineDate: blockStyle === 'task' ? attrs.deadlineDate : null,
         startedAt: blockStyle === 'task' ? attrs.startedAt : null,
         completedAt: blockStyle === 'task' ? attrs.completedAt : null,
+        canceledAt: blockStyle === 'task' ? attrs.canceledAt : null,
         backlogPromotedAt: blockStyle === 'task' ? attrs.backlogPromotedAt : null,
     });
 }
@@ -519,6 +551,7 @@ export function toggleParagraphTaskAtPos(
             taskStatus: null,
             checked: false,
             completedAt: null,
+            canceledAt: null,
             backlogPromotedAt: timestamp,
         });
 
@@ -535,6 +568,7 @@ export function toggleParagraphTaskAtPos(
             taskStatus: null,
             checked: true,
             completedAt: timestamp,
+            canceledAt: null,
         });
 
         transaction = updateTaskStatusTextPrefixInTransaction(transaction, pos, '');
@@ -550,6 +584,7 @@ export function toggleParagraphTaskAtPos(
             checked: false,
             taskStatus: null,
             completedAt: null,
+            canceledAt: null,
         });
 
         transaction = updateTaskStatusTextPrefixInTransaction(transaction, pos, '');
@@ -564,6 +599,7 @@ export function toggleParagraphTaskAtPos(
         checked: true,
         taskStatus: null,
         completedAt: timestamp,
+        canceledAt: null,
     });
 
     transaction = updateTaskStatusTextPrefixInTransaction(transaction, pos, '');
@@ -597,15 +633,28 @@ export function setParagraphTaskStatusAtPos(
     const normalizedTaskStatus = normalizeTaskStatus(taskStatus);
     const timestamp = nowIsoTimestamp();
 
+    const nextChecked = normalizedTaskStatus === null ? attrs.checked === true : false;
+    const nextCompletedAt = nextChecked
+        ? (attrs.completedAt ?? timestamp)
+        : null;
+    const nextCanceledAt = normalizedTaskStatus === 'canceled'
+        ? (attrs.canceledAt ?? timestamp)
+        : null;
+
     let transaction = state.tr.setNodeMarkup(pos, undefined, {
         ...attrs,
         taskStatus: normalizedTaskStatus,
-        checked: normalizedTaskStatus === null ? attrs.checked === true : false,
+        checked: nextChecked,
         startedAt:
             normalizedTaskStatus === 'in_progress' && attrs.taskStatus !== 'in_progress'
                 ? timestamp
                 : attrs.startedAt,
-        completedAt: normalizedTaskStatus === null ? attrs.completedAt : null,
+        completedAt: nextCompletedAt,
+        canceledAt: nextCanceledAt,
+        backlogPromotedAt:
+            normalizedTaskStatus === 'backlog'
+                ? null
+                : attrs.backlogPromotedAt,
     });
 
     transaction = updateTaskStatusTextPrefixInTransaction(
@@ -847,6 +896,7 @@ export function removeParagraphStyleOrDedentCurrentParagraph(
             deadlineDate: null,
             startedAt: null,
             completedAt: null,
+            canceledAt: null,
             backlogPromotedAt: null,
         });
 
@@ -911,7 +961,16 @@ export function syncTaskParagraphStatusesFromText(
         }
 
         const currentAttrs = normalizeParagraphAttrs(currentNode.attrs);
-        const nextStatus = detectTaskStatusFromTextPrefix(currentNode.textContent);
+        const inferredStatus = detectTaskStatusFromTextPrefix(currentNode.textContent);
+        let nextStatus: BlockTaskStatus = inferredStatus;
+
+        if (
+            inferredStatus === null &&
+            currentAttrs.taskStatus === 'migrated' &&
+            currentAttrs.migratedToNoteId !== null
+        ) {
+            nextStatus = 'migrated';
+        }
         const parsedDates = parseBlockTaskDates(currentNode.textContent);
         if (currentAttrs.taskStatus === nextStatus) {
             if (
@@ -922,17 +981,31 @@ export function syncTaskParagraphStatusesFromText(
             }
         }
 
+        const nextChecked = nextStatus === null ? currentAttrs.checked === true : false;
+        const nextCompletedAt = nextChecked
+            ? (currentAttrs.completedAt ?? nowIsoTimestamp())
+            : null;
+        const nextCanceledAt =
+            nextStatus === 'canceled'
+                ? (currentAttrs.canceledAt ?? nowIsoTimestamp())
+                : null;
+
         transaction = transaction.setNodeMarkup(mappedPos, undefined, {
             ...currentAttrs,
             taskStatus: nextStatus,
             dueDate: parsedDates.dueDate,
             deadlineDate: parsedDates.deadlineDate,
-            checked: nextStatus === null ? currentAttrs.checked === true : false,
+            checked: nextChecked,
             startedAt:
                 nextStatus === 'in_progress' && currentAttrs.taskStatus !== 'in_progress'
                     ? nowIsoTimestamp()
                     : currentAttrs.startedAt,
-            completedAt: nextStatus === null ? currentAttrs.completedAt : null,
+            completedAt: nextCompletedAt,
+            canceledAt: nextCanceledAt,
+            backlogPromotedAt:
+                nextStatus === 'backlog'
+                    ? null
+                    : currentAttrs.backlogPromotedAt,
         });
         changed = true;
 

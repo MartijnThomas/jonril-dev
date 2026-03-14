@@ -18,6 +18,7 @@ import {
     ListOrdered,
     Link2,
     NotebookText,
+    SendToBack,
     Pilcrow,
     Quote,
     Strikethrough,
@@ -202,6 +203,76 @@ export function BlockNodeToolbar({
             .run();
     };
 
+    const openTaskMigratePicker = () => {
+        const current = getCurrentBlockNode(editor);
+        if (!current || current.type !== 'paragraph') {
+            return;
+        }
+
+        const attrs = normalizeParagraphAttrs(current.node.attrs);
+        if (attrs.blockStyle !== 'task') {
+            return;
+        }
+
+        const blockId =
+            typeof attrs.id === 'string' && attrs.id.trim() !== ''
+                ? attrs.id.trim()
+                : null;
+        let position: number | null = null;
+
+        let counter = 0;
+        editor.state.doc.descendants((node, pos) => {
+            if (node.type.name !== 'paragraph') {
+                return true;
+            }
+
+            const nodeAttrs = normalizeParagraphAttrs(node.attrs);
+            if (nodeAttrs.blockStyle !== 'task') {
+                return true;
+            }
+
+            counter += 1;
+
+            if (pos === current.pos) {
+                position = counter;
+                return false;
+            }
+
+            return true;
+        });
+
+        const anchorPoint = (() => {
+            try {
+                const coords = editor.view.coordsAtPos(editor.state.selection.from);
+                if (
+                    typeof coords?.left === 'number' &&
+                    typeof coords?.bottom === 'number'
+                ) {
+                    return {
+                        x: coords.left,
+                        y: coords.bottom,
+                    };
+                }
+            } catch {
+                return null;
+            }
+
+            return null;
+        })();
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+                new CustomEvent('task-migrate:open', {
+                    detail: {
+                        blockId,
+                        position,
+                        anchorPoint,
+                    },
+                }),
+            );
+        }
+    };
+
     const normalizeLinkHref = (value: string): string => {
         const trimmed = value.trim();
         if (trimmed === '') {
@@ -277,10 +348,9 @@ export function BlockNodeToolbar({
     const inactiveSquareButtonClass = `${squareButtonBaseClass} border border-transparent text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground`;
 
     return (
-        <div className="sticky top-16 z-30 w-full border-y border-border/60 bg-background/95 shadow-xs backdrop-blur supports-[backdrop-filter]:bg-background/85">
-            <div className="w-full px-2 py-1.5 md:px-4">
-                <div className="overflow-x-auto">
-                    <div className="mx-auto flex w-max min-w-max items-center gap-2.5">
+        <div className="sticky top-16 z-30 w-full overflow-hidden border-y border-border/60 bg-background/95 shadow-xs backdrop-blur supports-[backdrop-filter]:bg-background/85 group-has-data-[collapsible=icon]/sidebar-wrapper:top-12">
+            <div className="mx-auto w-full overflow-x-auto overflow-y-hidden px-2 py-1.5 md:px-4">
+                <div className="mx-auto inline-flex min-w-max items-center gap-2.5">
                         <div className="flex items-center gap-2">
                         {BLOCK_NODE_OPTIONS.map((option) => {
                             const isActive = currentValue === option.value;
@@ -413,8 +483,24 @@ export function BlockNodeToolbar({
                                     </Button>
                                 );
                             })}
+
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={inactiveSquareButtonClass}
+                                onClick={openTaskMigratePicker}
+                                aria-label="Migrate task"
+                                title="Migrate task"
+                                disabled={
+                                    !isParagraphBlock ||
+                                    normalizeParagraphAttrs(currentBlock?.node.attrs ?? {}).blockStyle !== 'task'
+                                }
+                            >
+                                <SendToBack className="size-4" />
+                                <span className="sr-only">Migrate task</span>
+                            </Button>
                         </div>
-                    </div>
                 </div>
             </div>
         </div>

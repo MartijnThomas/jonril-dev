@@ -73,3 +73,21 @@ it('accepts json string content', function () {
     expect($title)->toBe('JSON Title');
 });
 
+it('strips markdown heading prefixes from extracted title', function () {
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1],
+                'content' => [
+                    ['type' => 'text', 'text' => '#### Block style editor'],
+                ],
+            ],
+        ],
+    ];
+
+    $title = app(NoteTitleExtractor::class)->extract($content);
+
+    expect($title)->toBe('Block style editor');
+});

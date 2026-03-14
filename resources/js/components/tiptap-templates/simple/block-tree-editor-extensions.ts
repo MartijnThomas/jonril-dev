@@ -8,8 +8,13 @@ import { Strike } from '@tiptap/extension-strike';
 import { Text } from '@tiptap/extension-text';
 import { Typography } from '@tiptap/extension-typography';
 import { Underline } from '@tiptap/extension-underline';
+import UniqueID from '@tiptap/extension-unique-id';
 import { UndoRedo } from '@tiptap/extensions/undo-redo';
+import { BlockDragHandleExtension } from '@/components/tiptap-templates/simple/block-tree/block-drag-handle-extension';
+import { BlockHeadingCollapseExtension } from '@/components/tiptap-templates/simple/block-tree/block-heading-collapse-extension';
 import { BlockLinkBehaviorExtension } from '@/components/tiptap-templates/simple/block-tree/block-link-behavior-extension';
+import { BlockTaskActionsExtension } from '@/components/tiptap-templates/simple/block-tree/block-task-actions-extension';
+import { BlockTaskMigrationMetaExtension } from '@/components/tiptap-templates/simple/block-tree/block-task-migration-meta-extension';
 import { BlockTreeDocument } from '@/components/tiptap-templates/simple/block-tree/block-tree-document-extension';
 import { createBlockTreeItemExtensions } from '@/components/tiptap-templates/simple/block-tree/block-tree-item-extensions';
 import { BlockWikiLinkMark } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-mark-extension';
@@ -20,6 +25,9 @@ export function createBlockTreeEditorExtensions(
     options: CreateSimpleEditorExtensionsOptions = {},
 ) {
     return [
+        UniqueID.configure({
+            types: ['heading', 'paragraph'],
+        }),
         Text,
         HardBreak.configure({
             keepMarks: true,
@@ -37,6 +45,9 @@ export function createBlockTreeEditorExtensions(
             multicolor: false,
         }),
         UndoRedo,
+        BlockHeadingCollapseExtension,
+        BlockTaskActionsExtension,
+        BlockDragHandleExtension,
         BlockLinkBehaviorExtension,
         Typography.configure({
             laquo: false,
@@ -49,6 +60,9 @@ export function createBlockTreeEditorExtensions(
         BlockWikiLinkSuggestion.configure({
             notes: options.wikiLinkNotes ?? [],
             language: options.language ?? 'nl',
+        }),
+        BlockTaskMigrationMetaExtension.configure({
+            notes: options.wikiLinkNotes ?? [],
         }),
         BlockTreeDocument,
         ...createBlockTreeItemExtensions(options),

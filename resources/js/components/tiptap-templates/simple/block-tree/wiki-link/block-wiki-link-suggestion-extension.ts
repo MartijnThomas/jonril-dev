@@ -15,6 +15,7 @@ import {
     editableJournalPathFromTargetPath,
     fallbackBlockWikiHrefFromTargetPath,
     findCompleteRawWikiLinks,
+    normalizeHeadingText,
     normalizeJournalTargetPath,
     normalizeNoteTargetPath,
     parseWikiLinkQuery,
@@ -103,10 +104,21 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                             .trim();
                     }
 
-                    const { rawPath } = parseWikiLinkQuery(effectiveQuery);
+                    const { rawPath, rawHeading } = parseWikiLinkQuery(effectiveQuery);
                     const normalized = normalizeQuery(rawPath);
                     const existingTargetPaths = new Set<string>();
                     const existingItems: BlockWikiLinkSuggestionItem[] = [];
+                    const resolvedTargetPath =
+                        normalizeJournalTargetPath(rawPath) ||
+                        normalizeNoteTargetPath(rawPath);
+                    const noteForHeadingQuery = resolvedTargetPath
+                        ? this.options.notes.find(
+                              (note) =>
+                                  deriveTargetPathFromNote(note).toLowerCase() ===
+                                  resolvedTargetPath.toLowerCase(),
+                          ) ?? null
+                        : null;
+                    const hasHeadingQuery = effectiveQuery.includes('#');
 
                     this.options.notes.forEach((note) => {
                         const targetPath = deriveTargetPathFromNote(note);
@@ -134,10 +146,11 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                             id: note.id,
                             title: note.title,
                             targetPath,
+                            targetBlockId: null,
                             noteId: note.id,
                             href:
                                 note.href ||
-                                fallbackBlockWikiHrefFromTargetPath(targetPath, note.id),
+                                    fallbackBlockWikiHrefFromTargetPath(targetPath, note.id),
                             subtitle,
                             kind: targetPath.startsWith('journal/')
                                 ? 'journal'
@@ -145,6 +158,45 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                             insertText: note.title,
                         });
                     });
+
+                    if (hasHeadingQuery && noteForHeadingQuery && resolvedTargetPath) {
+                        const headingQuery = normalizeHeadingText(rawHeading);
+                        const headings = Array.isArray(noteForHeadingQuery.headings)
+                            ? noteForHeadingQuery.headings
+                            : [];
+                        const displayPath =
+                            editableJournalPathFromTargetPath(resolvedTargetPath) ||
+                            resolvedTargetPath;
+                        const headingItems = headings
+                            .filter(
+                                (heading) =>
+                                    heading.id &&
+                                    heading.title &&
+                                    (
+                                        headingQuery === '' ||
+                                        normalizeHeadingText(heading.title).includes(
+                                            headingQuery,
+                                        )
+                                    ),
+                            )
+                            .map((heading) => ({
+                                id: `${noteForHeadingQuery.id}#${heading.id}`,
+                                title: heading.title,
+                                targetPath: resolvedTargetPath,
+                                targetBlockId: heading.id,
+                                noteId: noteForHeadingQuery.id,
+                                href: fallbackBlockWikiHrefFromTargetPath(
+                                    resolvedTargetPath,
+                                    noteForHeadingQuery.id,
+                                    heading.id,
+                                ),
+                                subtitle: `${displayPath}# ${heading.title}`,
+                                kind: 'heading' as const,
+                                insertText: `${noteForHeadingQuery.title} # ${heading.title}`,
+                            }));
+
+                        return headingItems.slice(0, 8);
+                    }
 
                     const journalItems =
                         rawPath.length >= 3
@@ -173,6 +225,7 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                                       this.options.language,
                                   ),
                                   targetPath,
+                                  targetBlockId: null,
                                   noteId: null,
                                   href: fallbackBlockWikiHrefFromTargetPath(targetPath),
                                   subtitle: targetPath.startsWith('journal/')
@@ -254,8 +307,10 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                                                 fallbackBlockWikiHrefFromTargetPath(
                                                     props.targetPath,
                                                     props.noteId,
+                                                    props.targetBlockId,
                                                 ),
                                             targetPath: props.targetPath,
+                                            targetBlockId: props.targetBlockId ?? null,
                                         },
                                     },
                                 ],

@@ -83,7 +83,27 @@ export const BlockParagraph = Paragraph.extend({
                 default: null,
                 rendered: false,
             },
+            canceledAt: {
+                default: null,
+                rendered: false,
+            },
             backlogPromotedAt: {
+                default: null,
+                rendered: false,
+            },
+            migratedAt: {
+                default: null,
+                rendered: false,
+            },
+            migratedToNoteId: {
+                default: null,
+                rendered: false,
+            },
+            migratedFromNoteId: {
+                default: null,
+                rendered: false,
+            },
+            migratedFromBlockId: {
                 default: null,
                 rendered: false,
             },
@@ -124,6 +144,9 @@ export const BlockParagraph = Paragraph.extend({
 
         if (blockStyle === 'task') {
             htmlAttributes['data-checked'] = checked ? 'true' : 'false';
+            if (typeof node.attrs.id === 'string' && node.attrs.id.trim() !== '') {
+                htmlAttributes.id = node.attrs.id;
+            }
             if (taskStatus !== null) {
                 htmlAttributes['data-task-status'] = taskStatus;
             }
@@ -139,11 +162,35 @@ export const BlockParagraph = Paragraph.extend({
             if (typeof node.attrs.completedAt === 'string' && node.attrs.completedAt !== '') {
                 htmlAttributes['data-completed-at'] = node.attrs.completedAt;
             }
+            if (typeof node.attrs.canceledAt === 'string' && node.attrs.canceledAt !== '') {
+                htmlAttributes['data-canceled-at'] = node.attrs.canceledAt;
+            }
             if (
                 typeof node.attrs.backlogPromotedAt === 'string' &&
                 node.attrs.backlogPromotedAt !== ''
             ) {
                 htmlAttributes['data-backlog-promoted-at'] = node.attrs.backlogPromotedAt;
+            }
+            if (typeof node.attrs.migratedAt === 'string' && node.attrs.migratedAt !== '') {
+                htmlAttributes['data-migrated-at'] = node.attrs.migratedAt;
+            }
+            if (
+                typeof node.attrs.migratedToNoteId === 'string' &&
+                node.attrs.migratedToNoteId !== ''
+            ) {
+                htmlAttributes['data-migrated-to-note-id'] = node.attrs.migratedToNoteId;
+            }
+            if (
+                typeof node.attrs.migratedFromNoteId === 'string' &&
+                node.attrs.migratedFromNoteId !== ''
+            ) {
+                htmlAttributes['data-migrated-from-note-id'] = node.attrs.migratedFromNoteId;
+            }
+            if (
+                typeof node.attrs.migratedFromBlockId === 'string' &&
+                node.attrs.migratedFromBlockId !== ''
+            ) {
+                htmlAttributes['data-migrated-from-block-id'] = node.attrs.migratedFromBlockId;
             }
         }
 
@@ -166,13 +213,19 @@ export const BlockHeading = Heading.extend({
         };
     },
     renderHTML({ node, HTMLAttributes }) {
+        const htmlAttributes: Record<string, string> = {
+            ...HTMLAttributes,
+            'data-block-tree-node': 'heading',
+            class: 'bt-heading',
+        };
+
+        if (typeof node.attrs.id === 'string' && node.attrs.id.trim() !== '') {
+            htmlAttributes.id = node.attrs.id;
+        }
+
         return [
             `h${Number(node.attrs.level ?? 1)}`,
-            {
-                ...HTMLAttributes,
-                'data-block-tree-node': 'heading',
-                class: 'bt-heading',
-            },
+            htmlAttributes,
             0,
         ];
     },
@@ -392,6 +445,8 @@ function createBlockEditingExtension(
                                     ? '? '
                                     : node.textContent.startsWith('/ ')
                                         ? '/ '
+                                        : node.textContent.startsWith('- ')
+                                            ? '- '
                                         : '';
 
                                 if (textPrefix === '') {
@@ -555,6 +610,12 @@ function createBlockEditingExtension(
                                 return false;
                             }
 
+                            // Let "- " flow as normal text input in tasks.
+                            // Status is inferred by appendTransaction sync.
+                            if (hasCanceledTaskMarker) {
+                                return false;
+                            }
+
                             const nextBlockStyle =
                                 hasQuoteMarker
                                     ? 'quote'
@@ -577,7 +638,7 @@ function createBlockEditingExtension(
                             const markerLength =
                                 hasOrderedMarker
                                     ? orderedMatch[0].length
-                                    : hasBacklogTaskMarker || hasInProgressTaskMarker
+                                    : hasBacklogTaskMarker || hasInProgressTaskMarker || hasCanceledTaskMarker
                                         ? 0
                                         : 1;
 
@@ -673,6 +734,7 @@ function createBlockEditingExtension(
                                     .splitBlock()
                                     .setNode('paragraph', {
                                         ...attrs,
+                                        id: null,
                                         order:
                                             attrs.blockStyle === 'ordered'
                                                 ? Math.max(
@@ -687,6 +749,10 @@ function createBlockEditingExtension(
                                         startedAt: null,
                                         completedAt: null,
                                         backlogPromotedAt: null,
+                                        migratedAt: null,
+                                        migratedToNoteId: null,
+                                        migratedFromNoteId: null,
+                                        migratedFromBlockId: null,
                                     })
                                     .run();
 
@@ -695,6 +761,7 @@ function createBlockEditingExtension(
 
                             insertParagraphAfterCurrentBlock(this.editor, {
                                 ...attrs,
+                                id: null,
                                 order:
                                     attrs.blockStyle === 'ordered'
                                         ? Math.max(
@@ -709,6 +776,10 @@ function createBlockEditingExtension(
                                 startedAt: null,
                                 completedAt: null,
                                 backlogPromotedAt: null,
+                                migratedAt: null,
+                                migratedToNoteId: null,
+                                migratedFromNoteId: null,
+                                migratedFromBlockId: null,
                             });
 
                             return true;
@@ -788,11 +859,25 @@ function createBlockEditingExtension(
         addKeyboardShortcuts() {
             return {
                 Tab: () => {
+                    const { $from } = this.editor.state.selection;
+                    const parentText = $from.parent.textContent ?? '';
+                    const beforeCursor = parentText.slice(0, $from.parentOffset);
+                    if (/\/[^\s]*$/u.test(beforeCursor)) {
+                        return false;
+                    }
+
                     return this.editor.commands.command(({ editor, state, dispatch }) => {
                         return indentCurrentParagraph(editor, state, dispatch);
                     });
                 },
                 'Shift-Tab': () => {
+                    const { $from } = this.editor.state.selection;
+                    const parentText = $from.parent.textContent ?? '';
+                    const beforeCursor = parentText.slice(0, $from.parentOffset);
+                    if (/\/[^\s]*$/u.test(beforeCursor)) {
+                        return false;
+                    }
+
                     return this.editor.commands.command(({ editor, state, dispatch }) => {
                         return dedentCurrentParagraph(editor, state, dispatch);
                     });

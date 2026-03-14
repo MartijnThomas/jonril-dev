@@ -14,11 +14,13 @@ import { NOTE_TITLE_ICON_PLUGIN_KEY } from '@/components/tiptap-extension/note-t
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
 import type { DocumentPropertiesValue } from '@/components/tiptap-properties/document-properties';
 import { BlockNodeToolbar } from '@/components/tiptap-templates/simple/block-tree/block-node-toolbar';
+import { BlockTaskActionsMenu } from '@/components/tiptap-templates/simple/block-tree/block-task-actions-menu';
 import { BlockTaskStatusMenu } from '@/components/tiptap-templates/simple/block-tree/block-task-status-menu';
 import { BlockTokenSuggestionMenu } from '@/components/tiptap-templates/simple/block-tree/block-token-suggestion-menu';
 import {
     createEmptyBlockDocument,
     isBlockTreeDocument,
+    toggleParagraphTaskAtPos,
     setParagraphTaskStatusAtPos,
 } from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
 import {
@@ -161,6 +163,11 @@ type SimpleEditorProps = {
         title: string;
         path?: string;
         href?: string;
+        headings?: {
+            id: string;
+            title: string;
+            level: number | null;
+        }[];
     }[];
     workspaceSuggestions?: {
         mentions: string[];
@@ -325,6 +332,21 @@ function SimpleEditorComponent({
         x: 0,
         y: 0,
         pos: null,
+        status: null,
+    });
+    const [blockTaskActionsMenu, setBlockTaskActionsMenu] = useState<{
+        open: boolean;
+        x: number;
+        y: number;
+        pos: number | null;
+        blockId: string | null;
+        status: 'backlog' | 'in_progress' | 'canceled' | null;
+    }>({
+        open: false,
+        x: 0,
+        y: 0,
+        pos: null,
+        blockId: null,
         status: null,
     });
 
@@ -555,10 +577,6 @@ function SimpleEditorComponent({
     }, [editor]);
 
     useEffect(() => {
-        if (editorMode === 'block') {
-            return;
-        }
-
         const openTaskMigratePicker = (event: Event) => {
             const customEvent = event as CustomEvent<{
                 blockId?: string | null;
@@ -599,25 +617,73 @@ function SimpleEditorComponent({
                 openTaskMigratePicker as EventListener,
             );
         };
-    }, [editorMode]);
+    }, []);
+
+    useEffect(() => {
+        const openTaskActionsMenu = (event: Event) => {
+            const customEvent = event as CustomEvent<{
+                x?: number;
+                y?: number;
+                pos?: number | null;
+                blockId?: string | null;
+                status?: 'backlog' | 'in_progress' | 'canceled' | null;
+            }>;
+
+            setBlockTaskActionsMenu({
+                open: true,
+                x: typeof customEvent.detail?.x === 'number' ? customEvent.detail.x : 0,
+                y: typeof customEvent.detail?.y === 'number' ? customEvent.detail.y : 0,
+                pos:
+                    typeof customEvent.detail?.pos === 'number'
+                        ? customEvent.detail.pos
+                        : null,
+                blockId:
+                    typeof customEvent.detail?.blockId === 'string'
+                        ? customEvent.detail.blockId
+                        : null,
+                status:
+                    customEvent.detail?.status === 'backlog' ||
+                    customEvent.detail?.status === 'in_progress' ||
+                    customEvent.detail?.status === 'canceled'
+                        ? customEvent.detail.status
+                        : null,
+            });
+        };
+
+        window.addEventListener(
+            'block-task-actions:open',
+            openTaskActionsMenu as EventListener,
+        );
+
+        return () => {
+            window.removeEventListener(
+                'block-task-actions:open',
+                openTaskActionsMenu as EventListener,
+            );
+        };
+    }, []);
 
     useEffect(() => {
         if (!editor) {
             return;
         }
 
-        (editor as Editor & { isMobile?: boolean }).isMobile = isMobile;
-    }, [editor, isMobile]);
-
-    useEffect(() => {
-        if (!editor) {
-            return;
-        }
+        const withEditorDom = (callback: (dom: HTMLElement) => void) => {
+            try {
+                const dom = editor.view?.dom;
+                if (dom instanceof HTMLElement) {
+                    callback(dom);
+                }
+            } catch {
+                // Editor view may not be mounted during lifecycle transitions.
+            }
+        };
 
         const updateWikiLinkEditClass = () => {
-            const dom = editor.view.dom as HTMLElement;
-            const isEditingWikiLink = editor.isActive('wikiLink');
-            dom.classList.toggle('md-wikilink-edit-active', isEditingWikiLink);
+            withEditorDom((dom) => {
+                const isEditingWikiLink = editor.isActive('wikiLink');
+                dom.classList.toggle('md-wikilink-edit-active', isEditingWikiLink);
+            });
         };
 
         updateWikiLinkEditClass();
@@ -629,9 +695,9 @@ function SimpleEditorComponent({
             editor.off('selectionUpdate', updateWikiLinkEditClass);
             editor.off('focus', updateWikiLinkEditClass);
             editor.off('blur', updateWikiLinkEditClass);
-            (editor.view.dom as HTMLElement).classList.remove(
-                'md-wikilink-edit-active',
-            );
+            withEditorDom((dom) => {
+                dom.classList.remove('md-wikilink-edit-active');
+            });
         };
     }, [editor]);
 
@@ -691,7 +757,19 @@ function SimpleEditorComponent({
             const currentBlockKind =
                 currentParent.type.name === 'heading'
                     ? `h${Math.min(6, Math.max(1, Number(currentParent.attrs.level ?? 1)))}`
-                    : 'paragraph';
+                    : currentParent.type.name === 'paragraph'
+                      ? (() => {
+                            const blockStyle = String(
+                                currentParent.attrs.blockStyle ?? 'paragraph',
+                            ).trim();
+
+                            if (blockStyle === 'quote') {
+                                return 'blockquote';
+                            }
+
+                            return blockStyle !== '' ? blockStyle : 'paragraph';
+                        })()
+                      : currentParent.type.name;
             const currentCursorPosition = editor.state.selection.$from.parentOffset;
 
             editor.state.doc.descendants((node) => {
@@ -743,9 +821,11 @@ function SimpleEditorComponent({
 
         emit();
         editor.on('update', emit);
+        editor.on('selectionUpdate', emit);
 
         return () => {
             editor.off('update', emit);
+            editor.off('selectionUpdate', emit);
         };
     }, [editor, onContentStatsChange]);
 
@@ -785,32 +865,30 @@ function SimpleEditorComponent({
                     <BlockNodeToolbar editor={editor} />
                 ) : null}
 
-                {editorMode !== 'block' ? (
-                    <TaskMigratePicker
-                        open={taskMigratePicker.open}
-                        sourceNoteId={id}
-                        blockId={taskMigratePicker.blockId}
-                        position={taskMigratePicker.position}
-                        anchorPoint={taskMigratePicker.anchorPoint}
-                        language={language}
-                        onClose={() =>
-                            setTaskMigratePicker({
-                                open: false,
-                                blockId: null,
-                                position: null,
-                                anchorPoint: null,
-                            })
-                        }
-                        onMigrated={() => {
-                            router.visit(window.location.href, {
-                                only: ['content', 'relatedTasks', 'backlinks'],
-                                preserveScroll: true,
-                                preserveState: false,
-                                replace: true,
-                            });
-                        }}
-                    />
-                ) : null}
+                <TaskMigratePicker
+                    open={taskMigratePicker.open}
+                    sourceNoteId={id}
+                    blockId={taskMigratePicker.blockId}
+                    position={taskMigratePicker.position}
+                    anchorPoint={taskMigratePicker.anchorPoint}
+                    language={language}
+                    onClose={() =>
+                        setTaskMigratePicker({
+                            open: false,
+                            blockId: null,
+                            position: null,
+                            anchorPoint: null,
+                        })
+                    }
+                    onMigrated={() => {
+                        router.visit(window.location.href, {
+                            only: ['content', 'relatedTasks', 'backlinks'],
+                            preserveScroll: true,
+                            preserveState: false,
+                            replace: true,
+                        });
+                    }}
+                />
                 {showRelatedPanel ? (
                     <div className="w-full md:mx-auto md:mt-4 md:max-w-3xl md:px-8">
                         <Deferred
@@ -855,6 +933,102 @@ function SimpleEditorComponent({
                             workspaceSuggestions={{
                                 mentions: mentionSuggestions,
                                 hashtags: hashtagSuggestions,
+                            }}
+                        />
+                    ) : null}
+
+                    {editor && editorMode === 'block' ? (
+                        <BlockTaskActionsMenu
+                            open={blockTaskActionsMenu.open}
+                            x={blockTaskActionsMenu.x}
+                            y={blockTaskActionsMenu.y}
+                            status={blockTaskActionsMenu.status}
+                            defaultMigrateTargets={linkableNotes
+                                .filter((note) => note.id !== id)
+                                .slice(0, 6)
+                                .map((note) => ({
+                                    id: note.id,
+                                    title: note.title,
+                                    path: note.path,
+                                }))}
+                            onClose={() => {
+                                setBlockTaskActionsMenu((current) => ({
+                                    ...current,
+                                    open: false,
+                                }));
+                            }}
+                            onToggleTask={() => {
+                                if (blockTaskActionsMenu.pos === null) {
+                                    return;
+                                }
+
+                                editor.commands.command(({ editor: commandEditor, state, dispatch }) => {
+                                    return toggleParagraphTaskAtPos(
+                                        commandEditor,
+                                        blockTaskActionsMenu.pos!,
+                                        state,
+                                        dispatch,
+                                    );
+                                });
+                            }}
+                            onSetStatus={(status) => {
+                                if (blockTaskActionsMenu.pos === null) {
+                                    return;
+                                }
+
+                                editor.commands.command(({ editor: commandEditor, state, dispatch }) => {
+                                    return setParagraphTaskStatusAtPos(
+                                        commandEditor,
+                                        blockTaskActionsMenu.pos!,
+                                        status,
+                                        state,
+                                        dispatch,
+                                    );
+                                });
+                            }}
+                            onOpenMigratePicker={() => {
+                                setTaskMigratePicker({
+                                    open: true,
+                                    blockId: blockTaskActionsMenu.blockId,
+                                    position: blockTaskActionsMenu.pos,
+                                    anchorPoint: {
+                                        x: blockTaskActionsMenu.x,
+                                        y: blockTaskActionsMenu.y,
+                                    },
+                                });
+                            }}
+                            onQuickMigrate={(targetNoteId) => {
+                                if (
+                                    blockTaskActionsMenu.blockId === null &&
+                                    (blockTaskActionsMenu.pos ?? 0) <= 0
+                                ) {
+                                    return;
+                                }
+
+                                router.post(
+                                    '/tasks/migrate',
+                                    {
+                                        source_note_id: id,
+                                        block_id: blockTaskActionsMenu.blockId,
+                                        position: blockTaskActionsMenu.pos,
+                                        target_note_id: targetNoteId,
+                                        target_journal_granularity: null,
+                                        target_journal_period: null,
+                                    },
+                                    {
+                                        preserveState: true,
+                                        preserveScroll: true,
+                                        replace: true,
+                                        onSuccess: () => {
+                                            router.visit(window.location.href, {
+                                                only: ['content', 'relatedTasks', 'backlinks'],
+                                                preserveScroll: true,
+                                                preserveState: false,
+                                                replace: true,
+                                            });
+                                        },
+                                    },
+                                );
                             }}
                         />
                     ) : null}

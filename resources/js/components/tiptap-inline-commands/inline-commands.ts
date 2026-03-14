@@ -33,6 +33,43 @@ function findCurrentTaskPosition(editor: any): number | null {
     return found;
 }
 
+function findCurrentBlockTask(editor: any): { blockId: string | null; position: number | null } | null {
+    const selectionFrom = editor?.state?.selection?.from;
+    if (!selectionFrom) {
+        return null;
+    }
+
+    let position = 0;
+    let found: { blockId: string | null; position: number | null } | null = null;
+
+    editor.state.doc.descendants((node: any, pos: number) => {
+        if (node.type?.name !== 'paragraph' || node.attrs?.blockStyle !== 'task') {
+            return true;
+        }
+
+        position += 1;
+
+        const from = pos;
+        const to = pos + node.nodeSize;
+        if (selectionFrom >= from && selectionFrom <= to) {
+            const blockId =
+                typeof node.attrs?.id === 'string' && node.attrs.id.trim() !== ''
+                    ? node.attrs.id
+                    : null;
+            found = {
+                blockId,
+                position,
+            };
+
+            return false;
+        }
+
+        return true;
+    });
+
+    return found;
+}
+
 export const inlineCommands: InlineCommand[] = [
     {
         name: 'task',
@@ -106,14 +143,28 @@ export const inlineCommands: InlineCommand[] = [
         name: 'migrate',
         aliases: ['move-task'],
         run: (editor, range) => {
-            if (!editor.isActive('taskItem')) {
+            const isLegacyTask = editor.isActive('taskItem');
+            const isBlockTask =
+                editor.isActive('paragraph') &&
+                editor.getAttributes('paragraph')?.blockStyle === 'task';
+
+            if (!isLegacyTask && !isBlockTask) {
                 return false;
             }
 
-            const blockId = (editor.getAttributes('taskItem')?.id ?? null) as
-                | string
-                | null;
-            const taskPosition = findCurrentTaskPosition(editor);
+            let blockId: string | null = null;
+            let taskPosition: number | null = null;
+
+            if (isLegacyTask) {
+                blockId = (editor.getAttributes('taskItem')?.id ?? null) as
+                    | string
+                    | null;
+                taskPosition = findCurrentTaskPosition(editor);
+            } else {
+                const currentBlockTask = findCurrentBlockTask(editor);
+                blockId = currentBlockTask?.blockId ?? null;
+                taskPosition = currentBlockTask?.position ?? null;
+            }
 
             const didDelete = editor.chain().focus().deleteRange(range).run();
             if (!didDelete) {

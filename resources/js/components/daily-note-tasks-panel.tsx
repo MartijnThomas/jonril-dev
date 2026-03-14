@@ -267,6 +267,10 @@ export function DailyNoteTasksPanel({
                                                           ]
                                                 }
                                                 language={language}
+                                                canceled={
+                                                    task.task_status ===
+                                                    'canceled'
+                                                }
                                                 hideStatusTokens
                                                 priorityStyle="range"
                                                 hidePriorityTokens

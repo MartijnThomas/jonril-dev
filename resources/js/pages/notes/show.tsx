@@ -10,7 +10,13 @@ type Props = {
     noteId: string;
     noteUpdateUrl: string;
     properties: any;
-    linkableNotes: { id: string; title: string; path?: string; href?: string }[];
+    linkableNotes: {
+        id: string;
+        title: string;
+        path?: string;
+        href?: string;
+        headings?: { id: string; title: string; level: number | null }[];
+    }[];
     breadcrumbs: BreadcrumbItem[];
     language: 'nl' | 'en';
     noteType: string | null;
@@ -151,8 +157,8 @@ export default function Dashboard({
             saveStatus={saveStatus}
             saveLastSavedAt={saveLastSavedAt}
             statusBarContent={
-                <div className="flex w-full items-center gap-3">
-                    <div className="flex items-center gap-3">
+                <div className="flex w-full min-w-0 items-center gap-3 overflow-hidden">
+                    <div className="flex min-w-0 items-center gap-3 overflow-hidden">
                         <span>Words {contentStats.words}</span>
                         <span>Chars {contentStats.characters}</span>
                         <StatusBarTaskCounter
@@ -165,7 +171,7 @@ export default function Dashboard({
                                 completed: contentStats.tasksCompleted,
                             }}
                         />
-                        <span>
+                        <span className="truncate">
                             Indent {contentStats.indent} | Position {contentStats.position} | Kind {contentStats.kind}
                         </span>
                     </div>

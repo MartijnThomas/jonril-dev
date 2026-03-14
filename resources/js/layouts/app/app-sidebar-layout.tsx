@@ -134,7 +134,7 @@ export default function AppSidebarLayout({
             />
             <AppSidebar />
             <AppContent variant="sidebar">
-                <div className="flex min-h-0 flex-1 w-full">
+                <div className="flex min-h-0 min-w-0 flex-1 w-full">
                     <div className="flex min-w-0 flex-1 flex-col">
                         <AppSidebarHeader
                             breadcrumbs={breadcrumbs}
@@ -144,7 +144,7 @@ export default function AppSidebarLayout({
                                 setIsRightSidebarOpen((open) => !open)
                             }
                         />
-                        <div className="min-h-0 flex-1 overflow-x-clip">
+                        <div className="min-h-0 flex-1">
                             {children}
                         </div>
                         {bottomPane}

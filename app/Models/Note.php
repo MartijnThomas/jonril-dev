@@ -138,6 +138,7 @@ class Note extends Model
         return [
             'content' => 'json',
             'properties' => 'array',
+            'meta' => 'array',
             'journal_date' => 'date',
             'word_count' => 'integer',
         ];
@@ -186,6 +187,7 @@ class Note extends Model
 
             if ($cursor->relationLoaded('parent')) {
                 $cursor = $cursor->parent;
+
                 continue;
             }
 
