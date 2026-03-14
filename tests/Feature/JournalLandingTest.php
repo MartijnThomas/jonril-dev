@@ -17,9 +17,8 @@ test('journal landing redirects authenticated users to today daily note', functi
 
     $response = $this->get(route('journal.landing'));
 
-    $response->assertRedirect(route('journal.show', [
+    $response->assertRedirect(route('journal.show.by-period', [
         'workspace' => $workspace?->slug,
-        'granularity' => 'daily',
         'period' => '2026-03-07',
     ], absolute: false));
 
@@ -35,9 +34,8 @@ test('notes landing redirects authenticated users to today daily note', function
 
     $response = $this->get(route('notes.landing'));
 
-    $response->assertRedirect(route('journal.show', [
+    $response->assertRedirect(route('journal.show.by-period', [
         'workspace' => $workspace?->slug,
-        'granularity' => 'daily',
         'period' => '2026-03-07',
     ], absolute: false));
 

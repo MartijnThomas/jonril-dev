@@ -135,3 +135,38 @@ Task behavior in panel:
 - Counter format is `closed_or_done/total`.
 - Grouping is by source note.
 - Toggling a task checkbox updates the task status directly from the panel.
+
+### How tasks are considered related
+
+Tasks are included in the related panel when one or more of these match:
+
+1. Date relation
+   - Due date token (`>YYYY-MM-DD`)
+   - Deadline token (`>>YYYY-MM-DD`)
+2. Wiki-link relation
+   - A task contains a wiki-link to the current note.
+3. Context relation
+   - The note `context` property matches a mention token used in the task content.
+
+This means a task can appear as related even when it lives in another note.
+
+## Spellcheck (editor settings)
+
+Spellcheck in the editor currently supports a per-note enable/disable toggle.
+
+1. `spellcheck` property
+   - `false`, `0`, `off`, `no` disables spellcheck for that note.
+   - Any other value (or no value) keeps spellcheck enabled.
+2. Browser requirement
+   - The selected language dictionary must exist in your browser/OS spellchecker.
+   - If a dictionary is missing, spellcheck may continue using another installed language.
+
+Examples:
+
+```text
+spellcheck: true
+```
+
+```text
+spellcheck: false
+```

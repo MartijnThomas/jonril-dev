@@ -106,6 +106,9 @@ export default function Dashboard({
         tasksCanceled: number;
         tasksMigrated: number;
         tasksOpen: number;
+        indent: number;
+        position: number;
+        kind: string;
     }>({
         words: 0,
         characters: 0,
@@ -115,6 +118,9 @@ export default function Dashboard({
         tasksCanceled: 0,
         tasksMigrated: 0,
         tasksOpen: 0,
+        indent: 0,
+        position: 0,
+        kind: 'paragraph',
     });
     const pageTitle = breadcrumbs.at(-1)?.title ?? 'Note';
     const handleContentStatsChange = useCallback((next: typeof contentStats) => {
@@ -127,7 +133,10 @@ export default function Dashboard({
                 current.tasksCompleted === next.tasksCompleted &&
                 current.tasksCanceled === next.tasksCanceled &&
                 current.tasksMigrated === next.tasksMigrated &&
-                current.tasksOpen === next.tasksOpen
+                current.tasksOpen === next.tasksOpen &&
+                current.indent === next.indent &&
+                current.position === next.position &&
+                current.kind === next.kind
             ) {
                 return current;
             }
@@ -156,6 +165,9 @@ export default function Dashboard({
                                 completed: contentStats.tasksCompleted,
                             }}
                         />
+                        <span>
+                            Indent {contentStats.indent} | Position {contentStats.position} | Kind {contentStats.kind}
+                        </span>
                     </div>
                     <div className="ml-auto flex items-center gap-3">
                         {editorMode === 'block' ? (

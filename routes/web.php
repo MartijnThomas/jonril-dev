@@ -20,9 +20,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         $workspace = $request->user()?->currentWorkspace();
         abort_if(! $workspace, 403, 'No workspace available.');
 
-        return redirect()->route('journal.show', [
+        return redirect()->route('journal.show.by-period', [
             'workspace' => $workspace->slug,
-            'granularity' => 'daily',
             'period' => now()->toDateString(),
         ]);
     })->name('journal.landing');
@@ -31,9 +30,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         $workspace = $request->user()?->currentWorkspace();
         abort_if(! $workspace, 403, 'No workspace available.');
 
-        return redirect()->route('journal.show', [
+        return redirect()->route('journal.show.by-period', [
             'workspace' => $workspace->slug,
-            'granularity' => 'daily',
             'period' => now()->toDateString(),
         ]);
     })->name('notes.landing');
@@ -50,6 +48,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('w/{workspace:slug}/journal/{granularity}/{period}', [NotesController::class, 'showJournalScoped'])
         ->name('journal.show');
+    Route::get('w/{workspace:slug}/journal/{period}', [NotesController::class, 'showJournalScopedByPeriod'])
+        ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)')
+        ->name('journal.show.by-period');
 
     Route::patch('notes/{noteId}/rename', [NotesController::class, 'rename'])
         ->whereUuid('noteId')
@@ -75,6 +76,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Legacy non-workspace-scoped URLs (kept for backward compatibility).
     Route::get('journal/{granularity}/{period}', [NotesController::class, 'showJournal'])
         ->name('journal.show.legacy');
+    Route::get('journal/{period}', [NotesController::class, 'showJournalByPeriod'])
+        ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)')
+        ->name('journal.show.legacy.by-period');
     Route::get('notes/{note}', [NotesController::class, 'show'])
         ->where('note', '.*')
         ->name('notes.show.legacy');

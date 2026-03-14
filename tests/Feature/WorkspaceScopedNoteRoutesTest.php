@@ -97,6 +97,26 @@ test('workspace scoped journal url resolves for workspace', function () {
         ->where('journalPeriod', '2026-03-10'));
 });
 
+test('workspace scoped simplified journal period url resolves for workspace', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    expect($workspace)->not()->toBeNull();
+
+    $response = $this
+        ->actingAs($user)
+        ->get(route('journal.show.by-period', [
+            'workspace' => $workspace->slug,
+            'period' => '2026-03',
+        ], absolute: false));
+
+    $response->assertOk();
+    $response->assertInertia(fn (Assert $page) => $page
+        ->where('noteType', Note::TYPE_JOURNAL)
+        ->where('journalGranularity', 'monthly')
+        ->where('journalPeriod', '2026-03'));
+});
+
 test('workspace scoped note url returns 403 for non member workspace', function () {
     $owner = User::factory()->create();
     $outsider = User::factory()->create();

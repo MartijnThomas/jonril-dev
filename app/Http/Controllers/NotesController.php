@@ -181,6 +181,33 @@ class NotesController extends Controller
         );
     }
 
+    public function showJournalByPeriod(Request $request, string $period)
+    {
+        $granularity = $this->resolveJournalGranularityFromPeriod($period);
+        abort_if($granularity === null, 404);
+
+        return $this->showJournalForWorkspace(
+            request: $request,
+            workspace: $this->currentWorkspace(),
+            granularity: $granularity,
+            period: $period,
+        );
+    }
+
+    public function showJournalScopedByPeriod(Request $request, Workspace $workspace, string $period)
+    {
+        $this->assertWorkspaceMembership($workspace);
+        $granularity = $this->resolveJournalGranularityFromPeriod($period);
+        abort_if($granularity === null, 404);
+
+        return $this->showJournalForWorkspace(
+            request: $request,
+            workspace: $workspace,
+            granularity: $granularity,
+            period: $period,
+        );
+    }
+
     private function showJournalForWorkspace(
         Request $request,
         Workspace $workspace,
@@ -200,6 +227,29 @@ class NotesController extends Controller
         }
 
         return $this->renderNotePage($note);
+    }
+
+    private function resolveJournalGranularityFromPeriod(string $period): ?string
+    {
+        $normalizedPeriod = trim($period);
+        $granularities = [
+            Note::JOURNAL_DAILY,
+            Note::JOURNAL_WEEKLY,
+            Note::JOURNAL_MONTHLY,
+            Note::JOURNAL_YEARLY,
+        ];
+
+        foreach ($granularities as $granularity) {
+            try {
+                $this->journalNoteService->parsePeriod($granularity, $normalizedPeriod);
+
+                return $granularity;
+            } catch (InvalidArgumentException) {
+                continue;
+            }
+        }
+
+        return null;
     }
 
     public function update(Request $request, string $note)

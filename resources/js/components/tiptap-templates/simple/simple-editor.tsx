@@ -80,17 +80,40 @@ const hasVisibleProperties = (properties: DocumentPropertiesValue): boolean => {
     return false;
 };
 
-const resolveEditorLanguage = (
+const resolveEditorSpellcheck = (
     properties: DocumentPropertiesValue,
-    fallbackLanguage: 'nl' | 'en',
-): string => {
-    const propertyLanguage = properties.language;
+): boolean => {
+    const propertySpellcheck = properties.spellcheck;
 
-    if (typeof propertyLanguage === 'string' && propertyLanguage.trim() !== '') {
-        return propertyLanguage.trim();
+    if (typeof propertySpellcheck !== 'string') {
+        return true;
     }
 
-    return fallbackLanguage;
+    const normalized = propertySpellcheck.trim().toLowerCase();
+
+    if (normalized === '') {
+        return true;
+    }
+
+    if (
+        normalized === 'false' ||
+        normalized === '0' ||
+        normalized === 'off' ||
+        normalized === 'no'
+    ) {
+        return false;
+    }
+
+    if (
+        normalized === 'true' ||
+        normalized === '1' ||
+        normalized === 'on' ||
+        normalized === 'yes'
+    ) {
+        return true;
+    }
+
+    return true;
 };
 
 function serializeEditorContent(content: SimpleEditorContent): string {
@@ -246,6 +269,9 @@ type SimpleEditorProps = {
         tasksCanceled: number;
         tasksMigrated: number;
         tasksOpen: number;
+        indent: number;
+        position: number;
+        kind: string;
     }) => void;
 };
 
@@ -307,9 +333,9 @@ function SimpleEditorComponent({
     const [showDocumentProperties, setShowDocumentProperties] = useState(
         hasVisibleProperties(properties),
     );
-    const editorLanguage = useMemo(
-        () => resolveEditorLanguage(documentProperties, language),
-        [documentProperties, language],
+    const editorSpellcheckEnabled = useMemo(
+        () => resolveEditorSpellcheck(documentProperties),
+        [documentProperties],
     );
     const noteIconProp = documentProperties.icon;
     const noteIconColorProp = documentProperties['icon-color'];
@@ -400,7 +426,7 @@ function SimpleEditorComponent({
                     autocomplete: 'off',
                     autocorrect: 'on',
                     autocapitalize: 'sentences',
-                    spellcheck: 'true',
+                    spellcheck: editorSpellcheckEnabled ? 'true' : 'false',
                     lang: language,
                     'aria-label': 'Main content area, start typing to enter text.',
                     'data-editor-mode': editorMode,
@@ -490,8 +516,12 @@ function SimpleEditorComponent({
             return;
         }
 
-        editor.view.dom.setAttribute('lang', editorLanguage);
-    }, [editor, editorLanguage]);
+        editor.view.dom.setAttribute('lang', language);
+        editor.view.dom.setAttribute(
+            'spellcheck',
+            editorSpellcheckEnabled ? 'true' : 'false',
+        );
+    }, [editor, language, editorSpellcheckEnabled]);
 
     useEffect(() => {
         if (!editor) {
@@ -653,6 +683,16 @@ function SimpleEditorComponent({
             let tasksCanceled = 0;
             let tasksMigrated = 0;
             let tasksOpen = 0;
+            const currentParent = editor.state.selection.$from.parent;
+            const currentBlockIndent =
+                currentParent.type.name === 'paragraph'
+                    ? Math.max(0, Number(currentParent.attrs.indent ?? 0))
+                    : 0;
+            const currentBlockKind =
+                currentParent.type.name === 'heading'
+                    ? `h${Math.min(6, Math.max(1, Number(currentParent.attrs.level ?? 1)))}`
+                    : 'paragraph';
+            const currentCursorPosition = editor.state.selection.$from.parentOffset;
 
             editor.state.doc.descendants((node) => {
                 const isLegacyTask = node.type.name === 'taskItem';
@@ -695,6 +735,9 @@ function SimpleEditorComponent({
                 tasksCanceled,
                 tasksMigrated,
                 tasksOpen,
+                indent: currentBlockIndent,
+                position: currentCursorPosition,
+                kind: currentBlockKind,
             });
         };
 
@@ -738,6 +781,10 @@ function SimpleEditorComponent({
     return (
         <div className="w-full">
             <EditorContext.Provider value={{ editor }}>
+                {editor && editorMode === 'block' ? (
+                    <BlockNodeToolbar editor={editor} />
+                ) : null}
+
                 {editorMode !== 'block' ? (
                     <TaskMigratePicker
                         open={taskMigratePicker.open}
@@ -802,10 +849,6 @@ function SimpleEditorComponent({
                 ) : null}
 
                 <div className="mx-auto w-full max-w-3xl">
-                    {editor && editorMode === 'block' ? (
-                        <BlockNodeToolbar editor={editor} />
-                    ) : null}
-
                     {editor && editorMode === 'block' ? (
                         <BlockTokenSuggestionMenu
                             editor={editor}

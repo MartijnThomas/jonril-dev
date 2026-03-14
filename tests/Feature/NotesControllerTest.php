@@ -1006,6 +1006,30 @@ test('journal route creates and reuses daily journal notes', function () {
     )->toBe(1);
 });
 
+test('legacy simplified journal period url resolves with inferred granularity', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $response = $this
+        ->actingAs($user)
+        ->get('/journal/2026-W11');
+
+    $response->assertInertia(fn (Assert $page) => $page
+        ->where('noteType', 'journal')
+        ->where('journalGranularity', 'weekly')
+        ->where('journalPeriod', '2026-W11'),
+    );
+
+    $journal = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->where('type', 'journal')
+        ->where('journal_granularity', 'weekly')
+        ->whereDate('journal_date', '2026-03-09')
+        ->first();
+
+    expect($journal)->not()->toBeNull();
+});
+
 test('update uses the first h1 as note title', function () {
     $user = User::factory()->create();
     $note = $user->notes()->create([

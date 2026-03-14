@@ -1,179 +1,210 @@
 # Block-tree editor
 
-This document is the source of truth for the `block` editor architecture.
+This document is the source of truth for the `block` editor architecture and current behavior.
 
 ## Architectural decision
 
-`block` is no longer a list-based editor.
+`block` is a block editor, not a list-container editor.
 
-It is a block editor.
+Core principles:
 
-That means:
+1. The editable unit is a block (`heading` or `paragraph` node).
+2. Paragraph variants are block-local styles, not different list nodes.
+3. Indentation is stored on the current paragraph (`indent` attr).
+4. Converting a block affects only that block, never siblings.
+5. Legacy runtime compatibility is not a design constraint for block mode.
 
-- the core unit is a block
-- a block is edited independently
-- indentation is block-local state
-- old list-container semantics are not part of the target design
+## Runtime boundaries
 
-## Hard constraints
+1. Workspace flag controls mode: `editor_mode = legacy | block`.
+2. One editor shell is reused for both modes.
+3. Block mode is a separate extension pack.
+4. Bubble menu and mobile legacy toolbar are disabled in block mode.
+5. Status bar shows `BLOCK MODE` when active.
 
-These constraints are intentional and should not be relaxed during implementation:
+## Data model (current)
 
-1. `block` must not reuse the current list / task / checklist architecture as its internal model.
-2. `block` must not use list containers as the source of truth for editing behavior.
-3. Converting one block's state must never affect siblings.
-4. Indentation must be stored on the block itself.
-5. The first implementation should stay extremely small: headings and paragraphs first.
+### Nodes
 
-## Reset decision
+1. `doc`
+2. `heading`
+3. `paragraph`
 
-The earlier `block` experiment should be treated as abandoned scaffolding.
+### Paragraph attrs
 
-It introduced too much hidden carry-over from the legacy editor:
+1. `indent: number`
+2. `blockStyle: paragraph | bullet | ordered | quote | task`
+3. `order: number` (for ordered style)
+4. `checked: boolean` (task style)
+5. `taskStatus: backlog | in_progress | canceled | null`
+6. `dueDate: string | null` (`YYYY-MM-DD`)
+7. `deadlineDate: string | null` (`YYYY-MM-DD`)
+8. `startedAt: string | null`
+9. `completedAt: string | null`
+10. `backlogPromotedAt: string | null`
 
-- list-based node thinking
-- list-based toolbar behavior
-- list-based conversion assumptions
-- compatibility-shaped internal structure
+## Implemented behavior
 
-That path is no longer the implementation direction.
+### Headings
 
-## First implementation target
+1. Toolbar supports `Paragraph`, `H1`-`H6`.
+2. Headings use real editable `#` prefix text.
+3. Prefix is hidden when heading is unfocused, shown when focused.
+4. Editing `#` count changes level.
+5. Removing heading prefix from active heading converts to paragraph.
+6. Typing `# `, `## `, ..., `###### ` at paragraph start creates heading.
 
-Start with only:
+### Paragraph styles
 
-- heading
-- paragraph
+1. `- ` creates bullet style paragraph.
+2. `n. ` creates ordered style paragraph (`n` is any positive integer).
+3. `> ` creates quote style paragraph.
+4. `* ` creates task style paragraph.
+5. Style buttons are toggleable:
+   - click active style to unset back to `paragraph`
+   - click different style to replace in place
 
-And only one block-level attr on paragraphs:
+### Indent / dedent
 
-- `indent`
+1. `Tab` increases paragraph `indent`.
+2. `Shift-Tab` decreases paragraph `indent`.
+3. `Backspace` at block start:
+   - first removes block style marker (for styled paragraphs)
+   - next dedents paragraph
+4. Dedicated toolbar buttons exist for indent / dedent.
 
-There are no list, task, checklist, or quote styles in the current `block` implementation.
+### Inline formatting
 
-## Editing behavior
+Block mode currently uses native TipTap marks for:
 
-### `Tab`
+1. bold
+2. italic
+3. underline
+4. strike
+5. highlight
+6. inline code
 
-- increase the current block's `indent`
-- affect only the current block
+`Shift-Enter` inserts soft line breaks.
 
-### `Shift-Tab`
+### Task status and click flow
 
-- decrease the current block's `indent`
-- if the block is already at the highest level, do nothing
+Status prefixes are text tokens at task start:
 
-### `Backspace`
+1. `? ` = backlog
+2. `/ ` = in progress
+3. `- ` at start of an existing task = canceled
 
-- if the cursor is before the first character in the block, behave like `Shift-Tab`
-- affect only the current block
-- never mutate a parent or sibling as a side effect
+Prefix visibility:
 
-## Deliberate simplification
+1. visible/editable when task is focused
+2. hidden when task is unfocused
 
-The first implementation does **not** start with:
+Marker click behavior:
 
-- nested list containers
-- subtree movement
-- compatibility-driven custom list nodes
-- tasks
-- checklists
-- quotes
-- custom markers
-- bubble menu
-- mobile toolbar
+1. in progress -> checked (and remove `/ `)
+2. checked -> open
+3. open -> checked
+4. backlog -> open (unchecked) and record pickup (remove `? `)
 
-Those concerns can come later if the flat block model proves out.
+Timestamps:
 
-The immediate goal is to get a clean, predictable, minimal block editor working first.
+1. `startedAt` when status becomes `in_progress`
+2. `completedAt` when task becomes checked
+3. `backlogPromotedAt` when backlog is picked up via click
 
-## Rendering
+### Task due/deadline
 
-Rendering is secondary to the model.
+Task text supports:
 
-For the first slice:
+1. `>YYYY-MM-DD` for due date
+2. `>>YYYY-MM-DD` for deadline
 
-- headings render as headings
-- paragraphs render with left padding based on `indent`
-- there are no markers or checkboxes
-- a sticky toolbar at the top of the editor exposes only:
-  - buttons for `Paragraph`
-  - buttons for `H1`
-  - buttons for `H2`
-  - buttons for `H3`
-  - buttons for `H4`
-  - buttons for `H5`
-  - buttons for `H6`
+Behavior:
 
-We will iterate on visuals later.
+1. Tokens are parsed from task text.
+2. Parsed values sync into task attrs (`dueDate`, `deadlineDate`).
+3. Raw token is shown when active.
+4. Raw token is hidden when inactive and replaced by localized display token.
 
-## Indexer expectations
+### Task priority
 
-For now there is no task indexing behavior in `block` mode. The mode is heading/paragraph only.
+Task text supports priority markers at the start of task content:
 
-## Migration approach
+1. `!` low
+2. `!!` medium
+3. `!!!` high
 
-There is no legacy runtime compatibility inside the editor.
+Allowed after status prefix:
 
-That means:
+1. `? ! ...`
+2. `/ !! ...`
 
-- `block` mode accepts only block documents
-- old note JSON is not translated inside the editor runtime
-- any future conversion from legacy note JSON must be a separate migration or import step
-- legacy shape must not influence the internal block editor model
+Behavior:
 
-## What stays valid from previous work
+1. Priority token is hidden when task is unfocused and shown when focused.
+2. Text after priority token is highlighted according to priority level.
 
-These pieces are still useful and should stay:
+### Mentions and hashtags (inline text)
 
-- workspace-level `editor_mode`
-- one editor shell
-- block mode status indicator
-- isolated `block` extension entry point
+1. Block mode recognizes inline `@mention` and `#hashtag` text anywhere in headings/paragraphs.
+2. Inline styling is decoration-based (plain text remains plain text).
+3. Autocomplete uses existing `workspaceSuggestions` payload from DB.
+4. No new save flow was introduced for this step.
 
-## What must be removed from `block`
+- TODO: Currently new mentions and hashtags are not preserved in the DB.
 
-The active `block` implementation should remove:
+### Related tasks integration
 
-- legacy list behavior
-- legacy task / checklist behavior
-- list-container-based keyboard behavior
-- list-based toolbar semantics
-- compatibility-shaped internal schema decisions
+The related tasks panel is fed by indexed task fragments and supports block-mode task metadata.
 
-## Rollout checklist
+1. Due/deadline:
+   - `>YYYY-MM-DD` and `>>YYYY-MM-DD` are indexed and exposed as `due_date_token` / `deadline_date_token` fragments.
+   - These dates are available for related-task filtering and rendering.
+2. Wiki-link:
+   - Task content wiki-link marks are indexed as `wikilink` fragments (`note_id`, `href`, `text`).
+   - Related-task matching can use these links when resolving note relationships.
+3. Context:
+   - Note `context` property is converted to normalized mention-style tokens.
+   - Tasks containing matching mentions are included in related tasks for that note context.
 
-Stable rollout scaffolding:
+## Migration and compatibility
 
-- ~~Add a workspace-level `editor_mode` flag~~
-- ~~Keep one editor shell and switch behavior by extension pack~~
-- ~~Add a visible indicator that block mode is active~~
+1. Block mode accepts block documents only.
+2. Legacy note JSON is not translated at runtime in block mode.
+3. Future legacy -> block conversion is a separate migration/import concern.
 
-Architectural reset:
+## Known decisions
 
-- ~~Decide that `block` is a real block editor, not a list editor~~
-- ~~Abandon the list-based `block` experiment~~
-- ~~Lock the design to headings + paragraphs first~~
+1. Keep native TipTap mark behavior for inline formatting for now.
+2. Revisit markdown-visible mark tokens later if needed.
+3. Keep block implementation split by domain files to avoid extension bloat.
 
-Next implementation slices:
+## Next planned area
 
-- ~~Strip `block` mode back to a minimal clean pack~~
-- ~~Define the minimal block schema for headings and paragraphs~~
-- ~~Add paragraph-local `indent`~~
-- ~~Implement block-local `Tab`, `Shift-Tab`, and `Backspace`~~
-- ~~Disable block-mode bubble menu and mobile toolbar~~
-- Add focused regression tests for block-local editing behavior
-- Revisit styling after the minimal editor is stable
-- Revisit indexing after the minimal editor is stable
+### Wiki-links in block mode
 
-## Implementation guidance
+Accepted requirements:
 
-- avoid one huge extension file
-- split by domain
+CREATE A NEW BLOCK ONLY EXTENSION FOR THIS. NO REUSING OF OTHER ASPECTS.
 
-Suggested domains:
+1. Support both existing and non-existing targets at link creation time.
+2. Persist non-existing targets as first-class link targets (do not discard unresolved paths).
+3. Keep link metadata in sync once a previously non-existing target note is later created.
+4. Re-open the picker when an existing wiki-link is edited (path and/or title edits).
+5. Support custom link titles using `[[path/to/note|Custom Title]]`.
+6. Edge deletion behavior should remove the whole wiki-link atomically.
+7. Picker should include regular notes directly.
+8. Picker should resolve journal notes progressively based on query input (__Please discuss this before implemenation__):
+   - avoid preloading huge date ranges
+   - narrow candidate generation by typed query (for example month/year fragments like `januari`)
+   - avoid returning hundreds of journal candidates by default.
 
-- block schema
-- block attrs and rendering
-- block keyboard behavior
-- block editor specific tests
+### Spellcheck
+Implemented behavior:
+
+1. Note property `spellcheck` can disable browser spellcheck (`false|0|off|no`).
+2. Any other value (or missing property) keeps spellcheck enabled.
+3. Per-note `language` override was removed after browser-level reliability issues.
+
+### Allow pasting of content
+Add the ability to paste content to the editor. For example I should be able to add this markdown file and it should render properly. And when I add a copied html it should work, the same for copied text-editor content.

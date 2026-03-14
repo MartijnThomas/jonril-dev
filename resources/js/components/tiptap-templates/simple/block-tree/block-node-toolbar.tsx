@@ -1,7 +1,9 @@
 import type { Editor } from '@tiptap/react';
 import {
+    AtSign,
     Bold,
     Code2,
+    Hash,
     Heading1,
     Heading2,
     Heading3,
@@ -14,6 +16,8 @@ import {
     IndentIncrease,
     List,
     ListOrdered,
+    Link2,
+    NotebookText,
     Pilcrow,
     Quote,
     Strikethrough,
@@ -51,6 +55,12 @@ const BLOCK_MARK_OPTIONS = [
     { value: 'highlight', label: 'Highlight', icon: Highlighter },
 ] as const;
 
+const BLOCK_INSERT_OPTIONS = [
+    { value: 'mention', label: 'Insert mention', icon: AtSign, token: '@' },
+    { value: 'hashtag', label: 'Insert hashtag', icon: Hash, token: '#' },
+    { value: 'wikilink', label: 'Insert wiki-link', icon: NotebookText, token: '[[' },
+] as const;
+
 function getCurrentBlockValue(editor: Editor): string {
     const currentBlock = getCurrentBlockNode(editor);
 
@@ -67,38 +77,6 @@ function getCurrentBlockValue(editor: Editor): string {
     const attrs = normalizeParagraphAttrs(currentBlock.node.attrs);
 
     return attrs.blockStyle;
-}
-
-function getCurrentBlockIndent(editor: Editor): number {
-    const currentBlock = getCurrentBlockNode(editor);
-
-    if (!currentBlock || currentBlock.type !== 'paragraph') {
-        return 0;
-    }
-
-    return Number(currentBlock.node.attrs.indent ?? 0);
-}
-
-function getCurrentBlockDebugLabel(editor: Editor): string {
-    const currentBlock = getCurrentBlockNode(editor);
-
-    if (!currentBlock) {
-        return 'unknown';
-    }
-
-    if (currentBlock.type === 'heading') {
-        const level = Number(currentBlock.node.attrs.level ?? 1);
-
-        return `type=heading kind=h${Math.min(6, Math.max(1, level))}`;
-    }
-
-    const attrs = normalizeParagraphAttrs(currentBlock.node.attrs);
-
-    return `type=paragraph kind=${attrs.blockStyle}`;
-}
-
-function getCurrentCursorOffset(editor: Editor): number {
-    return editor.state.selection.$from.parentOffset;
 }
 
 function canToggleMark(editor: Editor, mark: BlockMarkType): boolean {
@@ -128,15 +106,6 @@ export function BlockNodeToolbar({
     const [currentValue, setCurrentValue] = useState(() =>
         getCurrentBlockValue(editor),
     );
-    const [currentIndent, setCurrentIndent] = useState(() =>
-        getCurrentBlockIndent(editor),
-    );
-    const [currentBlockLabel, setCurrentBlockLabel] = useState(() =>
-        getCurrentBlockDebugLabel(editor),
-    );
-    const [currentCursorOffset, setCurrentCursorOffset] = useState(() =>
-        getCurrentCursorOffset(editor),
-    );
     const [currentMarks, setCurrentMarks] = useState<Record<BlockMarkType, boolean>>(() =>
         getCurrentMarkState(editor),
     );
@@ -144,9 +113,6 @@ export function BlockNodeToolbar({
     useEffect(() => {
         const updateValue = () => {
             setCurrentValue(getCurrentBlockValue(editor));
-            setCurrentIndent(getCurrentBlockIndent(editor));
-            setCurrentBlockLabel(getCurrentBlockDebugLabel(editor));
-            setCurrentCursorOffset(getCurrentCursorOffset(editor));
             setCurrentMarks(getCurrentMarkState(editor));
         };
 
@@ -218,14 +184,104 @@ export function BlockNodeToolbar({
         editor.commands.dedentBlockParagraph();
     };
 
+    const handleInsertToken = (token: string) => {
+        const { state } = editor;
+        const { from } = state.selection;
+        const $from = state.selection.$from;
+        const parentOffset = $from.parentOffset;
+        const parentText = $from.parent.textContent ?? '';
+        const previousCharacter =
+            parentOffset > 0 ? parentText.charAt(parentOffset - 1) : '';
+        const needsLeadingSpace =
+            parentOffset > 0 && previousCharacter !== '' && !/\s/u.test(previousCharacter);
+
+        editor
+            .chain()
+            .focus()
+            .insertContentAt(from, `${needsLeadingSpace ? ' ' : ''}${token}`)
+            .run();
+    };
+
+    const normalizeLinkHref = (value: string): string => {
+        const trimmed = value.trim();
+        if (trimmed === '') {
+            return '';
+        }
+
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(trimmed)) {
+            return `mailto:${trimmed}`;
+        }
+
+        if (/^(?:[a-z][a-z0-9+.-]*:|#|\/)/iu.test(trimmed)) {
+            return trimmed;
+        }
+
+        return `https://${trimmed}`;
+    };
+
+    const handleLinkAction = () => {
+        const currentHref = String(editor.getAttributes('link').href ?? '');
+        const input = window.prompt(
+            'Enter URL (leave empty to remove link)',
+            currentHref || 'https://',
+        );
+
+        if (input === null) {
+            return;
+        }
+
+        const href = normalizeLinkHref(input);
+        const { from, empty } = editor.state.selection;
+
+        if (href === '') {
+            editor.chain().focus().extendMarkRange('link').unsetLink().run();
+            return;
+        }
+
+        if (empty) {
+            editor
+                .chain()
+                .focus()
+                .insertContentAt(from, [
+                    {
+                        type: 'text',
+                        text: href,
+                        marks: [
+                            {
+                                type: 'link',
+                                attrs: { href },
+                            },
+                        ],
+                    },
+                    {
+                        type: 'text',
+                        text: ' ',
+                    },
+                ])
+                .setTextSelection(from + href.length + 1)
+                .run();
+
+            return;
+        }
+
+        editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
+    };
+
     const currentBlock = getCurrentBlockNode(editor);
     const isParagraphBlock = currentBlock?.type === 'paragraph';
+    const squareButtonBaseClass =
+        'size-8 rounded-md p-0 [&>svg]:size-4';
+    const activeSquareButtonClass = `${squareButtonBaseClass} border border-border/80 bg-background text-foreground shadow-xs`;
+    const activeSquareButtonHoverClass =
+        `${activeSquareButtonClass} hover:border-border hover:bg-accent/40 hover:text-foreground`;
+    const inactiveSquareButtonClass = `${squareButtonBaseClass} border border-transparent text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground`;
 
     return (
-        <div className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-8 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-            <div className="mx-auto w-full max-w-3xl">
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-muted/35 p-2 shadow-xs">
-                    <div className="flex flex-wrap gap-2">
+        <div className="sticky top-16 z-30 w-full border-y border-border/60 bg-background/95 shadow-xs backdrop-blur supports-[backdrop-filter]:bg-background/85">
+            <div className="w-full px-2 py-1.5 md:px-4">
+                <div className="overflow-x-auto">
+                    <div className="mx-auto flex w-max min-w-max items-center gap-2.5">
+                        <div className="flex items-center gap-2">
                         {BLOCK_NODE_OPTIONS.map((option) => {
                             const isActive = currentValue === option.value;
                             const Icon = option.icon;
@@ -238,8 +294,8 @@ export function BlockNodeToolbar({
                                     variant={isActive ? 'default' : 'ghost'}
                                     className={
                                         isActive
-                                            ? 'rounded-lg shadow-xs'
-                                            : 'rounded-lg text-muted-foreground hover:text-foreground'
+                                            ? activeSquareButtonHoverClass
+                                            : inactiveSquareButtonClass
                                     }
                                     onClick={() => handleValueChange(option.value)}
                                     aria-pressed={isActive}
@@ -251,75 +307,114 @@ export function BlockNodeToolbar({
                                 </Button>
                             );
                         })}
+                        </div>
+
+                        <div className="h-6 w-px bg-border/60" />
+
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={inactiveSquareButtonClass}
+                                onClick={handleIndent}
+                                aria-label="Indent block"
+                                title="Indent block"
+                                disabled={!isParagraphBlock}
+                            >
+                                <IndentIncrease className="size-4" />
+                                <span className="sr-only">Indent block</span>
+                            </Button>
+
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={inactiveSquareButtonClass}
+                                onClick={handleDedent}
+                                aria-label="Dedent block"
+                                title="Dedent block"
+                                disabled={!isParagraphBlock}
+                            >
+                                <IndentDecrease className="size-4" />
+                                <span className="sr-only">Dedent block</span>
+                            </Button>
+                        </div>
+
+                        <div className="h-6 w-px bg-border/60" />
+
+                        <div className="flex items-center gap-2">
+                            {BLOCK_MARK_OPTIONS.map((option) => {
+                                const isActive = currentMarks[option.value];
+                                const isDisabled = !canToggleMark(editor, option.value);
+                                const Icon = option.icon;
+
+                                return (
+                                    <Button
+                                        key={option.value}
+                                        type="button"
+                                        size="sm"
+                                        variant={isActive ? 'default' : 'ghost'}
+                                        className={
+                                            isActive
+                                                ? activeSquareButtonHoverClass
+                                                : inactiveSquareButtonClass
+                                        }
+                                        onClick={() => handleMarkToggle(option.value)}
+                                        aria-pressed={isActive}
+                                        aria-label={option.label}
+                                        title={option.label}
+                                        disabled={isDisabled}
+                                    >
+                                        <Icon className="size-4" />
+                                        <span className="sr-only">{option.label}</span>
+                                    </Button>
+                                );
+                            })}
+
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant={editor.isActive('link') ? 'default' : 'ghost'}
+                                className={
+                                    editor.isActive('link')
+                                        ? activeSquareButtonHoverClass
+                                        : inactiveSquareButtonClass
+                                }
+                                onClick={handleLinkAction}
+                                aria-pressed={editor.isActive('link')}
+                                aria-label="Insert or edit link"
+                                title="Insert or edit link"
+                            >
+                                <Link2 className="size-4" />
+                                <span className="sr-only">Insert or edit link</span>
+                            </Button>
+                        </div>
+
+                        <div className="h-6 w-px bg-border/60" />
+
+                        <div className="flex items-center gap-2">
+                            {BLOCK_INSERT_OPTIONS.map((option) => {
+                                const Icon = option.icon;
+
+                                return (
+                                    <Button
+                                        key={option.value}
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className={inactiveSquareButtonClass}
+                                        onClick={() => handleInsertToken(option.token)}
+                                        aria-label={option.label}
+                                        title={option.label}
+                                    >
+                                        <Icon className="size-4" />
+                                        <span className="sr-only">{option.label}</span>
+                                    </Button>
+                                );
+                            })}
+                        </div>
                     </div>
-
-                    <div className="h-7 w-px bg-border/70" />
-
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="rounded-lg text-muted-foreground hover:text-foreground"
-                            onClick={handleIndent}
-                            aria-label="Indent block"
-                            title="Indent block"
-                            disabled={!isParagraphBlock}
-                        >
-                            <IndentIncrease className="size-4" />
-                            <span className="sr-only">Indent block</span>
-                        </Button>
-
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="rounded-lg text-muted-foreground hover:text-foreground"
-                            onClick={handleDedent}
-                            aria-label="Dedent block"
-                            title="Dedent block"
-                            disabled={!isParagraphBlock}
-                        >
-                            <IndentDecrease className="size-4" />
-                            <span className="sr-only">Dedent block</span>
-                        </Button>
-                    </div>
-
-                    <div className="h-7 w-px bg-border/70" />
-
-                    <div className="flex flex-wrap gap-2">
-                        {BLOCK_MARK_OPTIONS.map((option) => {
-                            const isActive = currentMarks[option.value];
-                            const isDisabled = !canToggleMark(editor, option.value);
-                            const Icon = option.icon;
-
-                            return (
-                                <Button
-                                    key={option.value}
-                                    type="button"
-                                    size="sm"
-                                    variant={isActive ? 'default' : 'ghost'}
-                                    className={
-                                        isActive
-                                            ? 'rounded-lg shadow-xs'
-                                            : 'rounded-lg text-muted-foreground hover:text-foreground'
-                                    }
-                                    onClick={() => handleMarkToggle(option.value)}
-                                    aria-pressed={isActive}
-                                    aria-label={option.label}
-                                    title={option.label}
-                                    disabled={isDisabled}
-                                >
-                                    <Icon className="size-4" />
-                                    <span className="sr-only">{option.label}</span>
-                                </Button>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                <div className="pt-2 text-xs text-muted-foreground">
-                    Indent: {currentIndent} | Node: {currentBlockLabel} | Offset: {currentCursorOffset}
                 </div>
             </div>
         </div>

@@ -27,6 +27,7 @@ import {
     toggleParagraphTaskAtPos,
     syncTaskParagraphStatusesFromText,
 } from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
+import { findCompleteRawWikiLinks } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 import type { CreateSimpleEditorExtensionsOptions } from '@/components/tiptap-templates/simple/simple-editor-extension-options';
 
 declare module '@tiptap/core' {
@@ -245,6 +246,33 @@ function createBlockEditingExtension(
 
                             state.doc.descendants((node, pos) => {
                                 if (node.isText) {
+                                    for (const match of findCompleteRawWikiLinks(node.text ?? '')) {
+                                        const from = pos + match.from;
+                                        const to = pos + match.to;
+                                        const contentFrom = from + 2;
+                                        const contentTo = to - 2;
+
+                                        decorations.push(
+                                            Decoration.inline(from, contentFrom, {
+                                                class: 'md-wikilink-edit-bracket',
+                                            }),
+                                        );
+
+                                        if (contentTo > contentFrom) {
+                                            decorations.push(
+                                                Decoration.inline(contentFrom, contentTo, {
+                                                    class: 'md-wikilink-edit-content',
+                                                }),
+                                            );
+                                        }
+
+                                        decorations.push(
+                                            Decoration.inline(contentTo, to, {
+                                                class: 'md-wikilink-edit-bracket',
+                                            }),
+                                        );
+                                    }
+
                                     for (const range of findBlockInlineTokenRanges(node.text ?? '')) {
                                         decorations.push(
                                             Decoration.inline(pos + range.from, pos + range.to, {
