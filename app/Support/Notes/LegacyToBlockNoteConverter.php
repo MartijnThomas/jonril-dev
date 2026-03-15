@@ -700,7 +700,7 @@ class LegacyToBlockNoteConverter
             ->implode('');
 
         $assignee = null;
-        if (preg_match('/^\s*<\s+@([\p{L}\p{N}_-]+)/u', $combinedText, $match) === 1) {
+        if (preg_match('/^\s*<\s+(?:!{1,3}\s+)?@([\p{L}\p{N}_-]+)/u', $combinedText, $match) === 1) {
             $candidate = trim((string) ($match[1] ?? ''));
             $assignee = $candidate !== '' ? $candidate : null;
         }

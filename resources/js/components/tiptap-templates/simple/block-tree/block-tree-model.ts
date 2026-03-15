@@ -153,11 +153,11 @@ export function detectTaskStatusFromTextPrefix(text: string): BlockTaskStatus {
 }
 
 function isAssignedTaskText(text: string): boolean {
-    return /^(?:[?/*<\-—]\s)?@[^\s]+/u.test(text);
+    return /^(?:[?/*<\-—]\s)?(?:!{1,3}\s)?@[^\s]+/u.test(text);
 }
 
 function detectAssignedTaskAssignee(text: string): string | null {
-    const match = text.match(/^(?:[?/*<\-—]\s)?@([^\s]+)/u);
+    const match = text.match(/^(?:[?/*<\-—]\s)?(?:!{1,3}\s)?@([^\s]+)/u);
     const assignee = (match?.[1] ?? '').trim();
 
     return assignee !== '' ? assignee : null;

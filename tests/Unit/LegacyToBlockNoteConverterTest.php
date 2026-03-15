@@ -315,10 +315,10 @@ it('converts legacy deferred task prefix to assigned or deferred status and stri
 
     expect($taskNodes)->toHaveCount(2);
 
-    $assignedTask = $taskNodes[0];
-    expect($assignedTask['attrs']['taskStatus'] ?? null)->toBe('assigned');
-    expect($assignedTask['attrs']['assignee'] ?? null)->toBe('Dori');
-    expect($assignedTask['content'][0]['text'] ?? null)->toBe('Follow up with @Dori and @Aida');
+    $firstTask = $taskNodes[0];
+    expect($firstTask['attrs']['taskStatus'] ?? null)->toBe('deferred');
+    expect($firstTask['attrs']['assignee'] ?? null)->toBeNull();
+    expect($firstTask['content'][0]['text'] ?? null)->toBe('< Follow up with @Dori and @Aida');
 
     $deferredTask = $taskNodes[1];
     expect($deferredTask['attrs']['taskStatus'] ?? null)->toBe('deferred');

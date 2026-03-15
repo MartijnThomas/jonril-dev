@@ -15,7 +15,7 @@ function scoped_note_url($workspace, string $note): string
 
 function scoped_journal_url($workspace, string $granularity, string $period): string
 {
-    return "/w/{$workspace?->slug}/journal/{$granularity}/{$period}";
+    return "/w/{$workspace?->slug}/journal/{$period}";
 }
 
 test('start creates a note for the authenticated user and redirects to it', function () {
