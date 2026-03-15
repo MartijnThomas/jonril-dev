@@ -646,8 +646,8 @@ function SimpleEditorComponent({
     }, [editor, onContentStatsChange]);
 
     return (
-        <div className="flex w-full min-h-0">
-            <div className="flex-1 min-w-0">
+        <div className="flex h-full w-full min-h-0">
+            <div className="flex-1 min-w-0 overflow-y-auto">
                 <EditorContext.Provider value={{ editor }}>
                     {!readOnly ? blockUi : null}
                     {showRelatedPanel ? (

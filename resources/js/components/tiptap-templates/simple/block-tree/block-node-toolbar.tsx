@@ -387,7 +387,7 @@ export function BlockNodeToolbar({
     const hasMeetingToggle = meetingNotesState?.hasMeetingNotes === true;
 
     return (
-        <div className="sticky top-16 z-30 w-full overflow-hidden border-y border-border/60 bg-background/95 shadow-xs backdrop-blur supports-[backdrop-filter]:bg-background/85 group-has-data-[collapsible=icon]/sidebar-wrapper:top-12">
+        <div className="sticky top-0 z-30 w-full overflow-hidden border-b border-border/60 bg-background/95 shadow-xs backdrop-blur supports-backdrop-filter:bg-background/85">
             <div className={`mx-auto w-full overflow-x-auto overflow-y-hidden px-2 py-1.5 md:px-4 ${hasMeetingToggle ? 'pr-20!' : ''}`}>
                 <div className="mx-auto inline-flex min-w-max items-center gap-2.5">
                         <div className="flex items-center gap-2">

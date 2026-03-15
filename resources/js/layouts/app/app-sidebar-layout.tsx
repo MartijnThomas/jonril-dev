@@ -133,9 +133,9 @@ export default function AppSidebarLayout({
                 setRightSidebarOpen={setIsRightSidebarOpen}
             />
             <AppSidebar />
-            <AppContent variant="sidebar">
-                <div className="flex min-h-0 min-w-0 flex-1 w-full">
-                    <div className="flex min-w-0 flex-1 flex-col">
+            <AppContent variant="sidebar" className="h-svh overflow-hidden">
+                <div className="flex min-h-0 min-w-0 flex-1 w-full overflow-hidden">
+                    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                         <AppSidebarHeader
                             breadcrumbs={breadcrumbs}
                             rightSidebarEnabled
@@ -144,10 +144,10 @@ export default function AppSidebarLayout({
                                 setIsRightSidebarOpen((open) => !open)
                             }
                         />
-                        <div className="min-h-0 flex-1">
+                        <div className="flex min-h-0 flex-1 overflow-hidden">
                             {children}
+                            {bottomPane}
                         </div>
-                        {bottomPane}
                         {shouldRenderStatusBar ? (
                             <AppStatusBar
                                 saveStatus={saveStatus}
