@@ -1,6 +1,7 @@
 {
     "agents": [
-        "codex"
+        "codex",
+        "claude_code"
     ],
     "guidelines": true,
     "herd_mcp": false,
