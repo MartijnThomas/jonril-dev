@@ -153,11 +153,11 @@ export function detectTaskStatusFromTextPrefix(text: string): BlockTaskStatus {
 }
 
 function isAssignedTaskText(text: string): boolean {
-    return /@([^\s]+)/u.test(text);
+    return /^(?:[?/*<\-—]\s)?@[^\s]+/u.test(text);
 }
 
 function detectAssignedTaskAssignee(text: string): string | null {
-    const match = text.match(/@([^\s]+)/u);
+    const match = text.match(/^(?:[?/*<\-—]\s)?@([^\s]+)/u);
     const assignee = (match?.[1] ?? '').trim();
 
     return assignee !== '' ? assignee : null;
@@ -1048,7 +1048,7 @@ export function syncTaskParagraphStatusesFromText(
         if (nextStatus === null && isAssignedTaskText(currentNode.textContent)) {
             nextStatus = 'assigned';
         }
-        if (nextStatus === 'deferred' && firstMentionAssignee !== null) {
+        if (nextStatus === 'deferred' && detectAssignedTaskAssignee(currentNode.textContent) !== null) {
             nextStatus = 'assigned';
         }
         if (
@@ -1084,7 +1084,7 @@ export function syncTaskParagraphStatusesFromText(
             }
         }
 
-        const nextChecked = nextStatus === null ? currentAttrs.checked === true : false;
+        const nextChecked = nextStatus === null || nextStatus === 'assigned' ? currentAttrs.checked === true : false;
         const nextCompletedAt = nextChecked
             ? (currentAttrs.completedAt ?? nowIsoTimestamp())
             : null;

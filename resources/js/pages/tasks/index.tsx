@@ -659,7 +659,7 @@ export default function TasksIndex({
 
     const taskVisualStatus = (
         task: Pick<TaskItem, 'task_status' | 'checked'>,
-    ): 'open' | 'completed' | 'canceled' | 'migrated' | 'in_progress' | 'backlog' => {
+    ): 'open' | 'completed' | 'canceled' | 'migrated' | 'in_progress' | 'backlog' | 'assigned' => {
         if (task.task_status === 'canceled') {
             return 'canceled';
         }
@@ -674,6 +674,10 @@ export default function TasksIndex({
 
         if (task.task_status === 'backlog') {
             return 'backlog';
+        }
+
+        if (task.task_status === 'assigned') {
+            return 'assigned';
         }
 
         return task.checked ? 'completed' : 'open';

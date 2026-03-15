@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 type TaskToggleCheckboxProps = {
     checked: boolean;
     disabled?: boolean;
-    status?: 'open' | 'completed' | 'canceled' | 'migrated' | 'backlog' | 'in_progress';
+    status?: 'open' | 'completed' | 'canceled' | 'migrated' | 'backlog' | 'in_progress' | 'assigned';
     onCheckedChange: (checked: boolean) => void;
     ariaLabel: string;
     className?: string;

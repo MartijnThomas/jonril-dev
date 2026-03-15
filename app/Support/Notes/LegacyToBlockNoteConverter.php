@@ -160,6 +160,7 @@ class LegacyToBlockNoteConverter
 
             if ($type === 'horizontalRule') {
                 $normalized[] = ['type' => 'horizontalRule'];
+
                 continue;
             }
 
@@ -173,6 +174,7 @@ class LegacyToBlockNoteConverter
                     ),
                     'content' => Arr::get($node, 'content', []),
                 ];
+
                 continue;
             }
 
@@ -255,6 +257,7 @@ class LegacyToBlockNoteConverter
 
             if ($type === 'horizontalRule') {
                 $converted[] = ['type' => 'horizontalRule'];
+
                 continue;
             }
 
@@ -268,6 +271,7 @@ class LegacyToBlockNoteConverter
                     ),
                     'content' => Arr::get($node, 'content', []),
                 ];
+
                 continue;
             }
 
@@ -696,7 +700,7 @@ class LegacyToBlockNoteConverter
             ->implode('');
 
         $assignee = null;
-        if (preg_match('/@([\p{L}\p{N}_-]+)/u', $combinedText, $match) === 1) {
+        if (preg_match('/^\s*<\s+@([\p{L}\p{N}_-]+)/u', $combinedText, $match) === 1) {
             $candidate = trim((string) ($match[1] ?? ''));
             $assignee = $candidate !== '' ? $candidate : null;
         }

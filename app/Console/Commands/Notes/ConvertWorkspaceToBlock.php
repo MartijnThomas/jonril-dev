@@ -273,9 +273,65 @@ class ConvertWorkspaceToBlock extends Command
                     ->update(['parent_id' => $copiedParentId]);
             }
 
+            foreach ($sourceNotes as $sourceNote) {
+                $copiedId = $noteIdMap[(string) $sourceNote->id] ?? null;
+                if (! $copiedId) {
+                    continue;
+                }
+
+                $content = $sourceNote->content;
+                if (! is_array($content)) {
+                    continue;
+                }
+
+                $remapped = $this->remapNoteIdsInContent($content, $noteIdMap);
+                if ($remapped !== null) {
+                    Note::query()->where('id', $copiedId)->update(['content' => json_encode($remapped)]);
+                }
+            }
+
             return $target;
         });
 
         return [$targetWorkspace, $noteIdMap];
+    }
+
+    /**
+     * Walk a block-format or legacy-format content tree and remap note IDs in task migration attrs.
+     * Returns null if nothing changed, otherwise the updated content array.
+     *
+     * @param  array<string, mixed>  $content
+     * @param  array<string, string>  $noteIdMap
+     * @return array<string, mixed>|null
+     */
+    private function remapNoteIdsInContent(array $content, array $noteIdMap): ?array
+    {
+        $changed = false;
+
+        $walk = function (array &$node) use ($noteIdMap, &$changed, &$walk): void {
+            $attrs = $node['attrs'] ?? null;
+            if (is_array($attrs)) {
+                foreach (['migratedToNoteId', 'migratedFromNoteId'] as $key) {
+                    $oldId = is_string($attrs[$key] ?? null) ? trim((string) $attrs[$key]) : '';
+                    if ($oldId !== '' && isset($noteIdMap[$oldId])) {
+                        $node['attrs'][$key] = $noteIdMap[$oldId];
+                        $changed = true;
+                    }
+                }
+            }
+
+            if (isset($node['content']) && is_array($node['content'])) {
+                foreach ($node['content'] as &$child) {
+                    if (is_array($child)) {
+                        $walk($child);
+                    }
+                }
+                unset($child);
+            }
+        };
+
+        $walk($content);
+
+        return $changed ? $content : null;
     }
 }

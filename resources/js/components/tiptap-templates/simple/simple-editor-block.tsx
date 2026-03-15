@@ -1,6 +1,6 @@
 'use client';
 
-import { Deferred } from '@inertiajs/react';
+import { Deferred, usePage } from '@inertiajs/react';
 import type { Editor } from '@tiptap/core';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { format, isValid, parseISO } from 'date-fns';
@@ -26,6 +26,7 @@ import type {
     SimpleEditorProps,
 } from '@/components/tiptap-templates/simple/simple-editor-types';
 import { useEditorSave } from '@/components/tiptap-templates/simple/use-editor-save';
+import { cn } from '@/lib/utils';
 
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss';
 import '@/components/tiptap-node/code-block-node/code-block-node.scss';
@@ -242,6 +243,7 @@ function SimpleEditorComponent({
     journalDate = null,
     defaultTimeblockDurationMinutes = 60,
 }: SimpleEditorProps) {
+    const { rightSidebarOpen } = usePage().props as { rightSidebarOpen?: boolean };
     const isJournal = noteType === 'journal';
     const hasMeetingNotes = meetingChildren.length > 0 && !isJournal;
     // Default open on ≥768 px, closed on small screens. Lazy initializer runs once on mount.
@@ -686,7 +688,10 @@ function SimpleEditorComponent({
                 <button
                     type="button"
                     onClick={() => setShowMeetingNotes(true)}
-                    className="fixed top-14 right-4 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-sidebar shadow-md border border-sidebar-border/60 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+                    className={cn(
+                        'fixed top-28 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-sidebar shadow-md border border-sidebar-border/60 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-all duration-200',
+                        rightSidebarOpen ? 'right-84' : 'right-4',
+                    )}
                     aria-label="Show meeting notes"
                 >
                     <Presentation className="size-4" />

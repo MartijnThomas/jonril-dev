@@ -515,6 +515,30 @@ html {
     pointer-events: none;
 }
 
+.task-toggle-checkbox[data-status='assigned'] span {
+    position: relative;
+}
+
+.task-toggle-checkbox[data-status='assigned'] span::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0.82rem;
+    height: 0.82rem;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' stroke='rgb(251 191 36)' stroke-width='2.15' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='8' r='5'/%3E%3Cpath d='M20 21a8 8 0 0 0-16 0'/%3E%3C/svg%3E");
+    background-position: center calc(50% + 0.03rem);
+    background-repeat: no-repeat;
+    background-size: contain;
+    pointer-events: none;
+}
+
+.task-toggle-checkbox[data-status='assigned']
+    input[type='checkbox']:checked
+    + span::after {
+    opacity: 0;
+}
+
 .task-toggle-checkbox[data-status='in_progress'] span::after {
     content: '';
     position: absolute;

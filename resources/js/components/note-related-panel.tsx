@@ -486,6 +486,8 @@ export function NoteRelatedPanel({
                                                                                     ? 'in_progress'
                                                                                   : task.task_status === 'backlog'
                                                                                     ? 'backlog'
+                                                                                  : task.task_status === 'assigned'
+                                                                                    ? 'assigned'
                                                                                   : task.checked
                                                                                     ? 'completed'
                                                                                     : 'open'
