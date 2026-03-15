@@ -34,6 +34,10 @@ type UseBlockEditorUiOptions = {
         mentions: string[];
         hashtags: string[];
     };
+    hasMeetingNotes?: boolean;
+    showMeetingNotes?: boolean;
+    meetingNotesCount?: number;
+    onToggleMeetingNotes?: () => void;
 };
 
 export function useBlockEditorUi({
@@ -42,6 +46,10 @@ export function useBlockEditorUi({
     language,
     linkableNotes,
     workspaceSuggestions,
+    hasMeetingNotes = false,
+    showMeetingNotes = false,
+    meetingNotesCount = 0,
+    onToggleMeetingNotes,
 }: UseBlockEditorUiOptions) {
     const [taskMigratePicker, setTaskMigratePicker] = useState<{
         open: boolean;
@@ -222,7 +230,13 @@ export function useBlockEditorUi({
 
         return (
             <>
-                <BlockNodeToolbar editor={editor} />
+                <BlockNodeToolbar
+                    editor={editor}
+                    hasMeetingNotes={hasMeetingNotes}
+                    showMeetingNotes={showMeetingNotes}
+                    meetingNotesCount={meetingNotesCount}
+                    onToggleMeetingNotes={onToggleMeetingNotes}
+                />
 
                 <TaskMigratePicker
                     open={taskMigratePicker.open}

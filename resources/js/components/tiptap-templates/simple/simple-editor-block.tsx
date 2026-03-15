@@ -5,7 +5,7 @@ import type { Editor } from '@tiptap/core';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
-import { MapPin, Presentation } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -346,6 +346,10 @@ function SimpleEditorComponent({
             mentions: mentionSuggestions,
             hashtags: hashtagSuggestions,
         },
+        hasMeetingNotes,
+        showMeetingNotes,
+        meetingNotesCount: meetingChildren.length,
+        onToggleMeetingNotes: () => setShowMeetingNotes((current) => !current),
     });
 
     useEffect(() => {
@@ -372,25 +376,6 @@ function SimpleEditorComponent({
         }));
     }, [showDocumentProperties]);
 
-    useEffect(() => {
-        window.dispatchEvent(new CustomEvent('meeting-notes-state', {
-            detail: { hasMeetingNotes, showMeetingNotes, count: meetingChildren.length },
-        }));
-    }, [hasMeetingNotes, showMeetingNotes]);
-
-    useEffect(() => {
-        const handleToggle = () => {
-            if (hasMeetingNotes) {
-                setShowMeetingNotes((current) => !current);
-            }
-        };
-
-        window.addEventListener('meeting-notes-toggle-request', handleToggle);
-
-        return () => {
-            window.removeEventListener('meeting-notes-toggle-request', handleToggle);
-        };
-    }, [hasMeetingNotes]);
 
     useEffect(() => {
         if (!editor) {

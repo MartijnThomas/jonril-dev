@@ -115,10 +115,18 @@ type BlockMarkType = (typeof BLOCK_MARK_OPTIONS)[number]['value'];
 
 type BlockNodeToolbarProps = {
     editor: Editor;
+    hasMeetingNotes?: boolean;
+    showMeetingNotes?: boolean;
+    meetingNotesCount?: number;
+    onToggleMeetingNotes?: () => void;
 };
 
 export function BlockNodeToolbar({
     editor,
+    hasMeetingNotes = false,
+    showMeetingNotes = false,
+    meetingNotesCount = 0,
+    onToggleMeetingNotes,
 }: BlockNodeToolbarProps) {
     const [currentValue, setCurrentValue] = useState(() =>
         getCurrentBlockValue(editor),
@@ -126,17 +134,6 @@ export function BlockNodeToolbar({
     const [currentMarks, setCurrentMarks] = useState<Record<BlockMarkType, boolean>>(() =>
         getCurrentMarkState(editor),
     );
-    const [meetingNotesState, setMeetingNotesState] = useState<{ hasMeetingNotes: boolean; showMeetingNotes: boolean; count: number } | null>(null);
-
-    useEffect(() => {
-        const handler = (event: Event) => {
-            setMeetingNotesState((event as CustomEvent<{ hasMeetingNotes: boolean; showMeetingNotes: boolean; count: number }>).detail);
-        };
-
-        window.addEventListener('meeting-notes-state', handler);
-
-        return () => window.removeEventListener('meeting-notes-state', handler);
-    }, []);
 
     useEffect(() => {
         const updateValue = () => {
@@ -384,7 +381,7 @@ export function BlockNodeToolbar({
         `${activeSquareButtonClass} hover:border-border hover:bg-accent/40 hover:text-foreground`;
     const inactiveSquareButtonClass = `${squareButtonBaseClass} border border-transparent text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground`;
 
-    const hasMeetingToggle = meetingNotesState?.hasMeetingNotes === true;
+    const hasMeetingToggle = hasMeetingNotes && !showMeetingNotes;
 
     return (
         <div className="sticky top-0 z-30 w-full overflow-hidden border-b border-border/60 bg-background/95 shadow-xs backdrop-blur supports-backdrop-filter:bg-background/85">
@@ -558,13 +555,13 @@ export function BlockNodeToolbar({
             {hasMeetingToggle ? (
                 <button
                     type="button"
-                    onClick={() => window.dispatchEvent(new Event('meeting-notes-toggle-request'))}
+                    onClick={onToggleMeetingNotes}
                     aria-label="Toggle meeting notes"
-                    aria-pressed={meetingNotesState?.showMeetingNotes}
-                    className={`absolute inset-y-0 right-0 flex items-center gap-1.5 pl-3 pr-2.5 rounded-l-full border-l border-y border-sidebar-border/60 bg-sidebar transition-colors hover:text-foreground ${meetingNotesState?.showMeetingNotes ? 'text-foreground' : 'text-muted-foreground'}`}
+                    aria-pressed={showMeetingNotes}
+                    className={`absolute inset-y-0 right-0 flex items-center gap-1.5 pl-3 pr-2.5 rounded-l-full border-l border-y border-sidebar-border/60 bg-sidebar transition-colors hover:text-foreground ${showMeetingNotes ? 'text-foreground' : 'text-muted-foreground'}`}
                 >
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sidebar-border/60 bg-sidebar-accent text-[0.68rem] font-medium tabular-nums">
-                        {meetingNotesState?.count ?? 0}
+                        {meetingNotesCount}
                     </span>
                     <FileStack className="size-4" />
                 </button>
