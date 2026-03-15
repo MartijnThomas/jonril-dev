@@ -2,7 +2,7 @@ import { Link } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
 import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
-import { X, Users } from 'lucide-react';
+import { X, FileStack, Users } from 'lucide-react';
 
 export type MeetingNote = {
     id: string;
@@ -34,7 +34,7 @@ export function MeetingNotesSidebar({ meetingNotes, language = 'en', currentNote
     return (
         <aside className="flex w-64 shrink-0 flex-col border-l border-sidebar-border/60 bg-sidebar">
             <div className="flex h-12 items-center gap-2 border-b border-sidebar-border/60 px-4">
-                <Users className="size-4 shrink-0 text-muted-foreground" />
+                <FileStack className="size-4 shrink-0 text-muted-foreground" />
                 <span className="text-sm font-medium">Meetings</span>
                 <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[0.68rem] font-medium text-muted-foreground">
                     {meetingNotes.length}
