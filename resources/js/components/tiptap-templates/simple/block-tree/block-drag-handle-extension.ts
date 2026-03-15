@@ -216,6 +216,51 @@ export const BlockDragHandleExtension = Extension.create({
                         return this.getState(state);
                     },
                     handleDOMEvents: {
+                        touchend: (view, event) => {
+                            const target = event.target;
+                            if (!(target instanceof Element)) {
+                                return false;
+                            }
+
+                            const handle = target.closest('[data-bt-block-handle="true"]');
+                            if (!(handle instanceof HTMLElement)) {
+                                return false;
+                            }
+
+                            const sourcePos = Number.parseInt(
+                                handle.getAttribute('data-block-pos') ?? '',
+                                10,
+                            );
+                            if (!Number.isFinite(sourcePos)) {
+                                return false;
+                            }
+
+                            const sourceNode = view.state.doc.nodeAt(sourcePos);
+                            if (!sourceNode || sourceNode.type.name !== 'paragraph' || sourceNode.attrs.blockStyle !== 'task') {
+                                return false;
+                            }
+
+                            event.preventDefault();
+                            event.stopPropagation();
+
+                            const rect = handle.getBoundingClientRect();
+                            const status = (sourceNode.attrs.taskStatus as string | null) ?? null;
+                            const blockId = (sourceNode.attrs.blockId as string | null) ?? null;
+
+                            window.dispatchEvent(
+                                new CustomEvent('block-task-actions:open', {
+                                    detail: {
+                                        x: Math.round(rect.right + 8),
+                                        y: Math.round(rect.bottom + 2),
+                                        pos: sourcePos,
+                                        status,
+                                        blockId,
+                                    },
+                                }),
+                            );
+
+                            return true;
+                        },
                         mousedown: (view, event) => {
                             const target = event.target;
                             if (!(target instanceof Element)) {
