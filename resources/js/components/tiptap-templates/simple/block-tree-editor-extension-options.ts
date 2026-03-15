@@ -18,4 +18,7 @@ export type CreateBlockTreeEditorExtensionsOptions = {
     };
     language?: string;
     noteType?: string | null;
+    journalGranularity?: string | null;
+    journalDate?: string | null;
+    defaultTimeblockDurationMinutes?: number;
 };

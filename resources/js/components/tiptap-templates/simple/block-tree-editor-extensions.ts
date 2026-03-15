@@ -1,10 +1,14 @@
 import { Bold } from '@tiptap/extension-bold';
 import { Code } from '@tiptap/extension-code';
+import { CodeBlock } from '@tiptap/extension-code-block';
 import { HardBreak } from '@tiptap/extension-hard-break';
 import { Highlight } from '@tiptap/extension-highlight';
+import { HorizontalRule } from '@tiptap/extension-horizontal-rule';
 import { Italic } from '@tiptap/extension-italic';
 import { Link } from '@tiptap/extension-link';
 import { Strike } from '@tiptap/extension-strike';
+import { Subscript } from '@tiptap/extension-subscript';
+import { Superscript } from '@tiptap/extension-superscript';
 import { Text } from '@tiptap/extension-text';
 import { Typography } from '@tiptap/extension-typography';
 import { Underline } from '@tiptap/extension-underline';
@@ -15,6 +19,7 @@ import { BlockHeadingCollapseExtension } from '@/components/tiptap-templates/sim
 import { BlockLinkBehaviorExtension } from '@/components/tiptap-templates/simple/block-tree/block-link-behavior-extension';
 import { BlockTaskActionsExtension } from '@/components/tiptap-templates/simple/block-tree/block-task-actions-extension';
 import { BlockTaskMigrationMetaExtension } from '@/components/tiptap-templates/simple/block-tree/block-task-migration-meta-extension';
+import { BlockTimeblockExtension } from '@/components/tiptap-templates/simple/block-tree/block-timeblock-extension';
 import { BlockTreeDocument } from '@/components/tiptap-templates/simple/block-tree/block-tree-document-extension';
 import { createBlockTreeItemExtensions } from '@/components/tiptap-templates/simple/block-tree/block-tree-item-extensions';
 import { BlockWikiLinkMark } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-mark-extension';
@@ -26,13 +31,17 @@ export function createBlockTreeEditorExtensions(
 ) {
     return [
         UniqueID.configure({
-            types: ['heading', 'paragraph'],
+            types: ['heading', 'paragraph', 'codeBlock'],
         }),
         Text,
         HardBreak.configure({
             keepMarks: true,
         }),
         Bold,
+        Superscript,
+        Subscript,
+        CodeBlock,
+        HorizontalRule,
         Link.configure({
             openOnClick: false,
             enableClickSelection: true,
@@ -63,6 +72,15 @@ export function createBlockTreeEditorExtensions(
         }),
         BlockTaskMigrationMetaExtension.configure({
             notes: options.wikiLinkNotes ?? [],
+        }),
+        BlockTimeblockExtension.configure({
+            enabled:
+                options.noteType === 'journal' &&
+                options.journalGranularity === 'daily' &&
+                typeof options.journalDate === 'string' &&
+                options.journalDate.trim() !== '',
+            journalDate: options.journalDate ?? null,
+            defaultDurationMinutes: options.defaultTimeblockDurationMinutes ?? 60,
         }),
         BlockTreeDocument,
         ...createBlockTreeItemExtensions(options),

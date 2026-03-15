@@ -173,7 +173,7 @@ export function useEditorSave({
             const serializedProperties = JSON.stringify(sanitizedProperties);
             const currentTitle = extractFirstHeadingTitle(json);
             const timeblocks = includeTimeblocks
-                ? editor.storage.timeblock?.timeblocks ?? []
+                ? editor.storage.timeblock?.timeblocks ?? editor.storage.blockTimeblock?.timeblocks ?? []
                 : [];
             const serializedTimeblocks = includeTimeblocks
                 ? JSON.stringify(timeblocks)

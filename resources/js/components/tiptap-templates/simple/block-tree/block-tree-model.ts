@@ -417,7 +417,7 @@ export function getCurrentBlockNodeFromState(state: EditorState): {
 
     for (let depth = $from.depth; depth > 0; depth -= 1) {
         const node = $from.node(depth);
-        if (node.type.name !== 'paragraph' && node.type.name !== 'heading') {
+        if (node.type.name !== 'paragraph' && node.type.name !== 'heading' && node.type.name !== 'codeBlock') {
             continue;
         }
 

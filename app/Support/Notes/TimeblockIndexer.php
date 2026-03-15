@@ -123,6 +123,11 @@ class TimeblockIndexer
             $type = (string) ($node['type'] ?? '');
             if (in_array($type, ['listItem', 'taskItem'], true)) {
                 $onNode($node);
+            } elseif ($type === 'paragraph') {
+                $blockStyle = (string) Arr::get($node, 'attrs.blockStyle', '');
+                if (in_array($blockStyle, ['bullet', 'task'], true)) {
+                    $onNode($node);
+                }
             }
 
             $children = Arr::get($node, 'content', []);
@@ -148,6 +153,24 @@ class TimeblockIndexer
         }
 
         $line = trim($this->fragmentsToText($fragments));
+        if ($line === '') {
+            return null;
+        }
+
+        // Strip task-status prefix used by the block editor (e.g. "? ", "/ ", "- ", "* ", "< ")
+        // and capture the mapped status as a fallback for task nodes whose attrs.taskStatus is null.
+        $taskStatusFromPrefix = null;
+        if (preg_match('/^(?P<token>\?|\/|-|\*|<)\s/u', $line, $prefixMatch)) {
+            $taskStatusFromPrefix = match ($prefixMatch['token'] ?? '') {
+                '?' => 'backlog',
+                '/' => 'in_progress',
+                '*' => 'starred',
+                '<' => 'assigned',
+                default => null,
+            };
+            $line = trim(substr($line, strlen((string) ($prefixMatch[0] ?? ''))));
+        }
+
         if ($line === '') {
             return null;
         }
@@ -197,7 +220,9 @@ class TimeblockIndexer
 
         $attrs = Arr::get($node, 'attrs', []);
         $blockId = Arr::get($attrs, 'id');
-        $isTaskItem = (($node['type'] ?? null) === 'taskItem');
+        $nodeType = (string) ($node['type'] ?? '');
+        $isTaskItem = $nodeType === 'taskItem'
+            || ($nodeType === 'paragraph' && (string) Arr::get($attrs, 'blockStyle', '') === 'task');
 
         $startAtUtc = $startAtLocal->timezone('UTC');
         $endAtUtc = $endAtLocal->timezone('UTC');
@@ -211,7 +236,9 @@ class TimeblockIndexer
             'location' => $locationText !== '' ? $locationText : null,
             'task_block_id' => $isTaskItem ? $blockId : null,
             'task_checked' => $isTaskItem ? (bool) Arr::get($attrs, 'checked', false) : null,
-            'task_status' => $isTaskItem ? Arr::get($attrs, 'taskStatus') : null,
+            'task_status' => $isTaskItem
+                ? (Arr::get($attrs, 'taskStatus') ?? $taskStatusFromPrefix)
+                : null,
             'journal_date' => $journalDate->toDateString(),
             'meta' => null,
             'has_explicit_end' => $hasExplicitEnd,

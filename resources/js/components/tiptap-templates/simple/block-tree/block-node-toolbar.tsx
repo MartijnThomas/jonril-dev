@@ -18,11 +18,15 @@ import {
     ListChecks,
     ListOrdered,
     Link2,
+    Minus,
     NotebookText,
     SendToBack,
     Pilcrow,
     Quote,
+    SquareCode,
     Strikethrough,
+    Subscript,
+    Superscript,
     Underline,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -41,6 +45,7 @@ const BLOCK_NODE_OPTIONS = [
     { value: 'checklist', label: 'Checklist item', icon: ListChecks },
     { value: 'ordered', label: 'Ordered list item', icon: ListOrdered },
     { value: 'quote', label: 'Block quote', icon: Quote },
+    { value: 'code-block', label: 'Code block', icon: SquareCode },
     { value: 'heading-1', label: 'H1', icon: Heading1 },
     { value: 'heading-2', label: 'H2', icon: Heading2 },
     { value: 'heading-3', label: 'H3', icon: Heading3 },
@@ -56,6 +61,8 @@ const BLOCK_MARK_OPTIONS = [
     { value: 'underline', label: 'Underline', icon: Underline },
     { value: 'strike', label: 'Strikethrough', icon: Strikethrough },
     { value: 'highlight', label: 'Highlight', icon: Highlighter },
+    { value: 'superscript', label: 'Superscript', icon: Superscript },
+    { value: 'subscript', label: 'Subscript', icon: Subscript },
 ] as const;
 
 const BLOCK_INSERT_OPTIONS = [
@@ -77,6 +84,10 @@ function getCurrentBlockValue(editor: Editor): string {
         return `heading-${Math.min(6, Math.max(1, level))}`;
     }
 
+    if (currentBlock.type === 'codeBlock') {
+        return 'code-block';
+    }
+
     const attrs = normalizeParagraphAttrs(currentBlock.node.attrs);
 
     return attrs.blockStyle;
@@ -94,6 +105,8 @@ function getCurrentMarkState(editor: Editor): Record<BlockMarkType, boolean> {
         underline: editor.isActive('underline'),
         strike: editor.isActive('strike'),
         highlight: editor.isActive('highlight'),
+        superscript: editor.isActive('superscript'),
+        subscript: editor.isActive('subscript'),
     };
 }
 
@@ -140,6 +153,16 @@ export function BlockNodeToolbar({
             }
 
             editor.chain().focus().setNode('paragraph', normalizeParagraphAttrs({})).run();
+            return;
+        }
+
+        if (value === 'code-block') {
+            if (currentValue === 'code-block') {
+                editor.chain().focus().setNode('paragraph', normalizeParagraphAttrs({})).run();
+                return;
+            }
+
+            editor.chain().focus().setNode('codeBlock').run();
             return;
         }
 
@@ -485,6 +508,19 @@ export function BlockNodeToolbar({
                                     </Button>
                                 );
                             })}
+
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={inactiveSquareButtonClass}
+                                onClick={() => editor.chain().focus().setHorizontalRule().run()}
+                                aria-label="Insert horizontal rule"
+                                title="Insert horizontal rule"
+                            >
+                                <Minus className="size-4" />
+                                <span className="sr-only">Insert horizontal rule</span>
+                            </Button>
 
                             <Button
                                 type="button"

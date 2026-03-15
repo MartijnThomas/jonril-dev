@@ -120,7 +120,7 @@ class LegacyToBlockNoteConverter
             }
 
             $type = (string) ($node['type'] ?? '');
-            if (! in_array($type, ['heading', 'paragraph'], true)) {
+            if (! in_array($type, ['heading', 'paragraph', 'codeBlock', 'horizontalRule'], true)) {
                 return false;
             }
 
@@ -154,7 +154,25 @@ class LegacyToBlockNoteConverter
             }
 
             $type = (string) ($node['type'] ?? '');
-            if (! in_array($type, ['heading', 'paragraph'], true)) {
+            if (! in_array($type, ['heading', 'paragraph', 'codeBlock', 'horizontalRule'], true)) {
+                continue;
+            }
+
+            if ($type === 'horizontalRule') {
+                $normalized[] = ['type' => 'horizontalRule'];
+                continue;
+            }
+
+            if ($type === 'codeBlock') {
+                $id = $this->ensureUniqueId(Arr::get($node, 'attrs.id'), $usedIds);
+                $normalized[] = [
+                    'type' => 'codeBlock',
+                    'attrs' => array_merge(
+                        is_array(Arr::get($node, 'attrs')) ? Arr::get($node, 'attrs') : [],
+                        ['id' => $id],
+                    ),
+                    'content' => Arr::get($node, 'content', []),
+                ];
                 continue;
             }
 
@@ -232,6 +250,24 @@ class LegacyToBlockNoteConverter
                     existingAttrs: Arr::get($node, 'attrs', []),
                 );
 
+                continue;
+            }
+
+            if ($type === 'horizontalRule') {
+                $converted[] = ['type' => 'horizontalRule'];
+                continue;
+            }
+
+            if ($type === 'codeBlock') {
+                $id = $this->ensureUniqueId(Arr::get($node, 'attrs.id'), $usedIds);
+                $converted[] = [
+                    'type' => 'codeBlock',
+                    'attrs' => array_merge(
+                        is_array(Arr::get($node, 'attrs')) ? Arr::get($node, 'attrs') : [],
+                        ['id' => $id],
+                    ),
+                    'content' => Arr::get($node, 'content', []),
+                ];
                 continue;
             }
 

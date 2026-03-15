@@ -1359,7 +1359,14 @@ class TasksController extends Controller
                 continue;
             }
 
-            if (($node['type'] ?? null) === 'taskItem' && (($node['attrs']['id'] ?? null) === $blockId)) {
+            $type = $node['type'] ?? null;
+            $nodeBlockId = $node['attrs']['id'] ?? null;
+            $isTaskItem = $type === 'taskItem' && $nodeBlockId === $blockId;
+            $isBlockParagraph = $type === 'paragraph'
+                && ($node['attrs']['blockStyle'] ?? '') === 'task'
+                && $nodeBlockId === $blockId;
+
+            if ($isTaskItem || $isBlockParagraph) {
                 $this->applyTaskCheckedUpdate(
                     $node,
                     $checked,
@@ -1428,7 +1435,12 @@ class TasksController extends Controller
                 continue;
             }
 
-            if (($node['type'] ?? null) === 'taskItem') {
+            $type = $node['type'] ?? null;
+            $isTaskItem = $type === 'taskItem';
+            $isBlockParagraph = $type === 'paragraph'
+                && ($node['attrs']['blockStyle'] ?? '') === 'task';
+
+            if ($isTaskItem || $isBlockParagraph) {
                 $position++;
                 if ($position === $targetPosition) {
                     $this->applyTaskCheckedUpdate(

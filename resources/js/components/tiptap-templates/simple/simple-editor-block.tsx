@@ -179,6 +179,9 @@ function SimpleEditorComponent({
     onLastSavedAtChange,
     onContentStatsChange,
     noteType,
+    journalGranularity = null,
+    journalDate = null,
+    defaultTimeblockDurationMinutes = 60,
 }: SimpleEditorProps) {
     const [documentProperties, setDocumentProperties] =
         useState<DocumentPropertiesValue>(properties);
@@ -208,10 +211,16 @@ function SimpleEditorComponent({
                 },
                 language,
                 noteType,
+                journalGranularity,
+                journalDate,
+                defaultTimeblockDurationMinutes,
             }),
         [
             language,
             noteType,
+            journalGranularity,
+            journalDate,
+            defaultTimeblockDurationMinutes,
             linkableNotes,
             mentionSuggestions,
             hashtagSuggestions,
@@ -439,7 +448,7 @@ function SimpleEditorComponent({
         noteUpdateUrl,
         properties: documentProperties,
         idleMs: 1500,
-        includeTimeblocks: false,
+        includeTimeblocks: noteType === 'journal' && journalGranularity === 'daily' && typeof journalDate === 'string' && journalDate.trim() !== '',
         saveTransport: 'json',
     });
 
