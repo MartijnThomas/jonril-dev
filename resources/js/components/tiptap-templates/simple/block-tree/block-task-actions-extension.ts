@@ -3,7 +3,14 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-type TaskStatus = 'backlog' | 'in_progress' | 'canceled' | null;
+type TaskStatus =
+    | 'backlog'
+    | 'in_progress'
+    | 'starred'
+    | 'assigned'
+    | 'deferred'
+    | 'canceled'
+    | null;
 
 function isTaskParagraph(node: ProseMirrorNode): boolean {
     return node.type.name === 'paragraph' && node.attrs.blockStyle === 'task';
@@ -99,6 +106,9 @@ export const BlockTaskActionsExtension = Extension.create({
                             const status: TaskStatus =
                                 statusValue === 'backlog' ||
                                 statusValue === 'in_progress' ||
+                                statusValue === 'starred' ||
+                                statusValue === 'assigned' ||
+                                statusValue === 'deferred' ||
                                 statusValue === 'canceled'
                                     ? statusValue
                                     : null;

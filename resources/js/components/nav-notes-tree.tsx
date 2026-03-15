@@ -1,6 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import { ChevronDown, ChevronRight, FileText, Plus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getColorBgClass, getColorTextClass } from '@/components/color-swatch-picker';
 import {
     CreateNoteDialog,
@@ -35,6 +35,7 @@ type NotesTreeProps = {
     allOptions: CreateNoteParentOption[];
     parentPath: string | null;
     parentId: string | null;
+    workspaceReadOnly: boolean;
 };
 
 function hasActiveInBranch(
@@ -63,11 +64,13 @@ function RootNoteItem({
     allOptions,
     parentPath,
     parentId,
+    workspaceReadOnly,
 }: {
     item: SidebarNoteTreeItem;
     allOptions: CreateNoteParentOption[];
     parentPath: string | null;
     parentId: string | null;
+    workspaceReadOnly: boolean;
 }) {
     const { isCurrentUrl } = useCurrentUrl();
     const isActive = isCurrentUrl(item.href);
@@ -125,10 +128,10 @@ function RootNoteItem({
                             currentLocation={parentPath}
                             currentParentId={parentId}
                             moveParentOptions={moveParentOptions}
-                            canMove
-                            canRename
-                            canDelete
-                            canClear
+                            canMove={!workspaceReadOnly}
+                            canRename={!workspaceReadOnly}
+                            canDelete={!workspaceReadOnly}
+                            canClear={!workspaceReadOnly}
                             triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                             dropdownAlign="end"
                             dropdownSide="bottom"
@@ -177,10 +180,10 @@ function RootNoteItem({
                             currentLocation={parentPath}
                             currentParentId={parentId}
                             moveParentOptions={moveParentOptions}
-                            canMove
-                            canRename
-                            canDelete
-                            canClear
+                            canMove={!workspaceReadOnly}
+                            canRename={!workspaceReadOnly}
+                            canDelete={!workspaceReadOnly}
+                            canClear={!workspaceReadOnly}
                             triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                             dropdownAlign="end"
                             dropdownSide="bottom"
@@ -195,6 +198,7 @@ function RootNoteItem({
                         allOptions={allOptions}
                         parentPath={currentPath}
                         parentId={item.id}
+                        workspaceReadOnly={workspaceReadOnly}
                     />
                 </CollapsibleContent>
             </Collapsible>
@@ -202,7 +206,7 @@ function RootNoteItem({
     );
 }
 
-function NoteSubTree({ items, allOptions, parentPath, parentId }: NotesTreeProps) {
+function NoteSubTree({ items, allOptions, parentPath, parentId, workspaceReadOnly }: NotesTreeProps) {
     const { isCurrentUrl } = useCurrentUrl();
 
     return (
@@ -215,6 +219,7 @@ function NoteSubTree({ items, allOptions, parentPath, parentId }: NotesTreeProps
                     allOptions={allOptions}
                     parentPath={parentPath}
                     parentId={parentId}
+                    workspaceReadOnly={workspaceReadOnly}
                 />
             ))}
         </SidebarMenuSub>
@@ -227,12 +232,14 @@ function SubTreeNode({
     allOptions,
     parentPath,
     parentId,
+    workspaceReadOnly,
 }: {
     item: SidebarNoteTreeItem;
     isCurrentUrl: ReturnType<typeof useCurrentUrl>['isCurrentUrl'];
     allOptions: CreateNoteParentOption[];
     parentPath: string | null;
     parentId: string | null;
+    workspaceReadOnly: boolean;
 }) {
     const isActive = isCurrentUrl(item.href);
     const hasChildren = item.children.length > 0;
@@ -289,10 +296,10 @@ function SubTreeNode({
                             currentLocation={parentPath}
                             currentParentId={parentId}
                             moveParentOptions={moveParentOptions}
-                            canMove
-                            canRename
-                            canDelete
-                            canClear
+                            canMove={!workspaceReadOnly}
+                            canRename={!workspaceReadOnly}
+                            canDelete={!workspaceReadOnly}
+                            canClear={!workspaceReadOnly}
                             triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                             dropdownAlign="end"
                             dropdownSide="bottom"
@@ -341,10 +348,10 @@ function SubTreeNode({
                             currentLocation={parentPath}
                             currentParentId={parentId}
                             moveParentOptions={moveParentOptions}
-                            canMove
-                            canRename
-                            canDelete
-                            canClear
+                            canMove={!workspaceReadOnly}
+                            canRename={!workspaceReadOnly}
+                            canDelete={!workspaceReadOnly}
+                            canClear={!workspaceReadOnly}
                             triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                             dropdownAlign="end"
                             dropdownSide="bottom"
@@ -359,6 +366,7 @@ function SubTreeNode({
                         allOptions={allOptions}
                         parentPath={currentPath}
                         parentId={item.id}
+                        workspaceReadOnly={workspaceReadOnly}
                     />
                 </CollapsibleContent>
             </Collapsible>
@@ -367,12 +375,18 @@ function SubTreeNode({
 }
 
 export function NavNotesTree() {
-    const { notesTree } = usePage().props;
+    const { notesTree, currentWorkspace } = usePage().props as {
+        notesTree?: SidebarNoteTreeItem[];
+        currentWorkspace?: {
+            is_migrated_source?: boolean;
+        } | null;
+    };
     const { t } = useI18n();
     const items = useMemo(
         () => (notesTree ?? []) as SidebarNoteTreeItem[],
         [notesTree],
     );
+    const workspaceReadOnly = currentWorkspace?.is_migrated_source === true;
     const [createOpen, setCreateOpen] = useState(false);
 
     const parentOptions = useMemo(() => {
@@ -399,12 +413,20 @@ export function NavNotesTree() {
         return flattened;
     }, [items]);
 
-    const openDialog = () => {
+    const openDialog = useCallback(() => {
+        if (workspaceReadOnly) {
+            return;
+        }
+
         setCreateOpen(true);
-    };
+    }, [workspaceReadOnly]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
+            if (workspaceReadOnly) {
+                return;
+            }
+
             if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'n') {
                 return;
             }
@@ -420,7 +442,7 @@ export function NavNotesTree() {
         };
         // Intentionally global shortcut registration.
          
-    }, []);
+    }, [openDialog, workspaceReadOnly]);
 
     useEffect(() => {
         const openHandler = () => {
@@ -434,7 +456,7 @@ export function NavNotesTree() {
         };
         // Intentionally global event registration.
          
-    }, []);
+    }, [openDialog, workspaceReadOnly]);
 
     return (
         <SidebarGroup className="px-2 py-0 group-data-[collapsible=icon]:hidden">
@@ -442,16 +464,18 @@ export function NavNotesTree() {
                 <SidebarGroupLabel className="px-0">
                     {t('notes_create.heading', 'Notes')}
                 </SidebarGroupLabel>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    aria-label={t('notes_create.new_note', 'New note')}
-                    onClick={openDialog}
-                >
-                    <Plus className="h-4 w-4" />
-                </Button>
+                {!workspaceReadOnly ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        aria-label={t('notes_create.new_note', 'New note')}
+                        onClick={openDialog}
+                    >
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                ) : null}
             </div>
             <SidebarMenu>
                 {items.length === 0 && (
@@ -471,6 +495,7 @@ export function NavNotesTree() {
                         allOptions={parentOptions}
                         parentPath={null}
                         parentId={null}
+                        workspaceReadOnly={workspaceReadOnly}
                     />
                 ))}
             </SidebarMenu>

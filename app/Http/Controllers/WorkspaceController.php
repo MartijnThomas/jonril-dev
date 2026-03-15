@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Note;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -95,6 +97,7 @@ class WorkspaceController extends Controller
     public function update(Request $request, Workspace $workspace): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertWorkspaceMutable($workspace);
 
         $data = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
@@ -122,9 +125,43 @@ class WorkspaceController extends Controller
         return back()->with('status', 'workspace-updated');
     }
 
+    public function migrateToBlock(Request $request, Workspace $workspace): RedirectResponse
+    {
+        $this->assertOwner($request, $workspace);
+        $this->assertWorkspaceMutable($workspace);
+
+        if ($workspace->isMigratedSource()) {
+            return back()->withErrors([
+                'workspace' => 'This workspace has already been migrated.',
+            ]);
+        }
+
+        if ($workspace->editor_mode !== Workspace::EDITOR_MODE_LEGACY) {
+            return back()->withErrors([
+                'workspace' => 'Only legacy workspaces can be migrated.',
+            ]);
+        }
+
+        $exitCode = Artisan::call('notes:convert-workspace-to-block', [
+            '--workspace' => $workspace->id,
+            '--force' => true,
+        ]);
+
+        if ($exitCode !== 0) {
+            return back()->withErrors([
+                'workspace' => 'Workspace migration failed. Check logs for details.',
+            ]);
+        }
+
+        return back()
+            ->with('status', 'workspace-migrated')
+            ->with('migration_summary', $this->workspaceMigrationSummary($workspace));
+    }
+
     public function addMember(Request $request, Workspace $workspace): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertWorkspaceMutable($workspace);
 
         $data = $request->validate([
             'email' => [
@@ -152,6 +189,7 @@ class WorkspaceController extends Controller
     public function removeMember(Request $request, Workspace $workspace): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertWorkspaceMutable($workspace);
 
         $data = $request->validate([
             'user_id' => [
@@ -177,6 +215,7 @@ class WorkspaceController extends Controller
     public function updateMemberRole(Request $request, Workspace $workspace): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertWorkspaceMutable($workspace);
 
         $data = $request->validate([
             'user_id' => [
@@ -227,6 +266,58 @@ class WorkspaceController extends Controller
         return back()->with('status', 'member-role-updated');
     }
 
+    public function destroy(Request $request, Workspace $workspace): RedirectResponse
+    {
+        $this->assertOwner($request, $workspace);
+
+        $owner = $request->user();
+        if (! $owner) {
+            abort(403);
+        }
+
+        $remainingWorkspaceIds = $owner->workspaces()
+            ->where('workspaces.id', '!=', $workspace->id)
+            ->pluck('workspaces.id')
+            ->values();
+
+        if ($remainingWorkspaceIds->isEmpty()) {
+            return back()->withErrors([
+                'workspace' => 'You cannot delete your last workspace.',
+            ]);
+        }
+
+        $workspace->delete();
+
+        $settings = is_array($owner->settings) ? $owner->settings : [];
+        $preferredWorkspaceId = (string) ($settings['workspace_id'] ?? '');
+        if ($preferredWorkspaceId === $workspace->id) {
+            $settings['workspace_id'] = $remainingWorkspaceIds->first();
+            $owner->forceFill([
+                'settings' => $settings,
+            ])->save();
+        }
+
+        return redirect()->route('notes.index', [
+            'type' => 'all',
+        ])->with('status', 'workspace-deleted');
+    }
+
+    public function reactivate(Request $request, Workspace $workspace): RedirectResponse
+    {
+        $this->assertOwner($request, $workspace);
+        $this->assertAdmin($request);
+
+        if (! $workspace->isMigratedSource()) {
+            return back();
+        }
+
+        $workspace->forceFill([
+            'migrated_at' => null,
+        ])->save();
+
+        return back()->with('status', 'workspace-reactivated');
+    }
+
     private function assertOwner(Request $request, Workspace $workspace): void
     {
         $isOwner = $workspace->users()
@@ -237,10 +328,28 @@ class WorkspaceController extends Controller
         abort_unless($isOwner, 403);
     }
 
+    private function assertWorkspaceMutable(Workspace $workspace): void
+    {
+        if (! $workspace->isMigratedSource()) {
+            return;
+        }
+
+        abort(409, 'Migrated source workspaces are read-only.');
+    }
+
+    private function assertAdmin(Request $request): void
+    {
+        abort_unless((string) ($request->user()?->role ?? '') === 'admin', 403);
+    }
+
     /**
      * @return array{
-     *     workspace: array{id: string, name: string, color: string, timeblock_color: string|null, editor_mode: string, icon: string, owner_id: int},
-     *     members: array<int, array{id: int, name: string, email: string, role: string}>
+     *     workspace: array{id: string, name: string, color: string, timeblock_color: string|null, editor_mode: string, icon: string, owner_id: int, is_migrated_source: bool, can_migrate_to_block: bool},
+     *     members: array<int, array{id: int, name: string, email: string, role: string}>,
+     *     migrationSummary: array{
+     *         workspace: array{id: string, name: string, slug: string},
+     *         notes: array{total: int, normal: int, journal: int}
+     *     }|null
      * }
      */
     private function workspaceSettingsPayload(Workspace $workspace): array
@@ -268,8 +377,49 @@ class WorkspaceController extends Controller
                 'editor_mode' => $workspace->editor_mode,
                 'icon' => $workspace->icon,
                 'owner_id' => (int) $workspace->owner_id,
+                'is_migrated_source' => $workspace->isMigratedSource(),
+                'can_migrate_to_block' => $workspace->editor_mode === Workspace::EDITOR_MODE_LEGACY && ! $workspace->isMigratedSource(),
             ],
             'members' => $members,
+            'migrationSummary' => session('migration_summary', $this->workspaceMigrationSummary($workspace)),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     workspace: array{id: string, name: string, slug: string},
+     *     notes: array{total: int, normal: int, journal: int}
+     * }|null
+     */
+    private function workspaceMigrationSummary(Workspace $sourceWorkspace): ?array
+    {
+        $targetWorkspace = Workspace::query()
+            ->where('owner_id', $sourceWorkspace->owner_id)
+            ->where('editor_mode', Workspace::EDITOR_MODE_BLOCK)
+            ->where('name', $sourceWorkspace->name.' (Block)')
+            ->latest('created_at')
+            ->first();
+
+        if (! $targetWorkspace) {
+            return null;
+        }
+
+        $baseQuery = Note::query()->where('workspace_id', $targetWorkspace->id);
+        $total = (clone $baseQuery)->count();
+        $journal = (clone $baseQuery)->where('type', Note::TYPE_JOURNAL)->count();
+        $normal = $total - $journal;
+
+        return [
+            'workspace' => [
+                'id' => $targetWorkspace->id,
+                'name' => $targetWorkspace->name,
+                'slug' => $targetWorkspace->slug,
+            ],
+            'notes' => [
+                'total' => $total,
+                'normal' => $normal,
+                'journal' => $journal,
+            ],
         ];
     }
 }

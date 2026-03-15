@@ -1,4 +1,4 @@
-import { Link, router, useRemember } from '@inertiajs/react';
+import { Link, router, usePage, useRemember } from '@inertiajs/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -108,6 +108,12 @@ export function NoteRelatedPanel({
     backlinks,
     language,
 }: NoteRelatedPanelProps) {
+    const pageProps = usePage().props as {
+        currentWorkspace?: {
+            is_migrated_source?: boolean;
+        } | null;
+    };
+    const workspaceReadOnly = pageProps.currentWorkspace?.is_migrated_source === true;
     const isOpenTask = (task: RelatedTaskItem) =>
         task.checked !== true &&
         task.task_status !== 'canceled' &&
@@ -225,6 +231,10 @@ export function NoteRelatedPanel({
     }
 
     const toggleTask = (task: RelatedTaskItem) => {
+        if (workspaceReadOnly) {
+            return;
+        }
+
         if (pendingTaskIds.includes(task.id)) {
             return;
         }
@@ -481,6 +491,7 @@ export function NoteRelatedPanel({
                                                                                     : 'open'
                                                                         }
                                                                         disabled={
+                                                                            workspaceReadOnly ||
                                                                             pendingTaskIds.includes(
                                                                                 task.id,
                                                                             ) ||

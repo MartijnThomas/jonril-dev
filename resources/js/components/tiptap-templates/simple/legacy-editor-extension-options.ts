@@ -1,4 +1,4 @@
-export type WikiLinkNote = {
+export type LegacyWikiLinkNote = {
     id: string;
     title: string;
     path?: string;
@@ -10,15 +10,8 @@ export type WikiLinkNote = {
     }[];
 };
 
-export type BlockTaskStatusMenuPayload = {
-    x: number;
-    y: number;
-    pos: number;
-    status: 'backlog' | 'in_progress' | 'canceled' | null;
-};
-
-export type CreateSimpleEditorExtensionsOptions = {
-    wikiLinkNotes?: WikiLinkNote[];
+export type CreateLegacyEditorExtensionsOptions = {
+    wikiLinkNotes?: LegacyWikiLinkNote[];
     workspaceSuggestions?: {
         mentions: string[];
         hashtags: string[];
@@ -31,6 +24,4 @@ export type CreateSimpleEditorExtensionsOptions = {
     journalGranularity?: string | null;
     journalDate?: string | null;
     defaultTimeblockDurationMinutes?: number;
-    editorMode?: 'legacy' | 'block';
-    onBlockTaskStatusMenuRequest?: (payload: BlockTaskStatusMenuPayload) => void;
 };

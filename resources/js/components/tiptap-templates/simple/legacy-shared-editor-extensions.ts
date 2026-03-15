@@ -21,7 +21,7 @@ import { InlineCommands } from '@/components/tiptap-inline-commands/InlineComman
 import { createWorkspaceTokenSuggestion } from '@/components/tiptap-mention/workspace-token-suggestion';
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension';
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
-import type { CreateSimpleEditorExtensionsOptions } from '@/components/tiptap-templates/simple/simple-editor-extension-options';
+import type { CreateLegacyEditorExtensionsOptions } from '@/components/tiptap-templates/simple/legacy-editor-extension-options';
 import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils';
 
 type WorkspaceTokenKind = 'mention' | 'hashtag';
@@ -58,10 +58,9 @@ const TextAlignExtension = TextAlign.extend({
     },
 });
 
-export function createSharedEditorExtensions({
+export function createLegacySharedEditorExtensions({
     wikiLinkNotes = [],
     workspaceSuggestions = { mentions: [], hashtags: [] },
-    language = 'nl',
     noteIcon = null,
     noteIconColor = null,
     noteIconBg = null,
@@ -69,7 +68,7 @@ export function createSharedEditorExtensions({
     journalGranularity = null,
     journalDate = null,
     defaultTimeblockDurationMinutes = 60,
-}: CreateSimpleEditorExtensionsOptions = {}): Extensions {
+}: CreateLegacyEditorExtensionsOptions = {}): Extensions {
     const mentionItemsRef = { current: [...workspaceSuggestions.mentions] };
     const hashtagItemsRef = { current: [...workspaceSuggestions.hashtags] };
 

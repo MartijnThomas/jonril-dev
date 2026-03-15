@@ -1,5 +1,13 @@
 import { router } from '@inertiajs/react';
-import { Eraser, FolderInput, MoreVertical, Pencil, TableProperties, Trash2 } from 'lucide-react';
+import {
+    Eraser,
+    ExternalLink,
+    FolderInput,
+    MoreVertical,
+    Pencil,
+    TableProperties,
+    Trash2,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { MoveNoteDialog } from '@/components/move-note-dialog';
@@ -33,6 +41,8 @@ type Props = {
     canRename: boolean;
     canDelete: boolean;
     canClear: boolean;
+    canOpenBlockPreview?: boolean;
+    blockPreviewUrl?: string | null;
     triggerClassName?: string;
     triggerIconClassName?: string;
     dropdownAlign?: 'start' | 'center' | 'end';
@@ -51,6 +61,8 @@ export function NoteHeaderActions({
     canRename,
     canDelete,
     canClear,
+    canOpenBlockPreview = false,
+    blockPreviewUrl = null,
     triggerClassName,
     triggerIconClassName = 'h-4 w-4',
     dropdownAlign = 'start',
@@ -249,6 +261,27 @@ export function NoteHeaderActions({
                                 {t('note_actions.delete', 'Delete note')}
                             </span>
                         </DropdownMenuItem>
+                    ) : null}
+                    {canOpenBlockPreview && blockPreviewUrl ? (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                                <a
+                                    href={blockPreviewUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex w-full items-center gap-2"
+                                >
+                                    <ExternalLink className="h-4 w-4 shrink-0" />
+                                    <span>
+                                        {t(
+                                            'note_actions.open_block_preview',
+                                            'Open in block mode',
+                                        )}
+                                    </span>
+                                </a>
+                            </DropdownMenuItem>
+                        </>
                     ) : null}
                 </DropdownMenuContent>
             </DropdownMenu>

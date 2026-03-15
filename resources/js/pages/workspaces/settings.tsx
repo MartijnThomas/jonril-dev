@@ -1,5 +1,5 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
-import { Check, Copy, RotateCcw } from 'lucide-react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { Check, Copy, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
 import {
@@ -11,6 +11,15 @@ import Heading from '@/components/heading';
 import { DEFAULT_WORKSPACE_ICON, IconPicker } from '@/components/icon-picker';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -43,14 +52,37 @@ type Props = {
         editor_mode: 'legacy' | 'block' | string;
         icon: string;
         owner_id: number;
+        is_migrated_source?: boolean;
+        can_migrate_to_block?: boolean;
     };
     members: Member[];
     status?: string;
+    migrationSummary?: {
+        workspace: {
+            id: string;
+            name: string;
+            slug: string;
+        };
+        notes: {
+            total: number;
+            normal: number;
+            journal: number;
+        };
+    } | null;
 };
 
-export default function WorkspaceSettings({ workspace, members, status }: Props) {
+export default function WorkspaceSettings({ workspace, members, status, migrationSummary }: Props) {
     const { t } = useI18n();
     const page = usePage();
+    const authUserRole = (
+        page.props as {
+            auth?: {
+                user?: {
+                    role?: string;
+                };
+            };
+        }
+    ).auth?.user?.role;
     const url = useMemo(() => new URL(page.url, window.location.origin), [page.url]);
     const sectionParam = url.searchParams.get('section');
     const section: 'general' | 'members' | 'advanced' =
@@ -60,6 +92,9 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
     const [workspaceIdCopied, setWorkspaceIdCopied] = useState(false);
     const [openColorPicker, setOpenColorPicker] = useState(false);
     const [openTimeblockColorPicker, setOpenTimeblockColorPicker] = useState(false);
+    const workspaceReadOnly = workspace.is_migrated_source === true;
+    const canReactivateWorkspace = authUserRole === 'admin' && workspaceReadOnly;
+    const deleteWorkspaceForm = useForm({});
 
     useEffect(() => {
         if (!workspaceIdCopied) {
@@ -130,6 +165,10 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                     className="space-y-6"
                                     onSubmit={(event) => {
                                         event.preventDefault();
+                                        if (workspaceReadOnly) {
+                                            return;
+                                        }
+
                                         nameForm.patch(`/settings/workspaces/${workspace.id}`, {
                                             preserveScroll: true,
                                         });
@@ -145,6 +184,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                             onChange={(event) =>
                                                 nameForm.setData('name', event.target.value)
                                             }
+                                            disabled={workspaceReadOnly || nameForm.processing}
                                         />
                                         <InputError message={nameForm.errors.name} />
                                     </div>
@@ -158,7 +198,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                     value={nameForm.data.icon}
                                                     fallbackValue={DEFAULT_WORKSPACE_ICON}
                                                     onValueChange={(icon) => nameForm.setData('icon', icon)}
-                                                    disabled={nameForm.processing}
+                                                    disabled={workspaceReadOnly || nameForm.processing}
                                                 />
                                             </div>
 
@@ -173,6 +213,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                                 type="button"
                                                                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center p-0"
                                                                 aria-label={t('workspace_settings.color_label', 'Workspace color')}
+                                                                disabled={workspaceReadOnly || nameForm.processing}
                                                             >
                                                                 <span
                                                                     className="relative h-7 w-7 rounded-full border border-border/70"
@@ -220,6 +261,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                         onClick={() => {
                                                             nameForm.setData('icon', DEFAULT_WORKSPACE_ICON);
                                                         }}
+                                                        disabled={workspaceReadOnly || nameForm.processing}
                                                     >
                                                         <RotateCcw className="h-4 w-4" />
                                                     </button>
@@ -232,59 +274,6 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
 
                                         <InputError message={nameForm.errors.icon} />
                                         <InputError message={nameForm.errors.color} />
-                                    </div>
-
-                                    <div className="grid gap-3">
-                                        <div className="grid items-center gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
-                                            <Label htmlFor="workspace-editor-mode">
-                                                {t(
-                                                    'workspace_settings.editor_mode_label',
-                                                    'Editor mode',
-                                                )}
-                                            </Label>
-
-                                            <div className="space-y-2">
-                                                <Select
-                                                    value={nameForm.data.editor_mode}
-                                                    onValueChange={(value) =>
-                                                        nameForm.setData('editor_mode', value)
-                                                    }
-                                                    disabled={nameForm.processing}
-                                                >
-                                                    <SelectTrigger id="workspace-editor-mode">
-                                                        <SelectValue
-                                                            placeholder={t(
-                                                                'workspace_settings.editor_mode_label',
-                                                                'Editor mode',
-                                                            )}
-                                                        />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="legacy">
-                                                            {t(
-                                                                'workspace_settings.editor_mode_legacy',
-                                                                'Legacy',
-                                                            )}
-                                                        </SelectItem>
-                                                        <SelectItem value="block">
-                                                            {t(
-                                                                'workspace_settings.editor_mode_block',
-                                                                'Block',
-                                                            )}
-                                                        </SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-
-                                                <p className="text-sm text-muted-foreground">
-                                                    {t(
-                                                        'workspace_settings.editor_mode_description',
-                                                        'Choose which editor behavior model this workspace uses.',
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <InputError message={nameForm.errors.editor_mode} />
                                     </div>
 
                                     <div className="grid gap-3">
@@ -314,6 +303,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                                 type="button"
                                                                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center p-0"
                                                                 aria-label={t('workspace_settings.timeblock_color_label', 'Timeblock color')}
+                                                                disabled={workspaceReadOnly || nameForm.processing}
                                                             >
                                                                 <span
                                                                     className="relative h-7 w-7 rounded-full border border-border/70"
@@ -373,6 +363,14 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                 {t('workspace_settings.saved', 'Saved.')}
                                             </p>
                                         ) : null}
+                                        {workspaceReadOnly ? (
+                                            <p className="text-sm text-muted-foreground">
+                                                {t(
+                                                    'workspace_settings.read_only_migrated_workspace',
+                                                    'This migrated source workspace is read-only.',
+                                                )}
+                                            </p>
+                                        ) : null}
                                     </div>
                                 </form>
                     </section>
@@ -392,6 +390,10 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                     className="flex flex-col gap-3 sm:flex-row"
                                     onSubmit={(event) => {
                                         event.preventDefault();
+                                        if (workspaceReadOnly) {
+                                            return;
+                                        }
+
                                         addMemberForm.post(`/settings/workspaces/${workspace.id}/members`, {
                                             preserveScroll: true,
                                             onSuccess: () => addMemberForm.reset('email'),
@@ -409,10 +411,11 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                             onChange={(event) =>
                                                 addMemberForm.setData('email', event.target.value)
                                             }
+                                            disabled={workspaceReadOnly || addMemberForm.processing}
                                         />
                                         <InputError message={addMemberForm.errors.email} />
                                     </div>
-                                    <Button type="submit" disabled={addMemberForm.processing}>
+                                    <Button type="submit" disabled={workspaceReadOnly || addMemberForm.processing}>
                                         {t('workspace_settings.add_member', 'Add member')}
                                     </Button>
                                 </form>
@@ -444,6 +447,10 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                                 : 'member'
                                                         }
                                                         onChange={(event) => {
+                                                            if (workspaceReadOnly) {
+                                                                return;
+                                                            }
+
                                                             roleForm.setData({
                                                                 user_id: member.id,
                                                                 role: event.target.value,
@@ -456,7 +463,7 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                                 },
                                                             );
                                                         }}
-                                                        disabled={roleForm.processing}
+                                                        disabled={workspaceReadOnly || roleForm.processing}
                                                     >
                                                         <option value="member">
                                                             {t('workspace_settings.member', 'Member')}
@@ -472,8 +479,15 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
-                                                        disabled={removeMemberForm.processing}
+                                                        disabled={
+                                                            workspaceReadOnly ||
+                                                            removeMemberForm.processing
+                                                        }
                                                         onClick={() => {
+                                                            if (workspaceReadOnly) {
+                                                                return;
+                                                            }
+
                                                             removeMemberForm.setData('user_id', member.id);
                                                             removeMemberForm.delete(
                                                                 `/settings/workspaces/${workspace.id}/members`,
@@ -502,6 +516,14 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                         {t('workspace_settings.changes_saved', 'Changes saved.')}
                                     </p>
                                 ) : null}
+                                {workspaceReadOnly ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {t(
+                                            'workspace_settings.read_only_migrated_workspace',
+                                            'This migrated source workspace is read-only.',
+                                        )}
+                                    </p>
+                                ) : null}
                     </section>
                 ) : null}
 
@@ -516,6 +538,198 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                     )}
                                 />
                                 <div className="rounded-xl border bg-card p-5">
+                                    <form
+                                        className="mb-6 space-y-4 border-b pb-6"
+                                        onSubmit={(event) => {
+                                            event.preventDefault();
+                                            if (workspaceReadOnly) {
+                                                return;
+                                            }
+
+                                            nameForm.patch(`/settings/workspaces/${workspace.id}`, {
+                                                preserveScroll: true,
+                                            });
+                                        }}
+                                    >
+                                        <div className="grid items-center gap-3 sm:grid-cols-[160px_minmax(0,1fr)]">
+                                            <Label htmlFor="workspace-editor-mode">
+                                                {t(
+                                                    'workspace_settings.editor_mode_label',
+                                                    'Editor mode',
+                                                )}
+                                            </Label>
+
+                                            <div className="space-y-2">
+                                                <Select
+                                                    value={nameForm.data.editor_mode}
+                                                    onValueChange={(value) =>
+                                                        nameForm.setData('editor_mode', value)
+                                                    }
+                                                    disabled={workspaceReadOnly || nameForm.processing}
+                                                >
+                                                    <SelectTrigger id="workspace-editor-mode">
+                                                        <SelectValue
+                                                            placeholder={t(
+                                                                'workspace_settings.editor_mode_label',
+                                                                'Editor mode',
+                                                            )}
+                                                        />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="legacy">
+                                                            {t(
+                                                                'workspace_settings.editor_mode_legacy',
+                                                                'Legacy',
+                                                            )}
+                                                        </SelectItem>
+                                                        <SelectItem value="block">
+                                                            {t(
+                                                                'workspace_settings.editor_mode_block',
+                                                                'Block',
+                                                            )}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+
+                                                <p className="text-sm text-muted-foreground">
+                                                    {t(
+                                                        'workspace_settings.editor_mode_description',
+                                                        'Choose which editor behavior model this workspace uses.',
+                                                    )}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <InputError message={nameForm.errors.editor_mode} />
+
+                                        <div className="flex items-center gap-3">
+                                            <Button type="submit" disabled={workspaceReadOnly || nameForm.processing}>
+                                                {t('workspace_settings.save', 'Save')}
+                                            </Button>
+                                            {status === 'workspace-updated' ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    {t('workspace_settings.saved', 'Saved.')}
+                                                </p>
+                                            ) : null}
+                                            {workspaceReadOnly ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    {t(
+                                                        'workspace_settings.read_only_migrated_workspace',
+                                                        'This migrated source workspace is read-only.',
+                                                    )}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    </form>
+
+                                    <div className="mb-6 space-y-3 border-b pb-6">
+                                        <div className="space-y-1">
+                                            <Label>{t('workspace_settings.migrate_to_block_label', 'Migrate to block workspace')}</Label>
+                                            <p className="text-sm text-muted-foreground">
+                                                {t(
+                                                    'workspace_settings.migrate_to_block_description',
+                                                    'Duplicate this legacy workspace, convert the copy to block mode, and lock this source workspace as migrated.',
+                                                )}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-3">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                disabled={
+                                                    workspaceReadOnly ||
+                                                    !workspace.can_migrate_to_block
+                                                }
+                                                onClick={() => {
+                                                    if (workspaceReadOnly) {
+                                                        return;
+                                                    }
+
+                                                    if (
+                                                        !window.confirm(
+                                                            t(
+                                                                'workspace_settings.migrate_to_block_confirm',
+                                                                'Create a block-mode copy and mark this legacy workspace as migrated?',
+                                                            ),
+                                                        )
+                                                    ) {
+                                                        return;
+                                                    }
+
+                                                    nameForm.post(
+                                                        `/settings/workspaces/${workspace.id}/migrate`,
+                                                        {
+                                                            preserveScroll: true,
+                                                        },
+                                                    );
+                                                }}
+                                            >
+                                                {t('workspace_settings.migrate_to_block_action', 'Migrate workspace')}
+                                            </Button>
+
+                                            {workspace.is_migrated_source ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    {t(
+                                                        'workspace_settings.migrate_to_block_done',
+                                                        'This workspace is already marked as migrated.',
+                                                    )}
+                                                </p>
+                                            ) : null}
+                                            {status === 'workspace-migrated' ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    {t(
+                                                        'workspace_settings.migrate_to_block_success',
+                                                        'Workspace migration started successfully.',
+                                                    )}
+                                                </p>
+                                            ) : null}
+                                            {status === 'workspace-reactivated' ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    {t(
+                                                        'workspace_settings.workspace_reactivated',
+                                                        'Workspace is enabled again.',
+                                                    )}
+                                                </p>
+                                            ) : null}
+                                        </div>
+
+                                        {canReactivateWorkspace ? (
+                                            <div className="pt-2">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        if (
+                                                            !window.confirm(
+                                                                t(
+                                                                    'workspace_settings.reactivate_workspace_confirm',
+                                                                    'Enable this migrated workspace again?',
+                                                                ),
+                                                            )
+                                                        ) {
+                                                            return;
+                                                        }
+
+                                                        router.post(
+                                                            `/settings/workspaces/${workspace.id}/reactivate`,
+                                                            {},
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        );
+                                                    }}
+                                                >
+                                                    {t(
+                                                        'workspace_settings.reactivate_workspace_action',
+                                                        'Enable workspace again',
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        ) : null}
+
+                                    </div>
+
                                     <div className="space-y-2">
                                         <Label>
                                             {t('workspace_settings.workspace_id_label', 'Workspace ID')}
@@ -559,6 +773,138 @@ export default function WorkspaceSettings({ workspace, members, status }: Props)
                                                     </span>
                                                 </Button>
                                             </CopyToClipboard>
+                                        </div>
+                                    </div>
+
+                                    {migrationSummary ? (
+                                        <div className="mt-6 space-y-3 border-t pt-6">
+                                            <p className="text-sm font-medium">
+                                                {t(
+                                                    'workspace_settings.migrated_workspaces_heading',
+                                                    'Migrated workspaces',
+                                                )}
+                                            </p>
+                                            <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                                                <p className="text-sm font-medium">
+                                                    {t('workspace_settings.migration_summary_title', 'Migrated copy')}
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {migrationSummary.workspace.name}
+                                                </p>
+                                                <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                                                    <span>
+                                                        {t('workspace_settings.migration_notes_total', 'Total')}: {migrationSummary.notes.total}
+                                                    </span>
+                                                    <span>
+                                                        {t('workspace_settings.migration_notes_normal', 'Normal')}: {migrationSummary.notes.normal}
+                                                    </span>
+                                                    <span>
+                                                        {t('workspace_settings.migration_notes_journal', 'Journal')}: {migrationSummary.notes.journal}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                            router.post(
+                                                                '/workspaces/switch',
+                                                                {
+                                                                    workspace_id:
+                                                                        migrationSummary.workspace.id,
+                                                                },
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            );
+                                                        }}
+                                                    >
+                                                        {t(
+                                                            'workspace_settings.switch_to_migrated_workspace',
+                                                            'Switch to migrated workspace',
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : null}
+
+                                    <div className="mt-6 border-t pt-6">
+                                        <div className="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10">
+                                            <div className="space-y-1 text-red-700 dark:text-red-200">
+                                                <p className="text-sm font-medium">
+                                                    {t(
+                                                        'workspace_settings.delete_workspace_title',
+                                                        'Delete workspace',
+                                                    )}
+                                                </p>
+                                                <p className="text-sm">
+                                                    {t(
+                                                        'workspace_settings.delete_workspace_description',
+                                                        'Delete this workspace and all of its data. This action cannot be undone.',
+                                                    )}
+                                                </p>
+                                            </div>
+
+                                            <Dialog>
+                                                <DialogTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        variant="destructive"
+                                                        disabled={deleteWorkspaceForm.processing}
+                                                    >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        {t(
+                                                            'workspace_settings.delete_workspace_action',
+                                                            'Delete workspace',
+                                                        )}
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent>
+                                                    <DialogTitle>
+                                                        {t(
+                                                            'workspace_settings.delete_workspace_confirm_title',
+                                                            'Are you sure you want to delete this workspace?',
+                                                        )}
+                                                    </DialogTitle>
+                                                    <DialogDescription>
+                                                        {t(
+                                                            'workspace_settings.delete_workspace_confirm_description',
+                                                            'All workspace notes, journals, and related data will be permanently removed.',
+                                                        )}
+                                                    </DialogDescription>
+
+                                                    <DialogFooter className="gap-2">
+                                                        <DialogClose asChild>
+                                                            <Button
+                                                                type="button"
+                                                                variant="secondary"
+                                                            >
+                                                                {t('workspace_settings.cancel', 'Cancel')}
+                                                            </Button>
+                                                        </DialogClose>
+                                                        <Button
+                                                            type="button"
+                                                            variant="destructive"
+                                                            disabled={deleteWorkspaceForm.processing}
+                                                            onClick={() => {
+                                                                deleteWorkspaceForm.delete(
+                                                                    `/settings/workspaces/${workspace.id}`,
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                );
+                                                            }}
+                                                        >
+                                                            {t(
+                                                                'workspace_settings.delete_workspace_action',
+                                                                'Delete workspace',
+                                                            )}
+                                                        </Button>
+                                                    </DialogFooter>
+                                                </DialogContent>
+                                            </Dialog>
                                         </div>
                                     </div>
                                 </div>

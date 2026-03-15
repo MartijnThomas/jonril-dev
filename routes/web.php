@@ -8,17 +8,50 @@ use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceSuggestionController;
 use App\Http\Controllers\WorkspaceSwitchController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
+use Laravel\Sanctum\PersonalAccessToken;
 
 Route::inertia('/', 'welcome', [
     'canRegister' => Features::enabled(Features::registration()),
 ])->name('home');
 
+if (app()->environment('local')) {
+    Route::get('dev/auth/token-login', function (Request $request) {
+        $data = $request->validate([
+            'token' => ['required', 'string'],
+            'redirect' => ['nullable', 'string'],
+        ]);
+
+        $accessToken = PersonalAccessToken::findToken($data['token']);
+
+        abort_unless($accessToken !== null, 403);
+        abort_unless($accessToken->can('dev-auth-login'), 403);
+        abort_unless($accessToken->tokenable instanceof \App\Models\User, 403);
+
+        Auth::login($accessToken->tokenable);
+        $accessToken->delete();
+
+        $redirect = trim((string) ($data['redirect'] ?? '/'));
+        if ($redirect === '' || ! str_starts_with($redirect, '/')) {
+            $redirect = '/';
+        }
+
+        return redirect($redirect);
+    })->name('dev.auth.token-login');
+}
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('journal', function (Request $request) {
         $workspace = $request->user()?->currentWorkspace();
         abort_if(! $workspace, 403, 'No workspace available.');
+
+        if ($workspace->isMigratedSource()) {
+            return redirect()->route('notes.index', [
+                'type' => 'all',
+            ]);
+        }
 
         return redirect()->route('journal.show.by-period', [
             'workspace' => $workspace->slug,
@@ -29,6 +62,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('notes', function (Request $request) {
         $workspace = $request->user()?->currentWorkspace();
         abort_if(! $workspace, 403, 'No workspace available.');
+
+        if ($workspace->isMigratedSource()) {
+            return redirect()->route('notes.index', [
+                'type' => 'all',
+            ]);
+        }
 
         return redirect()->route('journal.show.by-period', [
             'workspace' => $workspace->slug,

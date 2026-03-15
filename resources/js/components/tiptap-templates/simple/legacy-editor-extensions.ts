@@ -1,8 +1,8 @@
+import type { CreateLegacyEditorExtensionsOptions } from '@/components/tiptap-templates/simple/legacy-editor-extension-options';
 import { createLegacyListBehaviorExtensions } from '@/components/tiptap-templates/simple/legacy-list-behavior-extensions';
-import { createSharedEditorExtensions } from '@/components/tiptap-templates/simple/shared-editor-extensions';
-import type { CreateSimpleEditorExtensionsOptions } from '@/components/tiptap-templates/simple/simple-editor-extension-options';
+import { createLegacySharedEditorExtensions } from '@/components/tiptap-templates/simple/legacy-shared-editor-extensions';
 
-export type { CreateSimpleEditorExtensionsOptions };
+export type { CreateLegacyEditorExtensionsOptions };
 
 export function createLegacyEditorExtensions({
     wikiLinkNotes = [],
@@ -15,12 +15,11 @@ export function createLegacyEditorExtensions({
     journalGranularity = null,
     journalDate = null,
     defaultTimeblockDurationMinutes = 60,
-    editorMode: _editorMode = 'legacy',
-}: CreateSimpleEditorExtensionsOptions = {}) {
+}: CreateLegacyEditorExtensionsOptions = {}) {
     const displayLocale = language === 'en' ? 'en-US' : 'nl-NL';
 
     return [
-        ...createSharedEditorExtensions({
+        ...createLegacySharedEditorExtensions({
             wikiLinkNotes,
             workspaceSuggestions,
             language,

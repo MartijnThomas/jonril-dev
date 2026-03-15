@@ -1,9 +1,9 @@
 <?php
 
+use App\Http\Controllers\Settings\EditorPreferencesController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\TaskFilterPresetController;
-use App\Http\Controllers\Settings\EditorPreferencesController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
 use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
@@ -45,6 +45,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('workspaces.settings.data');
     Route::patch('settings/workspaces/{workspace}', [WorkspaceController::class, 'update'])
         ->name('workspaces.settings.update');
+    Route::delete('settings/workspaces/{workspace}', [WorkspaceController::class, 'destroy'])
+        ->name('workspaces.settings.destroy');
+    Route::post('settings/workspaces/{workspace}/migrate', [WorkspaceController::class, 'migrateToBlock'])
+        ->name('workspaces.settings.migrate');
+    Route::post('settings/workspaces/{workspace}/reactivate', [WorkspaceController::class, 'reactivate'])
+        ->name('workspaces.settings.reactivate');
     Route::post('settings/workspaces/{workspace}/members', [WorkspaceController::class, 'addMember'])
         ->name('workspaces.settings.members.add');
     Route::delete('settings/workspaces/{workspace}/members', [WorkspaceController::class, 'removeMember'])

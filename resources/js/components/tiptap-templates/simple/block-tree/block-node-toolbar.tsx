@@ -15,6 +15,7 @@ import {
     IndentDecrease,
     IndentIncrease,
     List,
+    ListChecks,
     ListOrdered,
     Link2,
     NotebookText,
@@ -37,6 +38,7 @@ import { Button } from '@/components/ui/button';
 const BLOCK_NODE_OPTIONS = [
     { value: 'paragraph', label: 'Paragraph', icon: Pilcrow },
     { value: 'bullet', label: 'Bullet list item', icon: List },
+    { value: 'checklist', label: 'Checklist item', icon: ListChecks },
     { value: 'ordered', label: 'Ordered list item', icon: ListOrdered },
     { value: 'quote', label: 'Block quote', icon: Quote },
     { value: 'heading-1', label: 'H1', icon: Heading1 },
@@ -141,7 +143,7 @@ export function BlockNodeToolbar({
             return;
         }
 
-        if (value === 'bullet' || value === 'ordered' || value === 'quote') {
+        if (value === 'bullet' || value === 'checklist' || value === 'ordered' || value === 'quote') {
             if (currentValue === value) {
                 setCurrentParagraphStyle(editor, 'paragraph');
                 return;

@@ -1,4 +1,4 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -48,6 +48,12 @@ export function DailyNoteTasksPanel({
     tasks,
     language,
 }: DailyNoteTasksPanelProps) {
+    const pageProps = usePage().props as {
+        currentWorkspace?: {
+            is_migrated_source?: boolean;
+        } | null;
+    };
+    const workspaceReadOnly = pageProps.currentWorkspace?.is_migrated_source === true;
     const [open, setOpen] = useState(true);
     const [items, setItems] = useState(tasks);
     const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
@@ -76,6 +82,10 @@ export function DailyNoteTasksPanel({
     const counterLabel = `${doneOrCanceledCount}/${items.length}`;
 
     const toggleTask = (task: DailyTaskItem) => {
+        if (workspaceReadOnly) {
+            return;
+        }
+
         if (pendingTaskIds.includes(task.id)) {
             return;
         }
@@ -224,6 +234,7 @@ export function DailyNoteTasksPanel({
                                                     : 'open'
                                         }
                                         disabled={
+                                            workspaceReadOnly ||
                                             pendingTaskIds.includes(task.id) ||
                                             task.task_status === 'canceled' ||
                                             task.task_status === 'migrated'

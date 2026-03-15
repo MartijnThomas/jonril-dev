@@ -14,6 +14,7 @@ type UseEditorSaveProps = {
     editor: Editor | null;
     noteId: string;
     noteUpdateUrl: string;
+    enabled?: boolean;
     properties?: DocumentPropertiesValue;
     idleMs?: number;
     includeTimeblocks?: boolean;
@@ -127,6 +128,7 @@ export function useEditorSave({
     editor,
     noteId,
     noteUpdateUrl,
+    enabled = true,
     properties = {},
     idleMs = 1500,
     includeTimeblocks = false,
@@ -153,9 +155,15 @@ export function useEditorSave({
         noteUpdateUrlRef.current = noteUpdateUrl;
     }, [noteUpdateUrl]);
 
+    useEffect(() => {
+        if (!enabled) {
+            setStatus('ready');
+        }
+    }, [enabled]);
+
     const saveEditor = useCallback(
         (force = false) => {
-            if (!editor) {
+            if (!enabled || !editor) {
                 return;
             }
 
@@ -307,7 +315,7 @@ export function useEditorSave({
                 },
             );
         },
-        [editor, includeTimeblocks],
+        [editor, enabled, includeTimeblocks],
     );
 
     useEffect(() => {
@@ -325,7 +333,7 @@ export function useEditorSave({
     }, [idleMs, saveEditor]);
 
     useEffect(() => {
-        if (!editor) {
+        if (!enabled || !editor) {
             return;
         }
 
@@ -343,10 +351,10 @@ export function useEditorSave({
         }
         // Only reset baseline when loading/switching note editor.
          
-    }, [editor, noteId]);
+    }, [editor, enabled, noteId]);
 
     useEffect(() => {
-        if (!editor) {
+        if (!enabled || !editor) {
             return;
         }
 
@@ -360,18 +368,26 @@ export function useEditorSave({
         return () => {
             editor.off('update', handleUpdate);
         };
-    }, [editor, queueSave]);
+    }, [editor, enabled, queueSave]);
 
     useEffect(() => {
+        if (!enabled) {
+            return;
+        }
+
         if (JSON.stringify(properties) === lastSavedPropertiesRef.current) {
             return;
         }
 
         queueMicrotask(() => setStatus('dirty'));
         queueSave();
-    }, [properties, queueSave]);
+    }, [enabled, properties, queueSave]);
 
     useEffect(() => {
+        if (!enabled) {
+            return;
+        }
+
         const handleKeyDown = (event: KeyboardEvent) => {
             if (
                 !(event.metaKey || event.ctrlKey) ||
@@ -399,7 +415,7 @@ export function useEditorSave({
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [editor, saveEditor]);
+    }, [editor, enabled, saveEditor]);
 
     useEffect(() => {
         return () => {

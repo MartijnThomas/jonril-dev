@@ -27,6 +27,7 @@ type SharedWorkspace = {
     color: string;
     icon: string;
     role: string;
+    is_migrated_source?: boolean;
 };
 
 type PageProps = {
@@ -45,13 +46,16 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const currentPath = currentUrl.pathname;
     const currentSection = currentUrl.searchParams.get('section') ?? 'general';
 
-    const ownerWorkspaces = useMemo(
-        () =>
-            workspaces
-                .filter((workspace) => workspace.role === 'owner')
-                .sort((a, b) => a.name.localeCompare(b.name)),
-        [workspaces],
-    );
+    const ownerWorkspaces = useMemo(() => {
+        const owned = workspaces
+            .filter((workspace) => workspace.role === 'owner')
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        return {
+            active: owned.filter((workspace) => workspace.is_migrated_source !== true),
+            migrated: owned.filter((workspace) => workspace.is_migrated_source === true),
+        };
+    }, [workspaces]);
     const workspaceIconTextClass = (color: string | null | undefined) =>
         color === 'black' ? 'text-white dark:text-zinc-900' : 'text-white';
 
@@ -128,7 +132,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                 {t('settings.workspaces_section', 'Workspaces')}
                             </p>
 
-                            {ownerWorkspaces.map((workspace) => {
+                            {ownerWorkspaces.active.map((workspace) => {
                                 const workspacePath = `/settings/workspaces/${workspace.id}`;
                                 const isCurrentWorkspace = currentPath === workspacePath;
                                 const isWorkspaceOpen = openWorkspaceIds[workspace.id] === true;
@@ -191,6 +195,139 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                                             {t('settings.current_workspace', 'Current')}
                                                         </span>
                                                     ) : null}
+                                                    </span>
+                                                </Link>
+                                            </Button>
+                                        </div>
+
+                                        <CollapsibleContent className="mt-1 space-y-1.5 pl-12">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                asChild
+                                                className={cn('w-full justify-start px-2', {
+                                                    'bg-muted':
+                                                        isCurrentWorkspace &&
+                                                        currentSection === 'general',
+                                                })}
+                                            >
+                                                <Link href={sectionHref('general')} className="truncate">
+                                                    <span className="truncate">
+                                                        {t('workspace_settings.general', 'General')}
+                                                    </span>
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                asChild
+                                                className={cn('w-full justify-start px-2', {
+                                                    'bg-muted':
+                                                        isCurrentWorkspace &&
+                                                        currentSection === 'members',
+                                                })}
+                                            >
+                                                <Link href={sectionHref('members')} className="truncate">
+                                                    <span className="truncate">
+                                                        {t('workspace_settings.members', 'Members')}
+                                                    </span>
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                asChild
+                                                className={cn('w-full justify-start px-2', {
+                                                    'bg-muted':
+                                                        isCurrentWorkspace &&
+                                                        currentSection === 'advanced',
+                                                })}
+                                            >
+                                                <Link href={sectionHref('advanced')} className="truncate">
+                                                    <span className="truncate">
+                                                        {t('workspace_settings.advanced', 'Advanced')}
+                                                    </span>
+                                                </Link>
+                                            </Button>
+                                        </CollapsibleContent>
+                                    </Collapsible>
+                                );
+                            })}
+
+                            {ownerWorkspaces.migrated.length > 0 ? (
+                                <div className="pt-3">
+                                    <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                        {t(
+                                            'settings.migrated_workspaces_section',
+                                            'Migrated workspaces',
+                                        )}
+                                    </p>
+                                </div>
+                            ) : null}
+
+                            {ownerWorkspaces.migrated.map((workspace) => {
+                                const workspacePath = `/settings/workspaces/${workspace.id}`;
+                                const isCurrentWorkspace = currentPath === workspacePath;
+                                const isWorkspaceOpen = openWorkspaceIds[workspace.id] === true;
+
+                                const sectionHref = (section: 'general' | 'members' | 'advanced') =>
+                                    `${workspacePath}?section=${section}`;
+
+                                return (
+                                    <Collapsible
+                                        key={workspace.id}
+                                        open={isWorkspaceOpen}
+                                        onOpenChange={(open) =>
+                                            setOpenWorkspaceIds((prev) => ({
+                                                ...prev,
+                                                [workspace.id]: open,
+                                            }))
+                                        }
+                                    >
+                                        <div className="ml-1 flex w-full min-w-0 items-center gap-1">
+                                            <CollapsibleTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none"
+                                                    aria-label={`${workspace.name} sections`}
+                                                >
+                                                    {isWorkspaceOpen ? (
+                                                        <ChevronDown className="size-4" />
+                                                    ) : (
+                                                        <ChevronRight className="size-4" />
+                                                    )}
+                                                </button>
+                                            </CollapsibleTrigger>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                asChild
+                                                className={cn('min-w-0 flex-1 justify-start px-2', {
+                                                    'bg-muted': isCurrentWorkspace,
+                                                })}
+                                            >
+                                                <Link href={workspacePath} className="w-full min-w-0">
+                                                    <span className="flex w-full min-w-0 items-center gap-2 overflow-hidden">
+                                                        <span
+                                                            className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${getColorThemeBgClass(
+                                                                workspace.color,
+                                                            )}`}
+                                                        >
+                                                            <Icon
+                                                                iconNode={getWorkspaceIconComponent(
+                                                                    workspace.icon,
+                                                                )}
+                                                                className={`size-3.5 ${workspaceIconTextClass(
+                                                                    workspace.color,
+                                                                )}`}
+                                                            />
+                                                        </span>
+                                                        <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+                                                        {currentWorkspace?.id === workspace.id ? (
+                                                            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground uppercase">
+                                                                {t('settings.current_workspace', 'Current')}
+                                                            </span>
+                                                        ) : null}
                                                     </span>
                                                 </Link>
                                             </Button>

@@ -237,9 +237,10 @@ html {
 }
 
 .md-task-migration-meta {
-    margin-top: 0.15rem;
-    font-size: 0.78em;
-    line-height: 1.35;
+    margin-top: 0;
+    margin-bottom: 0;
+    font-size: 0.85em;
+    line-height: 1.2;
     letter-spacing: 0.01em;
     color: color-mix(in srgb, currentColor 64%, transparent);
     user-select: none;
@@ -557,43 +558,6 @@ html {
 .task-toggle-checkbox[data-status='migrated'] span::after {
     -webkit-mask-image: url('data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M9%2018L15%2012L9%206%22%2F%3E%3C%2Fsvg%3E');
     mask-image: url('data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M9%2018L15%2012L9%206%22%2F%3E%3C%2Fsvg%3E');
-}
-
-.tiptap.ProseMirror.simple-editor[data-editor-mode='block']
-    .bt-paragraph[data-block-style='task'][data-task-status='canceled']::before {
-    border-color: rgb(209 213 219) !important;
-    background-color: rgb(255 255 255) !important;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' stroke='rgb(156 163 175)' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M18 6L6 18'/%3E%3Cpath d='M6 6L18 18'/%3E%3C/svg%3E") !important;
-    background-position: center !important;
-    background-repeat: no-repeat !important;
-    background-size: 0.72rem 0.72rem !important;
-}
-
-.dark
-    .tiptap.ProseMirror.simple-editor[data-editor-mode='block']
-    .bt-paragraph[data-block-style='task'][data-task-status='canceled']::before {
-    background-color: rgb(39 39 42) !important;
-}
-
-.tiptap.ProseMirror.simple-editor[data-editor-mode='block']
-    .bt-paragraph[data-block-style='task'][data-task-status='canceled']
-    :is(
-        .mention,
-        .hashtag,
-        .md-wikilink,
-        .md-task-due-token,
-        .md-task-deadline-token,
-        .md-task-date-display,
-        .md-task-status-token,
-        .md-priority,
-        .md-priority-range
-    ) {
-    color: inherit !important;
-    background: transparent !important;
-    font-weight: inherit !important;
-    text-decoration: inherit !important;
-    border-radius: 0 !important;
-    padding: 0 !important;
 }
 
 .simple-editor-content .ProseMirror :is([id], [data-id]) {

@@ -24,6 +24,7 @@ type Props = {
     journalDate: string | null;
     defaultTimeblockDurationMinutes: number;
     editorMode: 'legacy' | 'block';
+    editorReadOnly?: boolean;
     workspaceSuggestions: {
         mentions: string[];
         hashtags: string[];
@@ -97,6 +98,7 @@ export default function Dashboard({
     journalDate,
     defaultTimeblockDurationMinutes,
     editorMode,
+    editorReadOnly = false,
     workspaceSuggestions,
     relatedTasks = [],
     backlinks = [],
@@ -205,6 +207,7 @@ export default function Dashboard({
                 journalDate={journalDate}
                 defaultTimeblockDurationMinutes={defaultTimeblockDurationMinutes}
                 editorMode={editorMode}
+                readOnly={editorReadOnly}
                 onSaveStatusChange={setSaveStatus}
                 onLastSavedAtChange={setSaveLastSavedAt}
                 onContentStatsChange={handleContentStatsChange}

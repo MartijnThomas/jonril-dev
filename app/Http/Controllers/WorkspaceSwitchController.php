@@ -35,6 +35,12 @@ class WorkspaceSwitchController extends Controller
             'settings' => $settings,
         ])->save();
 
+        if ($workspace->isMigratedSource()) {
+            return redirect()->route('notes.index', [
+                'type' => 'all',
+            ]);
+        }
+
         return redirect()->route('journal.landing');
     }
 }

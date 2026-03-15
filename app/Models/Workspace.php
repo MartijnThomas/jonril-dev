@@ -35,6 +35,7 @@ class Workspace extends Model
         'color',
         'timeblock_color',
         'editor_mode',
+        'migrated_at',
         'icon',
         'mention_suggestions',
         'hashtag_suggestions',
@@ -144,7 +145,13 @@ class Workspace extends Model
         return [
             'mention_suggestions' => 'array',
             'hashtag_suggestions' => 'array',
+            'migrated_at' => 'datetime',
         ];
+    }
+
+    public function isMigratedSource(): bool
+    {
+        return $this->migrated_at !== null;
     }
 
     public function owner(): BelongsTo

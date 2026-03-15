@@ -4,6 +4,7 @@ use App\Models\Note;
 use App\Models\NoteRevision;
 use App\Models\NoteTask;
 use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -48,6 +49,55 @@ test('start initializes block mode notes with an h1 first block', function () {
     expect($note)->not()->toBeNull();
     expect(data_get($note->content, 'content.0.type'))->toBe('heading');
     expect((int) data_get($note->content, 'content.0.attrs.level'))->toBe(1);
+});
+
+test('migrated source workspace is read-only in notes UI and update endpoint', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'migrated_at' => now(),
+    ])->save();
+
+    $note = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Read only note',
+        'slug' => 'read-only-note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 1],
+                    'content' => [['type' => 'text', 'text' => 'Read only note']],
+                ],
+            ],
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->get(scoped_note_url($workspace, $note->slug))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('editorReadOnly', true)
+            ->where('noteUpdateUrl', '')
+            ->where('noteActions.canClear', false)
+            ->where('noteActions.canRename', false)
+            ->where('noteActions.canMove', false)
+            ->where('noteActions.canDelete', false),
+        );
+
+    $this->actingAs($user)
+        ->putJson(scoped_note_url($workspace, $note->id), [
+            'content' => [
+                'type' => 'doc',
+                'content' => [
+                    [
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Attempt write']],
+                    ],
+                ],
+            ],
+        ])
+        ->assertStatus(409);
 });
 
 test('show resolves notes by slug', function () {
@@ -138,6 +188,221 @@ test('show includes the workspace editor mode', function () {
             ->where('noteId', $note->id)
             ->where('editorMode', 'block'),
         );
+});
+
+test('legacy admin sees block preview toggle in note actions', function () {
+    $user = User::factory()->create([
+        'role' => 'admin',
+    ]);
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'editor_mode' => Workspace::EDITOR_MODE_LEGACY,
+    ])->save();
+
+    $note = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Preview toggle note',
+        'slug' => 'preview-toggle-note',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $note->slug))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteActions.canOpenBlockPreview', true)
+            ->where(
+                'noteActions.blockPreviewUrl',
+                scoped_note_url($workspace, $note->slug).'?preview_block=1',
+            ),
+        );
+});
+
+test('legacy non-admin does not see block preview toggle in note actions', function () {
+    $user = User::factory()->create([
+        'role' => 'user',
+    ]);
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'editor_mode' => Workspace::EDITOR_MODE_LEGACY,
+    ])->save();
+
+    $note = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'No preview toggle note',
+        'slug' => 'no-preview-toggle-note',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $note->slug))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteActions.canOpenBlockPreview', false)
+            ->where('noteActions.blockPreviewUrl', null),
+        );
+});
+
+test('block workspace renders legacy-shaped note content as block content without mutating note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'editor_mode' => Workspace::EDITOR_MODE_BLOCK,
+    ])->save();
+
+    $legacyContent = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'paragraph',
+                'content' => [
+                    ['type' => 'text', 'text' => '# Legacy title'],
+                ],
+            ],
+            [
+                'type' => 'bulletList',
+                'content' => [
+                    [
+                        'type' => 'listItem',
+                        'content' => [
+                            [
+                                'type' => 'paragraph',
+                                'content' => [
+                                    ['type' => 'text', 'text' => 'Item'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $note = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Legacy title',
+        'slug' => 'legacy-title',
+        'content' => $legacyContent,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $note->slug))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('notes/show')
+            ->where('editorMode', Workspace::EDITOR_MODE_BLOCK)
+            ->where('editorReadOnly', false)
+            ->where('content.type', 'doc')
+            ->where('content.content.0.type', 'heading')
+            ->where('content.content.0.attrs.level', 1)
+            ->where('content.content.0.content.0.text', 'Legacy title')
+            ->where('content.content.1.type', 'paragraph')
+            ->where('content.content.1.attrs.blockStyle', 'bullet')
+            ->where('content.content.1.content.0.text', 'Item'),
+        );
+
+    $note->refresh();
+    expect($note->content)->toBe($legacyContent);
+});
+
+test('legacy workspace supports read-only block preview without mutating note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'editor_mode' => Workspace::EDITOR_MODE_LEGACY,
+    ])->save();
+
+    $note = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Legacy preview title',
+        'slug' => 'legacy-preview-title',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'paragraph',
+                    'content' => [
+                        ['type' => 'text', 'text' => '# Legacy preview title'],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $originalContent = $note->content;
+    $originalTitle = $note->title;
+    $originalSlug = $note->slug;
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $note->slug).'?preview_block=1')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('notes/show')
+            ->where('editorMode', Workspace::EDITOR_MODE_BLOCK)
+            ->where('editorReadOnly', true)
+            ->where('noteUpdateUrl', '')
+            ->where('content.type', 'doc')
+            ->where('content.content.0.type', 'heading')
+            ->where('content.content.0.attrs.level', 1)
+            ->where('content.content.0.content.0.text', 'Legacy preview title'),
+        );
+
+    $note->refresh();
+
+    expect($note->content)->toBe($originalContent);
+    expect($note->title)->toBe($originalTitle);
+    expect($note->slug)->toBe($originalSlug);
+});
+
+test('preview block mode rejects note updates and does not mutate stored content', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace?->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Preview protected note',
+        'slug' => 'preview-protected-note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'paragraph',
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Original body'],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $originalContent = $note->content;
+    $originalTitle = $note->title;
+
+    $this
+        ->actingAs($user)
+        ->putJson(route('notes.update', [
+            'workspace' => $workspace->slug,
+            'note' => $note->id,
+        ]).'?preview_block=1', [
+            'content' => [
+                'type' => 'doc',
+                'content' => [
+                    [
+                        'type' => 'heading',
+                        'attrs' => ['level' => 1],
+                        'content' => [
+                            ['type' => 'text', 'text' => 'Mutated'],
+                        ],
+                    ],
+                ],
+            ],
+            'properties' => [],
+            'save_mode' => 'manual',
+        ])
+        ->assertStatus(409);
+
+    $note->refresh();
+
+    expect($note->content)->toBe($originalContent);
+    expect($note->title)->toBe($originalTitle);
 });
 
 test('show includes the user language for the editor', function () {

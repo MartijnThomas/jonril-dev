@@ -7,6 +7,57 @@ use App\Models\Workspace;
 use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
 
+test('tasks index redirects to notes list for migrated source workspace', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'migrated_at' => now(),
+    ])->save();
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks')
+        ->assertRedirect(route('notes.index', ['type' => 'all'], absolute: false));
+});
+
+test('tasks cannot be toggled by reference in migrated source workspace', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $workspace?->forceFill([
+        'migrated_at' => now(),
+    ])->save();
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace?->id,
+        'type' => Note::TYPE_NOTE,
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Blocked task toggle']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch(route('tasks.checked-by-reference', absolute: false), [
+            'note_id' => $note->id,
+            'position' => 1,
+            'checked' => true,
+        ])
+        ->assertStatus(409);
+});
+
 test('tasks index extracts tasks and hides completed items by default', function () {
     $user = User::factory()->create();
 
@@ -91,6 +142,72 @@ test('tasks index extracts tasks and hides completed items by default', function
             ->where('tasks.data.0.render_fragments.2.type', 'priority_token')
             ->where('tasks.data.0.render_fragments.2.priority', 'normal')
             ->where('filters.show_completed', false),
+        );
+});
+
+test('tasks index excludes tasks from workspaces marked as migrated source', function () {
+    $user = User::factory()->create();
+    $primaryWorkspace = $user->currentWorkspace();
+
+    $secondaryWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'name' => 'Secondary Active',
+    ]);
+
+    $user->workspaces()->syncWithoutDetaching([
+        $secondaryWorkspace->id => ['role' => 'owner'],
+    ]);
+    $user->forceFill([
+        'settings' => [
+            ...(is_array($user->settings) ? $user->settings : []),
+            'workspace_id' => $secondaryWorkspace->id,
+        ],
+    ])->save();
+
+    $primaryWorkspace?->forceFill([
+        'migrated_at' => now(),
+    ])->save();
+
+    $primaryNote = Note::factory()->create([
+        'workspace_id' => $primaryWorkspace?->id,
+        'title' => 'Primary note',
+        'slug' => 'primary-note',
+    ]);
+
+    $secondaryNote = Note::factory()->create([
+        'workspace_id' => $secondaryWorkspace->id,
+        'title' => 'Secondary note',
+        'slug' => 'secondary-note',
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $primaryWorkspace?->id,
+        'note_id' => $primaryNote->id,
+        'block_id' => 'task-primary',
+        'position' => 1,
+        'checked' => false,
+        'content_text' => 'Primary task should be excluded',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $secondaryWorkspace->id,
+        'note_id' => $secondaryNote->id,
+        'block_id' => 'task-secondary',
+        'position' => 1,
+        'checked' => false,
+        'content_text' => 'Secondary task should stay visible',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    $this->actingAs($user)
+        ->get('/tasks')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('workspaces.0.id', $secondaryWorkspace->id)
+            ->where('tasks.data.0.content', 'Secondary task should stay visible')
+            ->where('tasks.total', 1),
         );
 });
 

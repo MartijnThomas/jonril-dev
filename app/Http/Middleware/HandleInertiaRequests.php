@@ -12,9 +12,9 @@ use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Lang;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -276,7 +276,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array<int, array{id: string, name: string, slug: string, color: string, timeblock_color: string|null, icon: string, role: string}>
+     * @return array<int, array{id: string, name: string, slug: string, color: string, timeblock_color: string|null, icon: string, role: string, is_migrated_source: bool}>
      */
     private function workspaceSummary(Request $request): array
     {
@@ -286,7 +286,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $user->workspaces()
-            ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.timeblock_color', 'workspaces.icon', 'workspace_user.role')
+            ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.timeblock_color', 'workspaces.icon', 'workspaces.migrated_at', 'workspace_user.role')
             ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
             ->orderBy('workspaces.name')
             ->get()
@@ -298,13 +298,24 @@ class HandleInertiaRequests extends Middleware
                 'timeblock_color' => $workspace->timeblock_color,
                 'icon' => $workspace->icon,
                 'role' => (string) ($workspace->pivot->role ?? 'member'),
+                'is_migrated_source' => $workspace->migrated_at !== null,
             ])
             ->values()
             ->all();
     }
 
     /**
-     * @return array{id: string, name: string, slug: string, color: string, timeblock_color: string|null, icon: string, role: string}|null
+     * @return array{
+     *   id: string,
+     *   name: string,
+     *   slug: string,
+     *   color: string,
+     *   timeblock_color: string|null,
+     *   icon: string,
+     *   role: string,
+     *   is_migrated_source: bool,
+     *   note_counts: array{total: int, normal: int, journal: int}
+     * }|null
      */
     private function currentWorkspaceSummary(Request $request): ?array
     {
@@ -322,6 +333,7 @@ class HandleInertiaRequests extends Middleware
             ->where('workspaces.id', $workspace->id)
             ->select('workspace_user.role')
             ->first();
+        $noteCounts = $this->workspaceNoteCounts($workspace);
 
         return [
             'id' => $workspace->id,
@@ -331,6 +343,31 @@ class HandleInertiaRequests extends Middleware
             'timeblock_color' => $workspace->timeblock_color,
             'icon' => $workspace->icon,
             'role' => (string) ($membership?->pivot->role ?? 'member'),
+            'is_migrated_source' => $workspace->isMigratedSource(),
+            'note_counts' => $noteCounts,
+        ];
+    }
+
+    /**
+     * @return array{total: int, normal: int, journal: int}
+     */
+    private function workspaceNoteCounts(Workspace $workspace): array
+    {
+        $totals = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->selectRaw(
+                'count(*) as total, sum(case when type = ? then 1 else 0 end) as journal',
+                [Note::TYPE_JOURNAL],
+            )
+            ->first();
+
+        $total = (int) ($totals?->total ?? 0);
+        $journal = (int) ($totals?->journal ?? 0);
+
+        return [
+            'total' => $total,
+            'normal' => max(0, $total - $journal),
+            'journal' => $journal,
         ];
     }
 

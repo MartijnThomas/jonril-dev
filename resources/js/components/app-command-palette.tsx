@@ -87,7 +87,11 @@ type CommandDefinition = {
 export function AppCommandPalette() {
     const page = usePage().props as {
         noteActions?: NoteActionsContext;
-        currentWorkspace?: { id: string; slug?: string | null } | null;
+        currentWorkspace?: {
+            id: string;
+            slug?: string | null;
+            is_migrated_source?: boolean;
+        } | null;
     };
     const { t } = useI18n();
     const [open, setOpen] = useState(false);
@@ -104,6 +108,7 @@ export function AppCommandPalette() {
     const [selectedCommandValue, setSelectedCommandValue] = useState('');
     const noteActions = page.noteActions ?? null;
     const workspaceId = page.currentWorkspace?.id ?? 'global';
+    const commandPaletteDisabled = page.currentWorkspace?.is_migrated_source === true;
 
     const openInCommandMode = useCallback(() => {
         setShowOptions(false);
@@ -177,6 +182,10 @@ export function AppCommandPalette() {
                 return;
             }
 
+            if (commandPaletteDisabled) {
+                return;
+            }
+
             event.preventDefault();
 
             if (event.shiftKey) {
@@ -227,7 +236,7 @@ export function AppCommandPalette() {
         };
     // This keyboard session intentionally tracks state across rapid key events.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, query, recentItems, openInCommandMode]);
+    }, [commandPaletteDisabled, open, query, recentItems, openInCommandMode]);
 
     useEffect(() => {
         if (open) {
@@ -242,9 +251,15 @@ export function AppCommandPalette() {
 
     useEffect(() => {
         const openHandler = () => {
+            if (commandPaletteDisabled) {
+                return;
+            }
             setOpen(true);
         };
         const openCommandModeHandler = () => {
+            if (commandPaletteDisabled) {
+                return;
+            }
             openInCommandMode();
         };
 
@@ -261,7 +276,15 @@ export function AppCommandPalette() {
                 openCommandModeHandler,
             );
         };
-    }, [openInCommandMode]);
+    }, [commandPaletteDisabled, openInCommandMode]);
+
+    useEffect(() => {
+        if (!commandPaletteDisabled) {
+            return;
+        }
+
+        setOpen(false);
+    }, [commandPaletteDisabled]);
 
     const isCommandMode = query.trimStart().startsWith(':');
     const isHeadingMode = !isCommandMode && query.startsWith('# ');
@@ -385,7 +408,7 @@ export function AppCommandPalette() {
                     'command_palette.create_description',
                     'Open the create note dialog.',
                 ),
-                available: true,
+                available: !commandPaletteDisabled,
             },
             {
                 id: 'move',
@@ -440,6 +463,7 @@ export function AppCommandPalette() {
             noteActions?.canDelete,
             noteActions?.canMove,
             noteActions?.canRename,
+            commandPaletteDisabled,
             t,
         ],
     );

@@ -7,14 +7,29 @@ export type BlockTreeDoc = {
     content: Array<Record<string, unknown>>;
 };
 
-export type BlockParagraphStyle = 'paragraph' | 'bullet' | 'quote' | 'ordered' | 'task';
-export type BlockTaskStatus = 'backlog' | 'in_progress' | 'canceled' | 'migrated' | null;
+export type BlockParagraphStyle =
+    | 'paragraph'
+    | 'bullet'
+    | 'quote'
+    | 'ordered'
+    | 'task'
+    | 'checklist';
+export type BlockTaskStatus =
+    | 'backlog'
+    | 'in_progress'
+    | 'canceled'
+    | 'migrated'
+    | 'starred'
+    | 'assigned'
+    | 'deferred'
+    | null;
 export type BlockParagraphAttrs = Record<string, unknown> & {
     indent: number;
     blockStyle: BlockParagraphStyle;
     order: number;
     checked: boolean;
     taskStatus: BlockTaskStatus;
+    assignee: string | null;
     dueDate: string | null;
     deadlineDate: string | null;
     startedAt: string | null;
@@ -50,7 +65,15 @@ function nowIsoTimestamp(): string {
 }
 
 export function normalizeTaskStatus(value: unknown): BlockTaskStatus {
-    if (value === 'backlog' || value === 'in_progress' || value === 'canceled' || value === 'migrated') {
+    if (
+        value === 'backlog' ||
+        value === 'in_progress' ||
+        value === 'canceled' ||
+        value === 'migrated' ||
+        value === 'starred' ||
+        value === 'assigned' ||
+        value === 'deferred'
+    ) {
         return value;
     }
 
@@ -70,10 +93,18 @@ export function taskStatusToken(status: BlockTaskStatus): string {
         return '-';
     }
 
+    if (status === 'starred') {
+        return '*';
+    }
+
+    if (status === 'deferred') {
+        return '<';
+    }
+
     return '';
 }
 
-export function taskStatusTextPrefix(status: BlockTaskStatus): '? ' | '/ ' | '- ' | '' {
+export function taskStatusTextPrefix(status: BlockTaskStatus): '? ' | '/ ' | '- ' | '* ' | '< ' | '' {
     if (status === 'backlog') {
         return '? ';
     }
@@ -86,23 +117,57 @@ export function taskStatusTextPrefix(status: BlockTaskStatus): '? ' | '/ ' | '- 
         return '- ';
     }
 
+    if (status === 'starred') {
+        return '* ';
+    }
+
+    if (status === 'deferred') {
+        return '< ';
+    }
+
     return '';
 }
 
 export function detectTaskStatusFromTextPrefix(text: string): BlockTaskStatus {
-    if (text.startsWith('? ')) {
+    if (/^\?\s/u.test(text)) {
         return 'backlog';
     }
 
-    if (text.startsWith('/ ')) {
+    if (/^\/\s/u.test(text)) {
         return 'in_progress';
     }
 
-    if (text.startsWith('- ')) {
+    if (/^(?:-|—)\s/u.test(text)) {
         return 'canceled';
     }
 
+    if (/^\*\s/u.test(text)) {
+        return 'starred';
+    }
+
+    if (/^<\s/u.test(text)) {
+        return 'deferred';
+    }
+
     return null;
+}
+
+function isAssignedTaskText(text: string): boolean {
+    return /@([^\s]+)/u.test(text);
+}
+
+function detectAssignedTaskAssignee(text: string): string | null {
+    const match = text.match(/@([^\s]+)/u);
+    const assignee = (match?.[1] ?? '').trim();
+
+    return assignee !== '' ? assignee : null;
+}
+
+function detectFirstTaskMentionAssignee(text: string): string | null {
+    const match = text.match(/@([^\s]+)/u);
+    const assignee = (match?.[1] ?? '').trim();
+
+    return assignee !== '' ? assignee : null;
 }
 
 type ParsedTaskDates = {
@@ -120,7 +185,7 @@ export type BlockTaskDateToken = {
 export type BlockTaskPriority = 'normal' | 'medium' | 'high' | null;
 
 const BLOCK_TASK_DATE_TOKEN_REGEX = /(>>?)(\d{4}-\d{2}-\d{2})/g;
-const BLOCK_TASK_PRIORITY_REGEX = /^(?:[?/-]\s)?(!{1,3})(?=\s|$)/u;
+const BLOCK_TASK_PRIORITY_REGEX = /^(?:[?/*<\-—]\s)?(!{1,3})(?=\s|$)/u;
 
 export function headingTextPrefix(level: number): string {
     return `${'#'.repeat(Math.min(6, Math.max(1, level)))} `;
@@ -264,10 +329,13 @@ export function normalizeParagraphAttrs(attrs: unknown): BlockParagraphAttrs {
                 ? 'ordered'
                 : raw.blockStyle === 'task'
                     ? 'task'
-                : 'paragraph';
+                    : raw.blockStyle === 'checklist'
+                        ? 'checklist'
+                        : 'paragraph';
     const order = Math.max(1, Math.floor(Number(raw.order ?? 1) || 1));
     const checked = raw.checked === true;
     const taskStatus = normalizeTaskStatus(raw.taskStatus);
+    const assignee = normalizeNullableIdentifier(raw.assignee);
     const dueDate = normalizeNullableIsoDate(raw.dueDate);
     const deadlineDate = normalizeNullableIsoDate(raw.deadlineDate);
     const startedAt = normalizeNullableTimestamp(raw.startedAt);
@@ -286,6 +354,7 @@ export function normalizeParagraphAttrs(attrs: unknown): BlockParagraphAttrs {
         order,
         checked,
         taskStatus,
+        assignee,
         dueDate,
         deadlineDate,
         startedAt,
@@ -399,12 +468,7 @@ function updateTaskStatusTextPrefixInTransaction(
     }
 
     const textContent = currentNode.textContent;
-    const currentPrefixLength =
-        textContent.startsWith('? ') ||
-        textContent.startsWith('/ ') ||
-        textContent.startsWith('- ')
-            ? 2
-            : 0;
+    const currentPrefixLength = textContent.match(/^(?:\?|\/|-|\*|<)\s/u)?.[0].length ?? 0;
     const contentStart = pos + 1;
 
     if (currentPrefixLength > 0) {
@@ -483,13 +547,14 @@ export function setCurrentParagraphStyle(
                 ? Math.max(1, Math.floor(Number(options?.order ?? attrs.order ?? 1) || 1))
                 : 1,
         checked:
-            blockStyle === 'task'
+            blockStyle === 'task' || blockStyle === 'checklist'
                 ? options?.checked ?? attrs.checked === true
                 : false,
         taskStatus:
             blockStyle === 'task'
                 ? normalizeTaskStatus(options?.taskStatus ?? attrs.taskStatus)
                 : null,
+        assignee: blockStyle === 'task' ? attrs.assignee : null,
         dueDate: blockStyle === 'task' ? attrs.dueDate : null,
         deadlineDate: blockStyle === 'task' ? attrs.deadlineDate : null,
         startedAt: blockStyle === 'task' ? attrs.startedAt : null,
@@ -512,14 +577,17 @@ export function setParagraphCheckedAtPos(
     }
 
     const attrs = normalizeParagraphAttrs(node.attrs);
-    if (attrs.blockStyle !== 'task') {
+    if (attrs.blockStyle !== 'task' && attrs.blockStyle !== 'checklist') {
         return false;
     }
 
     return dispatchParagraphAttrsUpdate(state, dispatch, pos, {
         ...attrs,
         checked,
-        completedAt: checked ? nowIsoTimestamp() : null,
+        completedAt:
+            attrs.blockStyle === 'task'
+                ? (checked ? nowIsoTimestamp() : null)
+                : null,
     });
 }
 
@@ -549,6 +617,7 @@ export function toggleParagraphTaskAtPos(
         let transaction = state.tr.setNodeMarkup(pos, undefined, {
             ...attrs,
             taskStatus: null,
+            assignee: null,
             checked: false,
             completedAt: null,
             canceledAt: null,
@@ -566,6 +635,7 @@ export function toggleParagraphTaskAtPos(
         let transaction = state.tr.setNodeMarkup(pos, undefined, {
             ...attrs,
             taskStatus: null,
+            assignee: null,
             checked: true,
             completedAt: timestamp,
             canceledAt: null,
@@ -583,6 +653,7 @@ export function toggleParagraphTaskAtPos(
             ...attrs,
             checked: false,
             taskStatus: null,
+            assignee: null,
             completedAt: null,
             canceledAt: null,
         });
@@ -598,6 +669,7 @@ export function toggleParagraphTaskAtPos(
         ...attrs,
         checked: true,
         taskStatus: null,
+        assignee: null,
         completedAt: timestamp,
         canceledAt: null,
     });
@@ -632,6 +704,9 @@ export function setParagraphTaskStatusAtPos(
 
     const normalizedTaskStatus = normalizeTaskStatus(taskStatus);
     const timestamp = nowIsoTimestamp();
+    const assignee = normalizedTaskStatus === 'assigned'
+        ? detectFirstTaskMentionAssignee(node.textContent)
+        : null;
 
     const nextChecked = normalizedTaskStatus === null ? attrs.checked === true : false;
     const nextCompletedAt = nextChecked
@@ -644,6 +719,7 @@ export function setParagraphTaskStatusAtPos(
     let transaction = state.tr.setNodeMarkup(pos, undefined, {
         ...attrs,
         taskStatus: normalizedTaskStatus,
+        assignee,
         checked: nextChecked,
         startedAt:
             normalizedTaskStatus === 'in_progress' && attrs.taskStatus !== 'in_progress'
@@ -850,7 +926,8 @@ export function dedentCurrentParagraph(
         if (
             attrs.blockStyle === 'bullet' ||
             attrs.blockStyle === 'ordered' ||
-            attrs.blockStyle === 'task'
+            attrs.blockStyle === 'task' ||
+            attrs.blockStyle === 'checklist'
         ) {
             return setCurrentParagraphStyle(editor, 'paragraph', undefined, state, dispatch);
         }
@@ -880,7 +957,8 @@ export function removeParagraphStyleOrDedentCurrentParagraph(
         attrs.blockStyle === 'bullet' ||
         attrs.blockStyle === 'quote' ||
         attrs.blockStyle === 'ordered' ||
-        attrs.blockStyle === 'task'
+        attrs.blockStyle === 'task' ||
+        attrs.blockStyle === 'checklist'
     ) {
         if (!dispatch) {
             return true;
@@ -892,6 +970,7 @@ export function removeParagraphStyleOrDedentCurrentParagraph(
             order: 1,
             checked: false,
             taskStatus: null,
+            assignee: null,
             dueDate: null,
             deadlineDate: null,
             startedAt: null,
@@ -962,7 +1041,30 @@ export function syncTaskParagraphStatusesFromText(
 
         const currentAttrs = normalizeParagraphAttrs(currentNode.attrs);
         const inferredStatus = detectTaskStatusFromTextPrefix(currentNode.textContent);
+        const inferredAssignee = detectAssignedTaskAssignee(currentNode.textContent);
+        const firstMentionAssignee = detectFirstTaskMentionAssignee(currentNode.textContent);
         let nextStatus: BlockTaskStatus = inferredStatus;
+
+        if (nextStatus === null && isAssignedTaskText(currentNode.textContent)) {
+            nextStatus = 'assigned';
+        }
+        if (nextStatus === 'deferred' && firstMentionAssignee !== null) {
+            nextStatus = 'assigned';
+        }
+        if (
+            nextStatus === null &&
+            currentAttrs.taskStatus === 'assigned' &&
+            firstMentionAssignee !== null
+        ) {
+            nextStatus = 'assigned';
+        }
+        if (nextStatus === null && currentAttrs.taskStatus === 'deferred') {
+            nextStatus = 'deferred';
+        }
+        const nextAssignee =
+            nextStatus === 'assigned'
+                ? (firstMentionAssignee ?? inferredAssignee ?? currentAttrs.assignee)
+                : null;
 
         if (
             inferredStatus === null &&
@@ -975,7 +1077,8 @@ export function syncTaskParagraphStatusesFromText(
         if (currentAttrs.taskStatus === nextStatus) {
             if (
                 currentAttrs.dueDate === parsedDates.dueDate &&
-                currentAttrs.deadlineDate === parsedDates.deadlineDate
+                currentAttrs.deadlineDate === parsedDates.deadlineDate &&
+                currentAttrs.assignee === nextAssignee
             ) {
                 return true;
             }
@@ -993,6 +1096,7 @@ export function syncTaskParagraphStatusesFromText(
         transaction = transaction.setNodeMarkup(mappedPos, undefined, {
             ...currentAttrs,
             taskStatus: nextStatus,
+            assignee: nextAssignee,
             dueDate: parsedDates.dueDate,
             deadlineDate: parsedDates.deadlineDate,
             checked: nextChecked,
@@ -1034,8 +1138,6 @@ export function syncHeadingBlocksFromText(
 ): Transaction | null {
     let transaction = state.tr;
     let changed = false;
-    const current = getCurrentBlockNodeFromState(state);
-    const activeHeadingPos = current?.type === 'heading' ? current.pos : null;
 
     state.doc.descendants((node, pos) => {
         if (node.type.name === 'paragraph') {
@@ -1080,20 +1182,11 @@ export function syncHeadingBlocksFromText(
         const detectedLevel = detectHeadingLevelFromTextPrefix(currentNode.textContent);
 
         if (detectedLevel === null) {
-            if (activeHeadingPos === pos) {
-                transaction = transaction.setNodeMarkup(
-                    mappedPos,
-                    editor.schema.nodes.paragraph,
-                    normalizeParagraphAttrs({}),
-                );
-                transaction = updateHeadingTextPrefixInTransaction(transaction, mappedPos, null);
-            } else {
-                transaction = updateHeadingTextPrefixInTransaction(
-                    transaction,
-                    mappedPos,
-                    Number(attrs.level ?? 1),
-                );
-            }
+            transaction = updateHeadingTextPrefixInTransaction(
+                transaction,
+                mappedPos,
+                Number(attrs.level ?? 1),
+            );
             changed = true;
             return true;
         }
@@ -1148,4 +1241,65 @@ export function normalizeHeadingPrefixesFromAttrs(
     });
 
     return changed ? transaction : null;
+}
+
+export function ensureFirstBlockHeadingLevelOne(
+    editor: Editor,
+    state: EditorState,
+): Transaction | null {
+    const firstNode = state.doc.firstChild;
+    if (!firstNode) {
+        return null;
+    }
+
+    if (firstNode.type.name === 'heading') {
+        const attrs = normalizeHeadingAttrs(firstNode.attrs);
+        if (Number(attrs.level ?? 1) === 1) {
+            return null;
+        }
+
+        const transaction = state.tr.setNodeMarkup(0, undefined, {
+            ...attrs,
+            level: 1,
+        });
+
+        const { from, to } = state.selection;
+        return transaction.setSelection(
+            TextSelection.create(
+                transaction.doc,
+                transaction.mapping.map(from),
+                transaction.mapping.map(to),
+            ),
+        );
+    }
+
+    if (firstNode.type.name !== 'paragraph') {
+        return null;
+    }
+
+    const paragraphAttrs = normalizeParagraphAttrs(firstNode.attrs);
+    const headingId =
+        typeof paragraphAttrs.id === 'string' && paragraphAttrs.id.trim() !== ''
+            ? paragraphAttrs.id.trim()
+            : null;
+
+    let transaction = state.tr.setNodeMarkup(
+        0,
+        editor.schema.nodes.heading,
+        normalizeHeadingAttrs({
+            id: headingId,
+            level: 1,
+        }),
+    );
+
+    const { from, to } = state.selection;
+    transaction = transaction.setSelection(
+        TextSelection.create(
+            transaction.doc,
+            transaction.mapping.map(from),
+            transaction.mapping.map(to),
+        ),
+    );
+
+    return transaction;
 }

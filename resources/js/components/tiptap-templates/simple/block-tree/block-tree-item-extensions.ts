@@ -14,6 +14,7 @@ import {
     headingTextPrefix,
     dedentCurrentParagraph,
     decreaseCurrentHeadingLevel,
+    ensureFirstBlockHeadingLevelOne,
     indentCurrentParagraph,
     isAtEndOfCurrentBlock,
     isAtStartOfCurrentBlock,
@@ -23,12 +24,13 @@ import {
     parseBlockTaskDateTokens,
     parseBlockTaskPriority,
     removeParagraphStyleOrDedentCurrentParagraph,
+    setParagraphCheckedAtPos,
     syncHeadingBlocksFromText,
     toggleParagraphTaskAtPos,
     syncTaskParagraphStatusesFromText,
 } from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
 import { findCompleteRawWikiLinks } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
-import type { CreateSimpleEditorExtensionsOptions } from '@/components/tiptap-templates/simple/simple-editor-extension-options';
+import type { CreateBlockTreeEditorExtensionsOptions } from '@/components/tiptap-templates/simple/block-tree-editor-extension-options';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -64,6 +66,10 @@ export const BlockParagraph = Paragraph.extend({
                 rendered: false,
             },
             taskStatus: {
+                default: null,
+                rendered: false,
+            },
+            assignee: {
                 default: null,
                 rendered: false,
             },
@@ -119,6 +125,8 @@ export const BlockParagraph = Paragraph.extend({
                     ? 'ordered'
                     : node.attrs.blockStyle === 'task'
                         ? 'task'
+                        : node.attrs.blockStyle === 'checklist'
+                            ? 'checklist'
                     : 'paragraph';
         const order = Math.max(1, Math.floor(Number(node.attrs.order ?? 1) || 1));
         const orderLabel = `${order}.`;
@@ -142,13 +150,19 @@ export const BlockParagraph = Paragraph.extend({
             htmlAttributes['data-order-label'] = orderLabel;
         }
 
-        if (blockStyle === 'task') {
+        if (blockStyle === 'task' || blockStyle === 'checklist') {
             htmlAttributes['data-checked'] = checked ? 'true' : 'false';
+        }
+
+        if (blockStyle === 'task') {
             if (typeof node.attrs.id === 'string' && node.attrs.id.trim() !== '') {
                 htmlAttributes.id = node.attrs.id;
             }
             if (taskStatus !== null) {
                 htmlAttributes['data-task-status'] = taskStatus;
+            }
+            if (typeof node.attrs.assignee === 'string' && node.attrs.assignee !== '') {
+                htmlAttributes['data-assignee'] = node.attrs.assignee;
             }
             if (typeof node.attrs.dueDate === 'string' && node.attrs.dueDate !== '') {
                 htmlAttributes['data-due-date'] = node.attrs.dueDate;
@@ -252,7 +266,7 @@ function insertParagraphAfterCurrentBlock(
 }
 
 function createBlockEditingExtension(
-    options: CreateSimpleEditorExtensionsOptions = {},
+    options: CreateBlockTreeEditorExtensionsOptions = {},
 ) {
     let longPressTimer: number | null = null;
     const displayLocale = options.language ?? 'en';
@@ -285,7 +299,10 @@ function createBlockEditingExtension(
                     appendTransaction: (_transactions, _oldState, newState) => {
                         return (
                             syncTaskParagraphStatusesFromText(newState) ??
-                            syncHeadingBlocksFromText(this.editor, newState)
+                            syncHeadingBlocksFromText(this.editor, newState) ??
+                            ((options.noteType === 'note' || options.noteType === 'journal')
+                                ? ensureFirstBlockHeadingLevelOne(this.editor, newState)
+                                : null)
                         );
                     },
                     props: {
@@ -295,6 +312,7 @@ function createBlockEditingExtension(
                                 current?.type === 'paragraph' ? current.pos : null;
                             const currentHeadingPos =
                                 current?.type === 'heading' ? current.pos : null;
+                            const isEditorFocused = this.editor.isFocused;
                             const decorations: Decoration[] = [];
 
                             state.doc.descendants((node, pos) => {
@@ -361,7 +379,12 @@ function createBlockEditingExtension(
                                 }
 
                                 const attrs = normalizeParagraphAttrs(node.attrs);
-                                if (attrs.blockStyle === 'task') {
+                                if (
+                                    attrs.blockStyle === 'task' ||
+                                    attrs.blockStyle === 'checklist' ||
+                                    attrs.blockStyle === 'bullet' ||
+                                    attrs.blockStyle === 'ordered'
+                                ) {
                                     const priority = parseBlockTaskPriority(node.textContent);
 
                                     if (priority) {
@@ -374,7 +397,7 @@ function createBlockEditingExtension(
                                         const paragraphTextEnd = pos + 1 + node.content.size;
                                         const priorityClass = priorityClassName(priority.priority);
                                         const priorityTokenClassName =
-                                            currentParagraphPos === pos
+                                            currentParagraphPos === pos && isEditorFocused
                                                 ? `md-priority-token bt-task-priority-token md-priority-token--${priorityClass}`
                                                 : `md-priority-token bt-task-priority-token bt-task-priority-token--hidden md-priority-token--${priorityClass}`;
 
@@ -392,7 +415,9 @@ function createBlockEditingExtension(
                                             );
                                         }
                                     }
+                                }
 
+                                if (attrs.blockStyle === 'task') {
                                     for (const token of parseBlockTaskDateTokens(node.textContent)) {
                                         const start = pos + 1 + token.start;
                                         const end = pos + 1 + token.end;
@@ -441,20 +466,17 @@ function createBlockEditingExtension(
                                     return true;
                                 }
 
-                                const textPrefix = node.textContent.startsWith('? ')
-                                    ? '? '
-                                    : node.textContent.startsWith('/ ')
-                                        ? '/ '
-                                        : node.textContent.startsWith('- ')
-                                            ? '- '
-                                        : '';
+                                const textPrefixMatch = node.textContent.match(
+                                    /^(?:\?\s|\/\s|\*\s|(?:-|—)\s|<\s)/u,
+                                );
+                                const textPrefix = textPrefixMatch?.[0] ?? '';
 
                                 if (textPrefix === '') {
                                     return true;
                                 }
 
                                 const className =
-                                    currentParagraphPos === pos
+                                    currentParagraphPos === pos && isEditorFocused
                                         ? 'bt-task-status-text-token'
                                         : 'bt-task-status-text-token bt-task-status-text-token--hidden';
 
@@ -479,7 +501,7 @@ function createBlockEditingExtension(
                         }
 
                         const attrs = normalizeParagraphAttrs(node.attrs);
-                        if (attrs.blockStyle !== 'task') {
+                        if (attrs.blockStyle !== 'task' && attrs.blockStyle !== 'checklist') {
                             return false;
                         }
 
@@ -497,8 +519,20 @@ function createBlockEditingExtension(
 
                         event.preventDefault();
 
+                        if (attrs.blockStyle === 'task') {
+                            return this.editor.commands.command(({ editor, state, dispatch }) => {
+                                return toggleParagraphTaskAtPos(editor, nodePos, state, dispatch);
+                            });
+                        }
+
                         return this.editor.commands.command(({ editor, state, dispatch }) => {
-                            return toggleParagraphTaskAtPos(editor, nodePos, state, dispatch);
+                            return setParagraphCheckedAtPos(
+                                editor,
+                                nodePos,
+                                attrs.checked !== true,
+                                state,
+                                dispatch,
+                            );
                         });
                         },
                         handleTextInput: (_view, _from, _to, text) => {
@@ -578,6 +612,10 @@ function createBlockEditingExtension(
                                 marker === '-' && parentOffset === 1;
                             const hasTaskMarker =
                                 marker === '*' && parentOffset === 1;
+                            const hasChecklistMarker =
+                                marker === '+' &&
+                                parentOffset === 1 &&
+                                attrs.blockStyle !== 'task';
                             const hasBacklogTaskMarker =
                                 marker === '?' &&
                                 parentOffset === 1 &&
@@ -588,8 +626,18 @@ function createBlockEditingExtension(
                                 parentOffset === 1 &&
                                 attrs.blockStyle === 'task' &&
                                 detectTaskStatusFromTextPrefix(textContent) === 'in_progress';
+                            const hasStarredTaskMarker =
+                                marker === '*' &&
+                                parentOffset === 1 &&
+                                attrs.blockStyle === 'task' &&
+                                detectTaskStatusFromTextPrefix(textContent) === 'starred';
+                            const hasDeferredTaskMarker =
+                                marker === '<' &&
+                                parentOffset === 1 &&
+                                attrs.blockStyle === 'task' &&
+                                detectTaskStatusFromTextPrefix(textContent) === 'deferred';
                             const hasCanceledTaskMarker =
-                                marker === '-' &&
+                                (marker === '-' || marker === '—') &&
                                 parentOffset === 1 &&
                                 attrs.blockStyle === 'task';
                             const hasQuoteMarker =
@@ -601,8 +649,11 @@ function createBlockEditingExtension(
                             if (
                                 !hasBulletMarker &&
                                 !hasTaskMarker &&
+                                !hasChecklistMarker &&
                                 !hasBacklogTaskMarker &&
                                 !hasInProgressTaskMarker &&
+                                !hasStarredTaskMarker &&
+                                !hasDeferredTaskMarker &&
                                 !hasCanceledTaskMarker &&
                                 !hasQuoteMarker &&
                                 !hasOrderedMarker
@@ -621,14 +672,25 @@ function createBlockEditingExtension(
                                     ? 'quote'
                                     : hasOrderedMarker
                                         ? 'ordered'
-                                        : hasTaskMarker || hasBacklogTaskMarker || hasInProgressTaskMarker || hasCanceledTaskMarker
-                                            ? 'task'
+                                        : hasChecklistMarker
+                                            ? 'checklist'
+                                            : hasTaskMarker ||
+                                                    hasBacklogTaskMarker ||
+                                                    hasInProgressTaskMarker ||
+                                                    hasStarredTaskMarker ||
+                                                    hasDeferredTaskMarker ||
+                                                    hasCanceledTaskMarker
+                                                ? 'task'
                                             : 'bullet';
                             const nextTaskStatus =
                                 hasBacklogTaskMarker
                                     ? 'backlog'
                                     : hasInProgressTaskMarker
                                         ? 'in_progress'
+                                        : hasTaskMarker || hasStarredTaskMarker
+                                            ? 'starred'
+                                        : hasDeferredTaskMarker
+                                            ? 'deferred'
                                         : hasCanceledTaskMarker
                                             ? 'canceled'
                                             : null;
@@ -638,7 +700,11 @@ function createBlockEditingExtension(
                             const markerLength =
                                 hasOrderedMarker
                                     ? orderedMatch[0].length
-                                    : hasBacklogTaskMarker || hasInProgressTaskMarker || hasCanceledTaskMarker
+                                    : hasBacklogTaskMarker ||
+                                            hasInProgressTaskMarker ||
+                                            hasStarredTaskMarker ||
+                                            hasDeferredTaskMarker ||
+                                            hasCanceledTaskMarker
                                         ? 0
                                         : 1;
 
@@ -646,7 +712,10 @@ function createBlockEditingExtension(
                                 ...attrs,
                                 blockStyle: nextBlockStyle,
                                 order: nextOrder,
-                                checked: nextBlockStyle === 'task' ? false : attrs.checked === true,
+                                checked:
+                                    nextBlockStyle === 'task' || nextBlockStyle === 'checklist'
+                                        ? false
+                                        : attrs.checked === true,
                                 taskStatus: nextBlockStyle === 'task' ? nextTaskStatus : null,
                             });
                             if (markerLength > 0) {
@@ -701,7 +770,8 @@ function createBlockEditingExtension(
                                 attrs.blockStyle !== 'bullet' &&
                                 attrs.blockStyle !== 'quote' &&
                                 attrs.blockStyle !== 'ordered' &&
-                                attrs.blockStyle !== 'task'
+                                attrs.blockStyle !== 'task' &&
+                                attrs.blockStyle !== 'checklist'
                             ) {
                                 return false;
                             }
@@ -719,6 +789,7 @@ function createBlockEditingExtension(
                                         order: 1,
                                         checked: false,
                                         taskStatus: null,
+                                        assignee: null,
                                         dueDate: null,
                                         deadlineDate: null,
                                     })
@@ -744,6 +815,7 @@ function createBlockEditingExtension(
                                                 : 1,
                                         checked: false,
                                         taskStatus: attrs.blockStyle === 'task' ? null : null,
+                                        assignee: null,
                                         dueDate: null,
                                         deadlineDate: null,
                                         startedAt: null,
@@ -771,6 +843,7 @@ function createBlockEditingExtension(
                                         : 1,
                                 checked: false,
                                 taskStatus: attrs.blockStyle === 'task' ? null : null,
+                                assignee: null,
                                 dueDate: null,
                                 deadlineDate: null,
                                 startedAt: null,
@@ -796,7 +869,9 @@ function createBlockEditingExtension(
                                 return false;
                             }
 
-                            const paragraphElement = target.closest('p.bt-paragraph[data-block-style="task"]');
+                            const paragraphElement = target.closest(
+                                'p.bt-paragraph[data-block-style="task"], p.bt-paragraph[data-block-style="checklist"]',
+                            );
                             if (!(paragraphElement instanceof HTMLElement)) {
                                 return false;
                             }
@@ -820,12 +895,16 @@ function createBlockEditingExtension(
                             }
 
                             longPressTimer = window.setTimeout(() => {
-                                options.onBlockTaskStatusMenuRequest?.({
-                                    x: event.clientX,
-                                    y: event.clientY,
-                                    pos: paragraphPos,
-                                    status: attrs.taskStatus ?? null,
-                                });
+                                window.dispatchEvent(
+                                    new CustomEvent('block-task-status-menu:open', {
+                                        detail: {
+                                            x: event.clientX,
+                                            y: event.clientY,
+                                            pos: paragraphPos,
+                                            status: attrs.taskStatus ?? null,
+                                        },
+                                    }),
+                                );
                                 longPressTimer = null;
                             }, 450);
 
@@ -940,7 +1019,7 @@ function createBlockEditingExtension(
 }
 
 export function createBlockTreeItemExtensions(
-    options: CreateSimpleEditorExtensionsOptions = {},
+    options: CreateBlockTreeEditorExtensionsOptions = {},
 ) {
     return [
         BlockParagraph,

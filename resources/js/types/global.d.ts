@@ -14,6 +14,7 @@ declare module '@inertiajs/core' {
                 timeblock_color?: string | null;
                 icon: string;
                 role: string;
+                is_migrated_source?: boolean;
             }>;
             currentWorkspace: {
                 id: string;
@@ -23,6 +24,12 @@ declare module '@inertiajs/core' {
                 timeblock_color?: string | null;
                 icon: string;
                 role: string;
+                is_migrated_source?: boolean;
+                note_counts?: {
+                    total: number;
+                    normal: number;
+                    journal: number;
+                };
             } | null;
             notesTree: SidebarNoteTreeItem[];
             noteSearchIndex: Array<{

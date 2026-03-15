@@ -19,10 +19,10 @@ import { BlockTreeDocument } from '@/components/tiptap-templates/simple/block-tr
 import { createBlockTreeItemExtensions } from '@/components/tiptap-templates/simple/block-tree/block-tree-item-extensions';
 import { BlockWikiLinkMark } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-mark-extension';
 import { BlockWikiLinkSuggestion } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-suggestion-extension';
-import type { CreateSimpleEditorExtensionsOptions } from '@/components/tiptap-templates/simple/simple-editor-extension-options';
+import type { CreateBlockTreeEditorExtensionsOptions } from '@/components/tiptap-templates/simple/block-tree-editor-extension-options';
 
 export function createBlockTreeEditorExtensions(
-    options: CreateSimpleEditorExtensionsOptions = {},
+    options: CreateBlockTreeEditorExtensionsOptions = {},
 ) {
     return [
         UniqueID.configure({

@@ -1035,9 +1035,10 @@
 }
 
 .md-task-migration-meta {
-    margin-top: 0.15rem;
-    font-size: 0.78em;
-    line-height: 1.35;
+    margin-top: 0;
+    margin-bottom: 0;
+    font-size: 0.85em;
+    line-height: 1.2;
     letter-spacing: 0.01em;
     color: color-mix(in srgb, currentColor 64%, transparent);
     user-select: none;

@@ -698,6 +698,7 @@ class NoteTaskIndexer
         return match (strtolower(trim($value))) {
             'canceled' => 'canceled',
             'assigned' => 'assigned',
+            'deferred' => 'deferred',
             'in_progress' => 'in_progress',
             'migrated' => 'migrated',
             'starred' => 'starred',

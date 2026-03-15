@@ -48,7 +48,11 @@ export function AppSidebar() {
                 };
             };
         };
+        currentWorkspace?: {
+            is_migrated_source?: boolean;
+        } | null;
     };
+    const workspaceReadOnly = pageProps.currentWorkspace?.is_migrated_source === true;
 
     const NotesIcon = getLucideIconComponent(
         pageProps.auth?.user?.settings?.editor?.sidebar_icons?.notes ?? null,
@@ -75,13 +79,15 @@ export function AppSidebar() {
             iconClassName: notesColorClass,
             prefetch: true,
         },
-        {
-            title: 'Tasks',
-            href: '/tasks',
-            icon: TasksIcon,
-            iconClassName: tasksColorClass,
-            prefetch: true,
-        },
+        ...(!workspaceReadOnly
+            ? [{
+                  title: 'Tasks',
+                  href: '/tasks',
+                  icon: TasksIcon,
+                  iconClassName: tasksColorClass,
+                  prefetch: true,
+              }]
+            : []),
     ];
 
     return (
@@ -92,7 +98,7 @@ export function AppSidebar() {
 
             <SidebarContent className="group-data-[collapsible=icon]:pt-3">
                 <NavMain items={mainNavItems} />
-                <NavJournalLinks />
+                {!workspaceReadOnly ? <NavJournalLinks /> : null}
                 <NavNotesTree />
             </SidebarContent>
 

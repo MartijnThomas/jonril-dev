@@ -1,8 +1,15 @@
-import { Circle, Pause, Slash, X } from 'lucide-react';
+import { ChevronLeft, Circle, Pause, Slash, Star, UserRound, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
-type BlockTaskStatus = 'backlog' | 'in_progress' | 'canceled' | null;
+type BlockTaskStatus =
+    | 'backlog'
+    | 'in_progress'
+    | 'starred'
+    | 'assigned'
+    | 'deferred'
+    | 'canceled'
+    | null;
 
 type BlockTaskStatusMenuProps = {
     open: boolean;
@@ -19,8 +26,11 @@ const STATUS_OPTIONS: Array<{
     icon: typeof Circle;
 }> = [
     { value: null, label: 'Open', icon: Circle },
+    { value: 'assigned', label: 'Assigned', icon: UserRound },
+    { value: 'deferred', label: 'Deferred', icon: ChevronLeft },
     { value: 'backlog', label: 'Backlog', icon: Pause },
     { value: 'in_progress', label: 'In progress', icon: Slash },
+    { value: 'starred', label: 'Starred', icon: Star },
     { value: 'canceled', label: 'Canceled', icon: X },
 ];
 

@@ -10,7 +10,14 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-type TaskStatus = 'backlog' | 'in_progress' | 'canceled' | null;
+type TaskStatus =
+    | 'backlog'
+    | 'in_progress'
+    | 'starred'
+    | 'assigned'
+    | 'deferred'
+    | 'canceled'
+    | null;
 
 type MigrateTarget = {
     id: string;

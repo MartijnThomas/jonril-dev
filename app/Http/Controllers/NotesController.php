@@ -7,6 +7,7 @@ use App\Models\NoteRevision;
 use App\Models\NoteTask;
 use App\Models\Workspace;
 use App\Support\Notes\JournalNoteService;
+use App\Support\Notes\LegacyToBlockNoteConverter;
 use App\Support\Notes\NoteRelatedPanelBuilder;
 use App\Support\Notes\NoteRevisionRecorder;
 use App\Support\Notes\NoteSlugService;
@@ -31,10 +32,13 @@ class NotesController extends Controller
         private readonly JournalNoteService $journalNoteService,
         private readonly NoteWordCountExtractor $noteWordCountExtractor,
         private readonly NoteRelatedPanelBuilder $noteRelatedPanelBuilder,
+        private readonly LegacyToBlockNoteConverter $legacyToBlockNoteConverter,
     ) {}
 
     public function start(Request $request)
     {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
         $data = $request->validate([
             'parent_id' => [
                 'nullable',
@@ -84,6 +88,8 @@ class NotesController extends Controller
 
     public function store(Request $request)
     {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'parent_id' => [
@@ -169,7 +175,7 @@ class NotesController extends Controller
     {
         $resolved = $this->resolveNoteOrFail($note);
 
-        return $this->renderNotePage($resolved);
+        return $this->renderNotePage($resolved, request());
     }
 
     public function showScoped(Workspace $workspace, string $note)
@@ -177,7 +183,7 @@ class NotesController extends Controller
         $this->assertWorkspaceMembership($workspace);
         $resolved = $this->resolveNoteOrFailInWorkspace($workspace, $note);
 
-        return $this->renderNotePage($resolved);
+        return $this->renderNotePage($resolved, request());
     }
 
     public function showJournal(Request $request, string $granularity, string $period)
@@ -236,18 +242,28 @@ class NotesController extends Controller
         string $period,
     ) {
         try {
-            $note = $this->journalNoteService->resolveOrCreate(
-                $workspace,
-                $granularity,
-                $period,
-                $this->userLanguage(),
-                $this->userLongDateFormat(),
-            );
+            if ($workspace->isMigratedSource()) {
+                $parsedDate = $this->journalNoteService->parsePeriod($granularity, $period);
+                $note = Note::query()
+                    ->where('workspace_id', $workspace->id)
+                    ->where('type', Note::TYPE_JOURNAL)
+                    ->where('journal_granularity', $granularity)
+                    ->whereDate('journal_date', $parsedDate->toDateString())
+                    ->firstOrFail();
+            } else {
+                $note = $this->journalNoteService->resolveOrCreate(
+                    $workspace,
+                    $granularity,
+                    $period,
+                    $this->userLanguage(),
+                    $this->userLongDateFormat(),
+                );
+            }
         } catch (InvalidArgumentException) {
             abort(404);
         }
 
-        return $this->renderNotePage($note);
+        return $this->renderNotePage($note, $request);
     }
 
     private function resolveJournalGranularityFromPeriod(string $period): ?string
@@ -287,6 +303,11 @@ class NotesController extends Controller
 
     private function updateForWorkspace(Request $request, Workspace $workspace, string $note)
     {
+        if ($request->boolean('preview_block', false)) {
+            abort(409, 'Preview mode does not allow saving.');
+        }
+        $this->assertWorkspaceWritable($workspace);
+
         $resolved = $this->resolveNoteOrFailInWorkspace($workspace, $note);
 
         $data = $request->validate([
@@ -341,6 +362,8 @@ class NotesController extends Controller
 
     public function rename(Request $request, string $noteId)
     {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
         $note = $this->currentWorkspace()
             ->notes()
             ->where('id', $noteId)
@@ -372,6 +395,8 @@ class NotesController extends Controller
 
     public function move(Request $request, string $noteId)
     {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
         $note = $this->currentWorkspace()
             ->notes()
             ->where('id', $noteId)
@@ -404,6 +429,8 @@ class NotesController extends Controller
 
     public function destroy(string $noteId)
     {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
         $note = $this->currentWorkspace()
             ->notes()
             ->where('id', $noteId)
@@ -420,6 +447,8 @@ class NotesController extends Controller
 
     public function clear(string $noteId)
     {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
         $note = $this->currentWorkspace()
             ->notes()
             ->where('id', $noteId)
@@ -445,10 +474,21 @@ class NotesController extends Controller
         return back();
     }
 
-    private function renderNotePage(Note $note)
+    private function renderNotePage(Note $note, ?Request $request = null)
     {
-        if ($note->type === Note::TYPE_NOTE) {
+        $previewBlock = (bool) ($request?->boolean('preview_block', false) ?? false);
+        $useBlockPreview = $previewBlock;
+        $workspaceEditorMode = $this->currentWorkspace()->editor_mode;
+        $workspaceReadOnly = $this->currentWorkspace()->isMigratedSource();
+        $usesBlockEditor = $useBlockPreview || $workspaceEditorMode === Workspace::EDITOR_MODE_BLOCK;
+
+        if ($note->type === Note::TYPE_NOTE && ! $useBlockPreview) {
             $this->noteSlugService->syncSingleNote($note);
+        }
+
+        $editorContent = $this->normalizeContentForEditor($note->content);
+        if ($usesBlockEditor) {
+            $editorContent = $this->legacyToBlockNoteConverter->convertNote($note)['document'];
         }
 
         $allNotes = Note::query()
@@ -569,12 +609,20 @@ class NotesController extends Controller
 
         $breadcrumbs = $this->buildBreadcrumbs($note, $noteTrail, $noteById, $this->currentWorkspace());
         [$noteActionIcon, $noteActionIconColor] = $this->resolveNoteActionIconPayload($note);
+        $canOpenBlockPreview = $workspaceEditorMode === Workspace::EDITOR_MODE_LEGACY
+            && ! $useBlockPreview
+            && ((string) (Auth::user()?->role ?? '') === 'admin');
+        $blockPreviewUrl = $canOpenBlockPreview
+            ? $this->noteSlugService->urlFor($note).'?preview_block=1'
+            : null;
 
         return Inertia::render('notes/show', [
-            'content' => $this->normalizeContentForEditor($note->content),
+            'content' => $editorContent,
             'noteId' => $note->id,
             'noteUrl' => $this->noteSlugService->urlFor($note),
-            'noteUpdateUrl' => $this->noteSlugService->updateUrlFor($note),
+            'noteUpdateUrl' => ($useBlockPreview || $workspaceReadOnly)
+                ? ''
+                : $this->noteSlugService->updateUrlFor($note),
             'noteType' => $note->type,
             'journalGranularity' => $note->journal_granularity,
             'journalDate' => $note->journal_date?->toDateString(),
@@ -582,7 +630,8 @@ class NotesController extends Controller
                 ? $this->journalNoteService->periodFor($note->journal_granularity, $note->journal_date)
                 : null,
             'defaultTimeblockDurationMinutes' => Auth::user()?->defaultTimeblockDurationMinutes() ?? 60,
-            'editorMode' => $this->currentWorkspace()->editor_mode,
+            'editorMode' => $usesBlockEditor ? Workspace::EDITOR_MODE_BLOCK : Workspace::EDITOR_MODE_LEGACY,
+            'editorReadOnly' => $useBlockPreview || $workspaceReadOnly,
             'noteActions' => [
                 'id' => $note->id,
                 'title' => (string) ($note->getRawOriginal('title') ?: $note->title ?: 'Untitled'),
@@ -593,10 +642,12 @@ class NotesController extends Controller
                 'journal_granularity' => $note->journal_granularity,
                 'icon' => $noteActionIcon,
                 'icon_color' => $noteActionIconColor,
-                'canRename' => $note->type === Note::TYPE_NOTE,
-                'canDelete' => $note->type === Note::TYPE_NOTE,
-                'canClear' => true,
-                'canMove' => $note->type === Note::TYPE_NOTE,
+                'canRename' => $note->type === Note::TYPE_NOTE && ! $workspaceReadOnly,
+                'canDelete' => $note->type === Note::TYPE_NOTE && ! $workspaceReadOnly,
+                'canClear' => ! $workspaceReadOnly,
+                'canMove' => $note->type === Note::TYPE_NOTE && ! $workspaceReadOnly,
+                'canOpenBlockPreview' => $canOpenBlockPreview,
+                'blockPreviewUrl' => $blockPreviewUrl,
             ],
             'properties' => $note->properties ?? [],
             'linkableNotes' => $linkableNotes,
@@ -800,6 +851,13 @@ class NotesController extends Controller
             ->filter(fn (string $item) => $item !== '')
             ->values()
             ->all();
+    }
+
+    private function assertWorkspaceWritable(Workspace $workspace): void
+    {
+        if ($workspace->isMigratedSource()) {
+            abort(409, 'This workspace is read-only after migration.');
+        }
     }
 
     private function replaceFirstHeadingLevelOneText(mixed $content, string $title): mixed

@@ -30,6 +30,8 @@ type JournalPageProps = {
         canRename?: boolean;
         canDelete?: boolean;
         canClear?: boolean;
+        canOpenBlockPreview?: boolean;
+        blockPreviewUrl?: string | null;
     } | null;
     moveParentOptions?: Array<{ id: string; title: string; path: string }>;
     currentWorkspace?: {
@@ -307,6 +309,12 @@ export function AppSidebarHeader({
                             canRename={Boolean(pageProps.noteActions.canRename)}
                             canDelete={Boolean(pageProps.noteActions.canDelete)}
                             canClear={Boolean(pageProps.noteActions.canClear)}
+                            canOpenBlockPreview={Boolean(
+                                pageProps.noteActions.canOpenBlockPreview,
+                            )}
+                            blockPreviewUrl={
+                                pageProps.noteActions.blockPreviewUrl ?? null
+                            }
                             dropdownSide="left"
                             enablePropertiesToggle
                             triggerIconClassName={headerIconClassName}

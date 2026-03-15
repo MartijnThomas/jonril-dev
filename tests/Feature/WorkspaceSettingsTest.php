@@ -1,6 +1,9 @@
 <?php
 
+use App\Models\Note;
 use App\Models\User;
+use App\Models\Workspace;
+use Illuminate\Support\Facades\Artisan;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('workspace owner can view workspace settings page', function () {
@@ -13,7 +16,9 @@ test('workspace owner can view workspace settings page', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('workspaces/settings')
             ->where('workspace.id', $workspace?->id)
-            ->where('workspace.editor_mode', 'legacy'),
+            ->where('workspace.editor_mode', 'legacy')
+            ->where('workspace.can_migrate_to_block', true)
+            ->where('workspace.is_migrated_source', false),
         );
 });
 
@@ -169,4 +174,207 @@ test('workspace owner can create a new workspace', function () {
     $workspace = $owner->fresh()?->workspaces()->where('name', 'New Workspace')->first();
 
     expect($workspace)->not->toBeNull();
+});
+
+test('workspace owner can trigger legacy workspace migration to block', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+    $workspace?->update(['editor_mode' => Workspace::EDITOR_MODE_LEGACY]);
+
+    $copiedWorkspace = Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'name' => $workspace?->name.' (Block)',
+        'editor_mode' => Workspace::EDITOR_MODE_BLOCK,
+    ]);
+    Note::factory()->create([
+        'workspace_id' => $copiedWorkspace->id,
+        'type' => Note::TYPE_NOTE,
+    ]);
+    Note::factory()->create([
+        'workspace_id' => $copiedWorkspace->id,
+        'type' => Note::TYPE_JOURNAL,
+    ]);
+
+    Artisan::shouldReceive('call')
+        ->once()
+        ->with('notes:convert-workspace-to-block', [
+            '--workspace' => $workspace?->id,
+            '--force' => true,
+        ])
+        ->andReturn(0);
+
+    $response = $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.migrate', ['workspace' => $workspace?->id], absolute: false))
+        ->assertRedirect()
+        ->assertSessionHas('status', 'workspace-migrated');
+
+    $response->assertSessionHas('migration_summary.workspace.id', $copiedWorkspace->id);
+    $response->assertSessionHas('migration_summary.notes.total', 2);
+    $response->assertSessionHas('migration_summary.notes.normal', 1);
+    $response->assertSessionHas('migration_summary.notes.journal', 1);
+});
+
+test('workspace owner cannot trigger migration for block workspace', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+    $workspace?->update(['editor_mode' => Workspace::EDITOR_MODE_BLOCK]);
+
+    Artisan::shouldReceive('call')->never();
+
+    $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.migrate', ['workspace' => $workspace?->id], absolute: false))
+        ->assertRedirect()
+        ->assertSessionHasErrors('workspace');
+});
+
+test('non-owner cannot trigger workspace migration', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+    $member = User::factory()->create();
+
+    $workspace?->users()->syncWithoutDetaching([
+        $member->id => ['role' => 'member'],
+    ]);
+
+    Artisan::shouldReceive('call')->never();
+
+    $this
+        ->actingAs($member)
+        ->post(route('workspaces.settings.migrate', ['workspace' => $workspace?->id], absolute: false))
+        ->assertForbidden();
+});
+
+test('workspace settings payload includes migration summary when migrated block copy exists', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+    $workspace?->update([
+        'editor_mode' => Workspace::EDITOR_MODE_LEGACY,
+        'migrated_at' => now(),
+    ]);
+
+    $copiedWorkspace = Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'name' => $workspace?->name.' (Block)',
+        'editor_mode' => Workspace::EDITOR_MODE_BLOCK,
+    ]);
+    Note::factory()->create([
+        'workspace_id' => $copiedWorkspace->id,
+        'type' => Note::TYPE_NOTE,
+    ]);
+    Note::factory()->create([
+        'workspace_id' => $copiedWorkspace->id,
+        'type' => Note::TYPE_JOURNAL,
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->get(route('workspaces.settings.edit', ['workspace' => $workspace?->id], absolute: false))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('migrationSummary.workspace.id', $copiedWorkspace->id)
+            ->where('migrationSummary.notes.total', 2)
+            ->where('migrationSummary.notes.normal', 1)
+            ->where('migrationSummary.notes.journal', 1)
+        );
+});
+
+test('workspace owner can delete workspace when another workspace exists', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+
+    $otherWorkspace = Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'name' => 'Second Workspace',
+    ]);
+    $otherWorkspace->users()->syncWithoutDetaching([
+        $owner->id => ['role' => 'owner'],
+    ]);
+
+    $owner->forceFill([
+        'settings' => [
+            ...(is_array($owner->settings) ? $owner->settings : []),
+            'workspace_id' => $workspace?->id,
+        ],
+    ])->save();
+
+    $this
+        ->actingAs($owner)
+        ->delete(route('workspaces.settings.destroy', ['workspace' => $workspace?->id], absolute: false))
+        ->assertRedirect(route('notes.index', ['type' => 'all'], absolute: false))
+        ->assertSessionHas('status', 'workspace-deleted');
+
+    expect(Workspace::query()->whereKey($workspace?->id)->exists())->toBeFalse();
+    expect($owner->fresh()?->currentWorkspace()?->id)->toBe($otherWorkspace->id);
+});
+
+test('workspace owner cannot delete last workspace', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+
+    $this
+        ->actingAs($owner)
+        ->delete(route('workspaces.settings.destroy', ['workspace' => $workspace?->id], absolute: false))
+        ->assertSessionHasErrors('workspace');
+
+    expect(Workspace::query()->whereKey($workspace?->id)->exists())->toBeTrue();
+});
+
+test('migrated source workspace cannot be modified via settings endpoints', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+    $workspace?->update([
+        'migrated_at' => now(),
+    ]);
+
+    $member = User::factory()->create();
+
+    $this
+        ->actingAs($owner)
+        ->patch(route('workspaces.settings.update', ['workspace' => $workspace?->id], absolute: false), [
+            'name' => 'Blocked Update',
+        ])
+        ->assertStatus(409);
+
+    $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.members.add', ['workspace' => $workspace?->id], absolute: false), [
+            'email' => $member->email,
+        ])
+        ->assertStatus(409);
+});
+
+test('admin can reactivate migrated source workspace', function () {
+    $owner = User::factory()->create([
+        'role' => 'admin',
+    ]);
+    $workspace = $owner->currentWorkspace();
+    $workspace?->forceFill([
+        'migrated_at' => now(),
+    ])->save();
+
+    $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.reactivate', ['workspace' => $workspace?->id], absolute: false))
+        ->assertRedirect()
+        ->assertSessionHas('status', 'workspace-reactivated');
+
+    expect($workspace?->fresh()?->migrated_at)->toBeNull();
+});
+
+test('non-admin cannot reactivate migrated source workspace', function () {
+    $owner = User::factory()->create([
+        'role' => 'user',
+    ]);
+    $workspace = $owner->currentWorkspace();
+    $workspace?->forceFill([
+        'migrated_at' => now(),
+    ])->save();
+
+    $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.reactivate', ['workspace' => $workspace?->id], absolute: false))
+        ->assertForbidden();
+
+    expect($workspace?->fresh()?->migrated_at)->not->toBeNull();
 });

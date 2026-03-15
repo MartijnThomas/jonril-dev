@@ -29,8 +29,15 @@ class TasksController extends Controller
             abort(403, 'No workspace available.');
         }
 
+        if ($user->currentWorkspace()?->isMigratedSource()) {
+            return redirect()->route('notes.index', [
+                'type' => 'all',
+            ]);
+        }
+
         $workspaces = $user->workspaces()
             ->select('workspaces.id', 'workspaces.name')
+            ->whereNull('workspaces.migrated_at')
             ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
             ->orderBy('workspaces.name')
             ->get();
@@ -467,6 +474,11 @@ class TasksController extends Controller
             abort(404);
         }
 
+        $note->loadMissing('workspace');
+        if ($note->workspace?->isMigratedSource()) {
+            abort(409, 'Task updates are disabled for migrated source workspaces.');
+        }
+
         $content = is_array($note->content) ? $note->content : null;
         if (! $content) {
             abort(422, 'Note content is invalid.');
@@ -538,6 +550,11 @@ class TasksController extends Controller
             ->find($data['note_id']);
         if (! $note) {
             abort(404);
+        }
+
+        $note->loadMissing('workspace');
+        if ($note->workspace?->isMigratedSource()) {
+            abort(409, 'Task updates are disabled for migrated source workspaces.');
         }
 
         $content = is_array($note->content) ? $note->content : null;
