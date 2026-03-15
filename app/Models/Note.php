@@ -18,6 +18,8 @@ class Note extends Model
 
     public const TYPE_JOURNAL = 'journal';
 
+    public const TYPE_MEETING = 'meeting';
+
     public const JOURNAL_DAILY = 'daily';
 
     public const JOURNAL_WEEKLY = 'weekly';

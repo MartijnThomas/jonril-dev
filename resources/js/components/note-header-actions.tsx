@@ -7,6 +7,7 @@ import {
     Pencil,
     TableProperties,
     Trash2,
+    Unlink,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -41,6 +42,7 @@ type Props = {
     canRename: boolean;
     canDelete: boolean;
     canClear: boolean;
+    canDetachFromEvent?: boolean;
     canOpenBlockPreview?: boolean;
     blockPreviewUrl?: string | null;
     triggerClassName?: string;
@@ -61,6 +63,7 @@ export function NoteHeaderActions({
     canRename,
     canDelete,
     canClear,
+    canDetachFromEvent = false,
     canOpenBlockPreview = false,
     blockPreviewUrl = null,
     triggerClassName,
@@ -75,6 +78,7 @@ export function NoteHeaderActions({
     const [moveOpen, setMoveOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [clearOpen, setClearOpen] = useState(false);
+    const [detachOpen, setDetachOpen] = useState(false);
     const [propertiesVisible, setPropertiesVisible] = useState(true);
     const [nextTitle, setNextTitle] = useState(title);
     const [processing, setProcessing] = useState(false);
@@ -153,6 +157,24 @@ export function NoteHeaderActions({
             onFinish: () => setProcessing(false),
             onSuccess: () => setDeleteOpen(false),
         });
+    };
+
+    const confirmDetach = () => {
+        if (processing) {
+            return;
+        }
+
+        setProcessing(true);
+        router.patch(
+            `/notes/${noteId}/detach-from-event`,
+            {},
+            {
+                preserveState: false,
+                preserveScroll: true,
+                onFinish: () => setProcessing(false),
+                onSuccess: () => setDetachOpen(false),
+            },
+        );
     };
 
     const confirmClear = () => {
@@ -248,6 +270,14 @@ export function NoteHeaderActions({
                             <span className="inline-flex flex-1 items-center gap-2">
                                 <Eraser className="h-4 w-4 shrink-0" />
                                 {t('note_actions.clear', 'Erase note')}
+                            </span>
+                        </DropdownMenuItem>
+                    ) : null}
+                    {canDetachFromEvent ? (
+                        <DropdownMenuItem onClick={() => setDetachOpen(true)}>
+                            <span className="inline-flex flex-1 items-center gap-2">
+                                <Unlink className="h-4 w-4 shrink-0" />
+                                {t('note_actions.detach_from_event', 'Detach from event')}
                             </span>
                         </DropdownMenuItem>
                     ) : null}
@@ -395,6 +425,38 @@ export function NoteHeaderActions({
                             disabled={processing}
                         >
                             {t('note_actions.delete_action', 'Delete')}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={detachOpen} onOpenChange={setDetachOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            {t('note_actions.detach_from_event', 'Detach from event')}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {t(
+                                'note_actions.detach_from_event_description',
+                                'This will convert the meeting note into a regular note and remove the event link.',
+                            )}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDetachOpen(false)}
+                        >
+                            {t('note_actions.cancel', 'Cancel')}
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={confirmDetach}
+                            disabled={processing}
+                        >
+                            {t('note_actions.detach_action', 'Detach')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

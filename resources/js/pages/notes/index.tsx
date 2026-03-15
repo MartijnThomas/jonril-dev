@@ -34,7 +34,7 @@ import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import type { BreadcrumbItem } from '@/types';
 
-type NoteTypeFilter = 'all' | 'note' | 'journal';
+type NoteTypeFilter = 'all' | 'note' | 'meeting' | 'journal';
 
 type NotesFilters = {
     type: NoteTypeFilter;
@@ -508,6 +508,7 @@ export default function NotesIndex({ roots, filters }: Props) {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="note">Normal notes</SelectItem>
+                                <SelectItem value="meeting">Meeting notes</SelectItem>
                                 <SelectItem value="journal">Journal notes</SelectItem>
                                 <SelectItem value="all">All notes</SelectItem>
                             </SelectContent>

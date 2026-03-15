@@ -47,7 +47,6 @@ type DocumentPropertiesProps = {
 };
 
 const DEFAULT_PROPERTY_OPTIONS = [
-    'type',
     'title',
     'icon',
     'icon-color',

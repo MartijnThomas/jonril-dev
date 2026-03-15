@@ -30,6 +30,7 @@ type JournalPageProps = {
         canRename?: boolean;
         canDelete?: boolean;
         canClear?: boolean;
+        canDetachFromEvent?: boolean;
         canOpenBlockPreview?: boolean;
         blockPreviewUrl?: string | null;
     } | null;
@@ -309,6 +310,7 @@ export function AppSidebarHeader({
                             canRename={Boolean(pageProps.noteActions.canRename)}
                             canDelete={Boolean(pageProps.noteActions.canDelete)}
                             canClear={Boolean(pageProps.noteActions.canClear)}
+                            canDetachFromEvent={Boolean(pageProps.noteActions.canDetachFromEvent)}
                             canOpenBlockPreview={Boolean(
                                 pageProps.noteActions.canOpenBlockPreview,
                             )}

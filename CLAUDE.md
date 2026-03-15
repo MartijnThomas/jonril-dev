@@ -1,5 +1,8 @@
 # Project Rules
 
+## Things to do
+- [ ] Currently migrated tasks kan be toggled in their origin, this should be disabled. 
+
 ## Branch
 - Always work on the `develop` branch. Never make changes in a worktree or any other branch unless explicitly instructed.
 - Before editing any file, confirm your working directory is `/Users/martijn/Code/sarth-react` (the main repo on `develop`), not a worktree path like `.claude/worktrees/...`.

@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Event;
 use App\Models\Note;
 use App\Models\NoteRevision;
 use App\Models\NoteTask;
+use App\Models\Timeblock;
 use App\Models\Workspace;
 use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\LegacyToBlockNoteConverter;
@@ -48,6 +50,8 @@ class NotesController extends Controller
                 ),
             ],
             'title' => ['nullable', 'string', 'max:255'],
+            'type' => ['nullable', Rule::in([Note::TYPE_NOTE, Note::TYPE_MEETING])],
+            'event_block_id' => ['nullable', 'string', 'max:255'],
         ]);
 
         $workspace = $this->currentWorkspace();
@@ -72,9 +76,13 @@ class NotesController extends Controller
             $initialWordCount = $this->noteWordCountExtractor->count($initialContent);
         }
 
+        $noteType = in_array($data['type'] ?? null, [Note::TYPE_NOTE, Note::TYPE_MEETING], true)
+            ? $data['type']
+            : Note::TYPE_NOTE;
+
         /** @var Note $note */
         $note = $workspace->notes()->create([
-            'type' => Note::TYPE_NOTE,
+            'type' => $noteType,
             'parent_id' => $data['parent_id'] ?? null,
             'title' => $title !== '' ? $title : null,
             'content' => $initialContent,
@@ -83,7 +91,35 @@ class NotesController extends Controller
 
         $this->noteSlugService->syncSingleNote($note);
 
+        if ($noteType === Note::TYPE_MEETING && ! empty($data['event_block_id'])) {
+            $this->linkMeetingNoteToEvent($note, $data['event_block_id']);
+        }
+
         return redirect($this->noteSlugService->urlFor($note));
+    }
+
+    private function linkMeetingNoteToEvent(Note $note, string $blockId): void
+    {
+        $event = Event::with('eventable')
+            ->where('block_id', $blockId)
+            ->where('workspace_id', $note->workspace_id)
+            ->first();
+
+        if (! $event) {
+            return;
+        }
+
+        $timeblock = $event->eventable instanceof Timeblock ? $event->eventable : null;
+
+        // Use block_id (stable across reindexes) instead of event_id (changes on every reindex).
+        $note->meta = array_merge(is_array($note->meta) ? $note->meta : [], [
+            'event_block_id' => $blockId,
+            'starts_at' => $event->starts_at?->toIso8601String(),
+            'ends_at' => $event->ends_at?->toIso8601String(),
+            'timezone' => $event->timezone,
+            'location' => $timeblock?->location,
+        ]);
+        $note->saveQuietly();
     }
 
     public function store(Request $request)
@@ -339,7 +375,7 @@ class NotesController extends Controller
         $resolved->word_count = $this->noteWordCountExtractor->count($data['content']);
         $resolved->save();
 
-        if ($resolved->type === Note::TYPE_NOTE) {
+        if (in_array($resolved->type, [Note::TYPE_NOTE, Note::TYPE_MEETING], true)) {
             $this->noteSlugService->syncNoteAndDescendants($resolved);
         }
 
@@ -369,7 +405,7 @@ class NotesController extends Controller
             ->where('id', $noteId)
             ->firstOrFail();
 
-        if ($note->type !== Note::TYPE_NOTE) {
+        if (! in_array($note->type, [Note::TYPE_NOTE, Note::TYPE_MEETING], true)) {
             abort(404);
         }
 
@@ -436,7 +472,7 @@ class NotesController extends Controller
             ->where('id', $noteId)
             ->firstOrFail();
 
-        if ($note->type !== Note::TYPE_NOTE) {
+        if (! in_array($note->type, [Note::TYPE_NOTE, Note::TYPE_MEETING], true)) {
             abort(404);
         }
 
@@ -470,6 +506,83 @@ class NotesController extends Controller
         ];
         $note->properties = [];
         $note->save();
+
+        return back();
+    }
+
+    public function detachFromEvent(string $noteId)
+    {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
+        $note = $this->currentWorkspace()
+            ->notes()
+            ->where('id', $noteId)
+            ->where('type', Note::TYPE_MEETING)
+            ->firstOrFail();
+
+        $note->type = Note::TYPE_NOTE;
+
+        $meta = is_array($note->meta) ? $note->meta : [];
+        unset($meta['event_block_id'], $meta['starts_at'], $meta['ends_at'], $meta['timezone'], $meta['location']);
+        $note->meta = $meta;
+
+        $note->saveQuietly();
+
+        return back();
+    }
+
+    public function attachToEvent(Request $request, string $noteId)
+    {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
+        $data = $request->validate([
+            'event_block_id' => ['required', 'string', 'max:255'],
+            'parent_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('notes', 'id')->where(function ($query) {
+                    $query->where('workspace_id', $this->currentWorkspace()->id)
+                        ->whereIn('type', [Note::TYPE_NOTE, Note::TYPE_JOURNAL, null]);
+                }),
+            ],
+        ]);
+
+        $note = $this->currentWorkspace()
+            ->notes()
+            ->where('id', $noteId)
+            ->where('type', Note::TYPE_NOTE)
+            ->firstOrFail();
+
+        $hasMeetingChildren = $this->currentWorkspace()
+            ->notes()
+            ->where('parent_id', $note->id)
+            ->where('type', Note::TYPE_MEETING)
+            ->exists();
+
+        abort_if($hasMeetingChildren, 422, 'This note already has meeting notes attached to it.');
+
+        $event = Event::with('eventable')
+            ->where('block_id', $data['event_block_id'])
+            ->where('workspace_id', $this->currentWorkspace()->id)
+            ->firstOrFail();
+
+        if (array_key_exists('parent_id', $data) && $data['parent_id'] !== null) {
+            $note->parent_id = $data['parent_id'];
+        } elseif ($event->note_id) {
+            // Fall back to nesting under the event's associated note.
+            $eventNote = $this->currentWorkspace()
+                ->notes()
+                ->where('id', $event->note_id)
+                ->first();
+
+            if ($eventNote) {
+                $note->parent_id = $eventNote->id;
+            }
+        }
+
+        $note->type = Note::TYPE_MEETING;
+
+        $this->linkMeetingNoteToEvent($note, $data['event_block_id']);
 
         return back();
     }
@@ -616,6 +729,42 @@ class NotesController extends Controller
             ? $this->noteSlugService->urlFor($note).'?preview_block=1'
             : null;
 
+        // When viewing a meeting note: show sibling meetings (same parent).
+        // Otherwise: show meeting note children of the current note.
+        if ($note->type === Note::TYPE_MEETING && $note->parent_id) {
+            $meetingNotesCollection = $allNotes
+                ->filter(fn (Note $sibling) => $sibling->parent_id === $note->parent_id && $sibling->type === Note::TYPE_MEETING);
+        } else {
+            $meetingNotesCollection = $allNotes
+                ->filter(fn (Note $child) => $child->parent_id === $note->id && $child->type === Note::TYPE_MEETING);
+        }
+
+        $meetingChildren = $meetingNotesCollection
+            ->map(fn (Note $meetingNote) => [
+                'id' => $meetingNote->id,
+                'title' => $meetingNote->display_title,
+                'href' => $this->noteSlugService->urlFor($meetingNote),
+                'starts_at' => is_array($meetingNote->meta) ? ($meetingNote->meta['starts_at'] ?? null) : null,
+            ])
+            ->sortByDesc('starts_at')
+            ->values();
+
+        $meetingEvent = null;
+        if ($note->type === Note::TYPE_MEETING && is_array($note->meta)) {
+            $startsAt = $note->meta['starts_at'] ?? null;
+            $endsAt = $note->meta['ends_at'] ?? null;
+            $timezone = $note->meta['timezone'] ?? null;
+            $location = $note->meta['location'] ?? null;
+            if ($startsAt || $endsAt || $location) {
+                $meetingEvent = [
+                    'starts_at' => $startsAt,
+                    'ends_at' => $endsAt,
+                    'timezone' => $timezone,
+                    'location' => $location,
+                ];
+            }
+        }
+
         return Inertia::render('notes/show', [
             'content' => $editorContent,
             'noteId' => $note->id,
@@ -642,16 +791,20 @@ class NotesController extends Controller
                 'journal_granularity' => $note->journal_granularity,
                 'icon' => $noteActionIcon,
                 'icon_color' => $noteActionIconColor,
-                'canRename' => $note->type === Note::TYPE_NOTE && ! $workspaceReadOnly,
-                'canDelete' => $note->type === Note::TYPE_NOTE && ! $workspaceReadOnly,
+                'canRename' => in_array($note->type, [Note::TYPE_NOTE, Note::TYPE_MEETING], true) && ! $workspaceReadOnly,
+                'canDelete' => in_array($note->type, [Note::TYPE_NOTE, Note::TYPE_MEETING], true) && ! $workspaceReadOnly,
                 'canClear' => ! $workspaceReadOnly,
                 'canMove' => $note->type === Note::TYPE_NOTE && ! $workspaceReadOnly,
+                'canDetachFromEvent' => $note->type === Note::TYPE_MEETING && is_array($note->meta) && ! empty($note->meta['event_block_id']) && ! $workspaceReadOnly,
+                'canAttachToEvent' => $note->type === Note::TYPE_NOTE && $meetingNotesCollection->isEmpty() && ! $workspaceReadOnly,
                 'canOpenBlockPreview' => $canOpenBlockPreview,
                 'blockPreviewUrl' => $blockPreviewUrl,
             ],
             'properties' => $note->properties ?? [],
             'linkableNotes' => $linkableNotes,
             'moveParentOptions' => $moveParentOptions,
+            'meetingChildren' => $meetingChildren,
+            'meetingEvent' => $meetingEvent,
             'breadcrumbs' => $breadcrumbs,
             'language' => $this->userLanguage(),
             'relatedTasks' => Inertia::defer(function () use ($note) {
@@ -935,7 +1088,7 @@ class NotesController extends Controller
     private function validateNotesListFilters(Request $request): array
     {
         $data = $request->validate([
-            'type' => ['nullable', Rule::in(['all', Note::TYPE_NOTE, Note::TYPE_JOURNAL])],
+            'type' => ['nullable', Rule::in(['all', Note::TYPE_NOTE, Note::TYPE_MEETING, Note::TYPE_JOURNAL])],
             'context' => ['nullable', 'string', 'max:120'],
             'tags' => ['nullable', 'string', 'max:255'],
             'tokens' => ['nullable', 'string', 'max:255'],
@@ -986,8 +1139,14 @@ class NotesController extends Controller
             ->when(
                 $filters['type'] === Note::TYPE_NOTE,
                 fn ($query) => $query->where(function ($inner) {
-                    $inner->whereNull('type')->orWhere('type', Note::TYPE_NOTE);
+                    $inner->whereNull('type')
+                        ->orWhere('type', Note::TYPE_NOTE)
+                        ->orWhere('type', Note::TYPE_MEETING);
                 }),
+            )
+            ->when(
+                $filters['type'] === Note::TYPE_MEETING,
+                fn ($query) => $query->where('type', Note::TYPE_MEETING),
             )
             ->when(
                 $filters['type'] === Note::TYPE_JOURNAL,

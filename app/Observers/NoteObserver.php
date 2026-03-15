@@ -22,7 +22,9 @@ class NoteObserver
 
     public function saving(Note $note): void
     {
-        $note->meta = $this->noteMetaExtractor->extract($note->content);
+        $existing = is_array($note->meta) ? $note->meta : [];
+        $extracted = $this->noteMetaExtractor->extract($note->content);
+        $note->meta = array_merge($existing, $extracted);
     }
 
     public function saved(Note $note): void

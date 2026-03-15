@@ -108,6 +108,8 @@ export type SimpleEditorProps = {
         };
         href: string;
     }[];
+    meetingChildren?: { id: string; title: string; href: string; starts_at?: string | null }[];
+    meetingEvent?: { starts_at: string | null; ends_at: string | null; timezone: string | null; location: string | null } | null;
     showRelatedPanel?: boolean;
     language?: 'nl' | 'en';
     noteType?: string | null;

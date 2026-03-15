@@ -58,6 +58,8 @@ type Props = {
             href: string;
         };
     }[];
+    meetingChildren?: { id: string; title: string; href: string; starts_at?: string | null }[];
+    meetingEvent?: { starts_at: string | null; ends_at: string | null; timezone: string | null; location: string | null } | null;
     backlinks?: {
         id: string;
         block_id: string;
@@ -102,6 +104,8 @@ export default function Dashboard({
     workspaceSuggestions,
     relatedTasks = [],
     backlinks = [],
+    meetingChildren = [],
+    meetingEvent = null,
 }: Props) {
     const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('ready');
     const [saveLastSavedAt, setSaveLastSavedAt] = useState<number | null>(null);
@@ -197,6 +201,8 @@ export default function Dashboard({
                 workspaceSuggestions={workspaceSuggestions}
                 relatedTasks={relatedTasks}
                 backlinks={backlinks}
+                meetingChildren={meetingChildren}
+                meetingEvent={meetingEvent}
                 showRelatedPanel={
                     noteType !== 'journal' ||
                     (noteType === 'journal' && journalGranularity === 'daily')

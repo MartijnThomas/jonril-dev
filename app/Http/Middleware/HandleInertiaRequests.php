@@ -76,6 +76,8 @@ class HandleInertiaRequests extends Middleware
             'rightSidebarOpen' => $this->sidebarDefaultOpenState($request, 'right'),
             'todayEvents' => fn () => $sidebarEventsPayload()['events'],
             'todayEventsDate' => fn () => $sidebarEventsPayload()['date'],
+            'workspaceLinkableNotes' => fn () => $this->workspaceLinkableNotes($request),
+            'workspaceMeetingParentOptions' => fn () => $this->workspaceMeetingParentOptions($request),
             'locale' => $locale,
             'translations' => fn () => [
                 'ui' => $this->cachedUiTranslations($request, $locale),
@@ -212,7 +214,7 @@ class HandleInertiaRequests extends Middleware
             ->where('workspace_id', $workspace->id)
             ->where(function ($query) {
                 $query->whereNull('type')
-                    ->orWhere('type', '!=', 'journal');
+                    ->orWhere('type', Note::TYPE_NOTE);
             })
             ->orderBy('created_at')
             ->get(['id', 'workspace_id', 'slug', 'title', 'properties', 'parent_id', 'type']);
@@ -411,7 +413,9 @@ class HandleInertiaRequests extends Middleware
      *     task_checked:bool|null,
      *     task_status:string|null,
      *     note_title:string|null,
-     *     href:string|null
+     *     href:string|null,
+     *     meeting_note_id:string|null,
+     *     meeting_note_href:string|null
      *   }>
      * }
      */
@@ -431,7 +435,7 @@ class HandleInertiaRequests extends Middleware
         $startOfDayUtc = $anchorDate->copy()->timezone($userTimezone)->startOfDay()->timezone('UTC');
         $endOfDayUtc = $anchorDate->copy()->timezone($userTimezone)->endOfDay()->timezone('UTC');
 
-        $events = Event::query()
+        $rawEvents = Event::query()
             ->with(['eventable', 'note:id,title,slug,type,journal_granularity,journal_date,workspace_id,parent_id,properties'])
             ->where('workspace_id', $workspace->id)
             ->where('starts_at', '<=', $endOfDayUtc)
@@ -452,6 +456,7 @@ class HandleInertiaRequests extends Middleware
 
                 return [
                     'id' => $event->id,
+                    'block_id' => $event->block_id,
                     'type' => $isTimeblock ? 'timeblock' : 'event',
                     'title' => (string) $event->title,
                     'note_id' => $event->note_id,
@@ -465,14 +470,178 @@ class HandleInertiaRequests extends Middleware
                     'href' => $event->note ? $this->noteSlugService->urlFor($event->note) : null,
                     'timezone' => $userTimezone,
                 ];
-            })
-            ->values()
-            ->all();
+            });
+
+        // Resolve meeting note hrefs and IDs via block_id (stable across reindexes).
+        $blockIds = $rawEvents->pluck('block_id')->filter()->unique()->values()->all();
+        $meetingNoteMap = []; // block_id => ['id' => ..., 'href' => ...]
+        if (! empty($blockIds)) {
+            Note::query()
+                ->where('type', Note::TYPE_MEETING)
+                ->where('workspace_id', $workspace->id)
+                ->get(['id', 'meta', 'slug', 'type', 'journal_granularity', 'journal_date', 'workspace_id'])
+                ->each(function (Note $n) use (&$meetingNoteMap): void {
+                    $blockId = is_array($n->meta) ? ($n->meta['event_block_id'] ?? null) : null;
+                    if ($blockId) {
+                        $meetingNoteMap[$blockId] = [
+                            'id' => $n->id,
+                            'href' => $this->noteSlugService->urlFor($n),
+                        ];
+                    }
+                });
+        }
+
+        $events = $rawEvents->map(function (array $e) use ($meetingNoteMap): array {
+            $match = isset($e['block_id']) ? ($meetingNoteMap[$e['block_id']] ?? null) : null;
+
+            return [
+                ...$e,
+                'meeting_note_id' => $match ? $match['id'] : null,
+                'meeting_note_href' => $match ? $match['href'] : null,
+            ];
+        })->values()->all();
 
         return [
             'date' => $anchorDate->toDateString(),
             'events' => $events,
         ];
+    }
+
+    /**
+     * @return array<int, array{id: string, title: string, path: string|null}>
+     */
+    private function workspaceLinkableNotes(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return [];
+        }
+
+        $workspace = $this->resolvedWorkspace($request);
+        if (! $workspace) {
+            return [];
+        }
+
+        $meetingParentIds = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('type', Note::TYPE_MEETING)
+            ->whereNotNull('parent_id')
+            ->pluck('parent_id')
+            ->unique()
+            ->all();
+
+        $notes = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->whereIn('type', [Note::TYPE_NOTE, null])
+            ->whereNotIn('id', $meetingParentIds)
+            ->get(['id', 'title', 'parent_id', 'properties']);
+
+        /** @var \Illuminate\Support\Collection<string, array{id: string, title: string, parent_id: string|null}> $byId */
+        $byId = $notes->keyBy('id');
+
+        $resolvePath = function (string $noteId) use ($byId): ?string {
+            $segments = [];
+            $visited = [];
+            $cursor = $byId->get($noteId);
+
+            while ($cursor !== null && ! isset($visited[$cursor['id']])) {
+                $visited[$cursor['id']] = true;
+                array_unshift($segments, $cursor['title'] ?? 'Untitled');
+
+                if (! $cursor['parent_id']) {
+                    break;
+                }
+
+                $cursor = $byId->get($cursor['parent_id']);
+            }
+
+            return count($segments) > 0 ? implode(' / ', $segments) : null;
+        };
+
+        return $notes
+            ->map(fn (Note $note) => [
+                'id' => $note->id,
+                'title' => $note->display_title,
+                'path' => $note->parent_id ? $resolvePath($note->parent_id) : null,
+            ])
+            ->sortBy(fn (array $n) => strtolower((string) $n['path'].' '.$n['title']))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{id: string, title: string, path: string|null, is_journal: bool}>
+     */
+    private function workspaceMeetingParentOptions(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return [];
+        }
+
+        $workspace = $this->resolvedWorkspace($request);
+        if (! $workspace) {
+            return [];
+        }
+
+        $userTimezone = $this->resolveUserTimezone($request);
+        $todayDate = now($userTimezone)->toDateString();
+
+        $todayJournal = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->where('journal_granularity', Note::JOURNAL_DAILY)
+            ->whereDate('journal_date', $todayDate)
+            ->first(['id', 'journal_date']);
+
+        $notes = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->whereIn('type', [Note::TYPE_NOTE, null])
+            ->get(['id', 'title', 'parent_id', 'properties']);
+
+        /** @var \Illuminate\Support\Collection<string, array{id: string, title: string, parent_id: string|null}> $byId */
+        $byId = $notes->keyBy('id');
+
+        $resolvePath = function (string $noteId) use ($byId): ?string {
+            $segments = [];
+            $visited = [];
+            $cursor = $byId->get($noteId);
+
+            while ($cursor !== null && ! isset($visited[$cursor['id']])) {
+                $visited[$cursor['id']] = true;
+                array_unshift($segments, $cursor['title'] ?? 'Untitled');
+
+                if (! $cursor['parent_id']) {
+                    break;
+                }
+
+                $cursor = $byId->get($cursor['parent_id']);
+            }
+
+            return count($segments) > 0 ? implode(' / ', $segments) : null;
+        };
+
+        $options = $notes
+            ->map(fn (Note $note) => [
+                'id' => $note->id,
+                'title' => $note->display_title,
+                'path' => $note->parent_id ? $resolvePath($note->parent_id) : null,
+                'is_journal' => false,
+            ])
+            ->sortBy(fn (array $n) => strtolower((string) $n['path'].' '.$n['title']))
+            ->values()
+            ->all();
+
+        if ($todayJournal) {
+            array_unshift($options, [
+                'id' => $todayJournal->id,
+                'title' => "Daily note · {$todayDate}",
+                'path' => null,
+                'is_journal' => true,
+            ]);
+        }
+
+        return $options;
     }
 
     private function resolveSidebarEventsDate(Request $request): CarbonInterface

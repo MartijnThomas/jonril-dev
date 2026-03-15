@@ -2645,3 +2645,204 @@ test('prune command applies retention windows to note revisions', function () {
 
     Carbon::setTestNow();
 });
+
+test('start links meeting note to event via event_block_id', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    // Create a parent note to hold the meeting
+    $parent = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Parent',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    // Create a timeblock and its event manually
+    $timeblock = \App\Models\Timeblock::create(['location' => 'office']);
+    $event = \App\Models\Event::create([
+        'workspace_id' => $workspace->id,
+        'block_id' => 'test-block-id-123',
+        'eventable_type' => \App\Models\Timeblock::class,
+        'eventable_id' => $timeblock->id,
+        'title' => 'Standup',
+        'starts_at' => '2026-03-15 09:00:00',
+        'ends_at' => '2026-03-15 09:30:00',
+        'timezone' => 'Europe/Amsterdam',
+        'journal_date' => '2026-03-15',
+    ]);
+
+    $response = $this->actingAs($user)->get(route('notes.start', [
+        'title' => 'Standup',
+        'parent_id' => $parent->id,
+        'type' => 'meeting',
+        'event_block_id' => 'test-block-id-123',
+    ]));
+
+    $note = Note::query()
+        ->where('workspace_id', $workspace->id)
+        ->where('type', Note::TYPE_MEETING)
+        ->latest()
+        ->first();
+
+    expect($note)->not()->toBeNull();
+    expect($note->type)->toBe(Note::TYPE_MEETING);
+    expect($note->meta)->toHaveKey('event_block_id', 'test-block-id-123');
+    expect($note->meta)->toHaveKey('starts_at');
+    expect($note->meta)->toHaveKey('ends_at');
+    expect($note->meta)->toHaveKey('timezone', 'Europe/Amsterdam');
+    expect($note->meta)->toHaveKey('location', 'office');
+});
+
+test('note observer preserves custom meta keys across saves', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Test',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    // Manually set a custom meta key (simulating what linkMeetingNoteToEvent does)
+    $note->meta = array_merge(is_array($note->meta) ? $note->meta : [], [
+        'event_block_id' => 'some-block-id',
+        'starts_at' => '2026-03-15T09:00:00+00:00',
+    ]);
+    $note->saveQuietly();
+
+    // Now trigger a regular save (which fires the observer)
+    $note->title = 'Updated Title';
+    $note->save();
+
+    $fresh = $note->fresh();
+    expect($fresh->meta)->toHaveKey('event_block_id', 'some-block-id');
+    expect($fresh->meta)->toHaveKey('starts_at', '2026-03-15T09:00:00+00:00');
+    expect($fresh->meta)->toHaveKey('navigation'); // content-derived key still present
+});
+
+test('detach from event converts meeting note to regular note and clears event meta', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => \App\Models\Note::TYPE_MEETING,
+        'title' => 'Standup',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $note->meta = [
+        'navigation' => [],
+        'event_block_id' => 'some-block-id',
+        'starts_at' => '2026-03-15T09:00:00+00:00',
+        'ends_at' => '2026-03-15T09:30:00+00:00',
+        'timezone' => 'Europe/Amsterdam',
+        'location' => 'office',
+    ];
+    $note->saveQuietly();
+
+    $this->actingAs($user)
+        ->patch(route('notes.detach-from-event', $note->id))
+        ->assertRedirect();
+
+    $fresh = $note->fresh();
+    expect($fresh->type)->toBe(\App\Models\Note::TYPE_NOTE);
+    expect($fresh->meta)->not()->toHaveKey('event_block_id');
+    expect($fresh->meta)->not()->toHaveKey('starts_at');
+    expect($fresh->meta)->not()->toHaveKey('ends_at');
+    expect($fresh->meta)->not()->toHaveKey('timezone');
+    expect($fresh->meta)->not()->toHaveKey('location');
+    expect($fresh->meta)->toHaveKey('navigation'); // non-event meta preserved
+});
+
+test('detach from event is forbidden on regular notes', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => \App\Models\Note::TYPE_NOTE,
+        'title' => 'Regular',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('notes.detach-from-event', $note->id))
+        ->assertNotFound();
+});
+
+test('attach to event converts regular note to meeting note and sets event meta', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'My Note',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $timeblock = \App\Models\Timeblock::create(['location' => 'boardroom']);
+    \App\Models\Event::create([
+        'workspace_id' => $workspace->id,
+        'block_id' => 'event-block-xyz',
+        'eventable_type' => \App\Models\Timeblock::class,
+        'eventable_id' => $timeblock->id,
+        'title' => 'Team Meeting',
+        'starts_at' => '2026-03-15 10:00:00',
+        'ends_at' => '2026-03-15 10:30:00',
+        'timezone' => 'Europe/Amsterdam',
+        'journal_date' => '2026-03-15',
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('notes.attach-to-event', $note->id), [
+            'event_block_id' => 'event-block-xyz',
+        ])
+        ->assertRedirect();
+
+    $fresh = $note->fresh();
+    expect($fresh->type)->toBe(Note::TYPE_MEETING);
+    expect($fresh->meta)->toHaveKey('event_block_id', 'event-block-xyz');
+    expect($fresh->meta)->toHaveKey('starts_at');
+    expect($fresh->meta)->toHaveKey('ends_at');
+    expect($fresh->meta)->toHaveKey('location', 'boardroom');
+});
+
+test('attach to event is forbidden on meeting notes', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_MEETING,
+        'title' => 'Already a meeting',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('notes.attach-to-event', $note->id), [
+            'event_block_id' => 'any-block-id',
+        ])
+        ->assertNotFound();
+});
+
+test('attach to event is forbidden on notes that have meeting note children', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $parent = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Parent',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_MEETING,
+        'title' => 'Meeting child',
+        'content' => ['type' => 'doc', 'content' => []],
+        'parent_id' => $parent->id,
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('notes.attach-to-event', $parent->id), [
+            'event_block_id' => 'any-block-id',
+        ])
+        ->assertStatus(422);
+});

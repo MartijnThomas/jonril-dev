@@ -459,6 +459,22 @@ export function NavNotesTree() {
     }, [openDialog, workspaceReadOnly]);
 
     return (
+        <>
+        {!workspaceReadOnly ? (
+            <SidebarGroup className="hidden px-2 py-1 group-data-[collapsible=icon]:block">
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton
+                            onClick={openDialog}
+                            tooltip={t('notes_create.new_note', 'New note')}
+                            className="justify-center"
+                        >
+                            <Plus className="h-4 w-4" />
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
+            </SidebarGroup>
+        ) : null}
         <SidebarGroup className="px-2 py-0 group-data-[collapsible=icon]:hidden">
             <div className="mb-1 flex items-center justify-between px-2">
                 <SidebarGroupLabel className="px-0">
@@ -505,5 +521,6 @@ export function NavNotesTree() {
                 parentOptions={parentOptions}
             />
         </SidebarGroup>
+        </>
     );
 }

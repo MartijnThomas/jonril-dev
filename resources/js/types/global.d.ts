@@ -44,6 +44,7 @@ declare module '@inertiajs/core' {
             rightSidebarOpen: boolean;
             todayEvents?: Array<{
                 id: string;
+                block_id: string | null;
                 type: 'timeblock' | 'event';
                 title: string;
                 note_id: string | null;
@@ -56,8 +57,21 @@ declare module '@inertiajs/core' {
                 task_status: string | null;
                 note_title: string | null;
                 href: string | null;
+                meeting_note_id: string | null;
+                meeting_note_href: string | null;
             }>;
             todayEventsDate?: string | null;
+            workspaceLinkableNotes?: Array<{
+                id: string;
+                title: string;
+                path: string | null;
+            }>;
+            workspaceMeetingParentOptions?: Array<{
+                id: string;
+                title: string;
+                path: string | null;
+                is_journal: boolean;
+            }>;
             [key: string]: unknown;
         };
     }

@@ -3,12 +3,16 @@
 import { Deferred } from '@inertiajs/react';
 import type { Editor } from '@tiptap/core';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
+import { format, isValid, parseISO } from 'date-fns';
+import { enUS, nl } from 'date-fns/locale';
+import { MapPin, Presentation } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
     NoteRelatedPanel,
     NoteRelatedPanelPlaceholder,
 } from '@/components/note-related-panel';
+import { MeetingNotesSidebar } from '@/components/meeting-notes-sidebar';
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
 import type { DocumentPropertiesValue } from '@/components/tiptap-properties/document-properties';
 import {
@@ -36,6 +40,59 @@ import '@/components/tiptap-templates/simple/styling.css';
 import '@/components/tiptap-templates/simple/block-tree/block-editor-only.scss';
 const EMPTY_SUGGESTIONS: string[] = [];
 const PROPERTY_VISIBILITY_META_PREFIX = '__visible:';
+
+type MeetingEventData = {
+    starts_at: string | null;
+    ends_at: string | null;
+    timezone: string | null;
+    location: string | null;
+};
+
+function formatMeetingTimeRange(
+    startsAt: string | null | undefined,
+    endsAt: string | null | undefined,
+    language: 'nl' | 'en',
+): string | null {
+    if (!startsAt) return null;
+    const start = parseISO(startsAt);
+    if (!isValid(start)) return null;
+    const locale = language === 'nl' ? nl : enUS;
+    const dateStr = format(start, 'EEEE d MMMM yyyy', { locale });
+    const startTime = format(start, 'HH:mm', { locale });
+    if (endsAt) {
+        const end = parseISO(endsAt);
+        if (isValid(end)) {
+            return `${dateStr} · ${startTime}–${format(end, 'HH:mm', { locale })}`;
+        }
+    }
+    return `${dateStr} · ${startTime}`;
+}
+
+function MeetingEventMeta({ event, language }: { event: MeetingEventData; language: 'nl' | 'en' }) {
+    const timeLabel = formatMeetingTimeRange(event.starts_at, event.ends_at, language);
+    if (!timeLabel && !event.location) return null;
+
+    return (
+        <div className="mt-3 mb-1 flex flex-col gap-1.5 text-sm">
+            {timeLabel ? (
+                <div className="flex items-start gap-3 text-muted-foreground">
+                    <span className="w-16 shrink-0 whitespace-nowrap pt-px text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
+                        {language === 'nl' ? 'Wanneer' : 'When'}
+                    </span>
+                    <span className="text-[0.82rem]">{timeLabel}</span>
+                </div>
+            ) : null}
+            {event.location ? (
+                <div className="flex items-center gap-3 text-muted-foreground">
+                    <span className="flex w-16 shrink-0 justify-start">
+                        <MapPin className="size-3 opacity-60" />
+                    </span>
+                    <span className="text-[0.82rem]">{event.location}</span>
+                </div>
+            ) : null}
+        </div>
+    );
+}
 
 const isPropertyVisibilityMetaKey = (key: string) =>
     key.startsWith(PROPERTY_VISIBILITY_META_PREFIX);
@@ -172,6 +229,8 @@ function SimpleEditorComponent({
     workspaceSuggestions,
     relatedTasks = [],
     backlinks = [],
+    meetingChildren = [],
+    meetingEvent = null,
     showRelatedPanel = false,
     language = 'nl',
     readOnly = false,
@@ -183,8 +242,15 @@ function SimpleEditorComponent({
     journalDate = null,
     defaultTimeblockDurationMinutes = 60,
 }: SimpleEditorProps) {
+    const isJournal = noteType === 'journal';
+    const hasMeetingNotes = meetingChildren.length > 0 && !isJournal;
+    // Default open on ≥768 px, closed on small screens. Lazy initializer runs once on mount.
+    const [showMeetingNotes, setShowMeetingNotes] = useState(
+        () => typeof window === 'undefined' || window.innerWidth >= 768,
+    );
+
     const [documentProperties, setDocumentProperties] =
-        useState<DocumentPropertiesValue>(properties);
+        useState<DocumentPropertiesValue>(() => ({ ...properties }));
     const [showDocumentProperties, setShowDocumentProperties] = useState(
         hasVisibleProperties(properties),
     );
@@ -560,56 +626,80 @@ function SimpleEditorComponent({
     }, [editor, onContentStatsChange]);
 
     return (
-        <div className="w-full">
-            <EditorContext.Provider value={{ editor }}>
-                {!readOnly ? blockUi : null}
-                {showRelatedPanel ? (
-                    <div className="w-full md:mx-auto md:mt-4 md:max-w-3xl md:px-8">
-                        <Deferred
-                            data={['relatedTasks', 'backlinks']}
-                            fallback={<NoteRelatedPanelPlaceholder language={language} />}
-                        >
-                            <NoteRelatedPanel
-                                noteId={id}
-                                key={id}
-                                relatedTasks={relatedTasks}
-                                backlinks={backlinks}
-                                language={language}
-                            />
-                        </Deferred>
-                    </div>
-                ) : null}
+        <div className="flex w-full min-h-0">
+            <div className="flex-1 min-w-0">
+                <EditorContext.Provider value={{ editor }}>
+                    {!readOnly ? blockUi : null}
+                    {showRelatedPanel ? (
+                        <div className="w-full md:mx-auto md:mt-4 md:max-w-3xl md:px-8">
+                            <Deferred
+                                data={['relatedTasks', 'backlinks']}
+                                fallback={<NoteRelatedPanelPlaceholder language={language} />}
+                            >
+                                <NoteRelatedPanel
+                                    noteId={id}
+                                    key={id}
+                                    relatedTasks={relatedTasks}
+                                    backlinks={backlinks}
+                                    language={language}
+                                />
+                            </Deferred>
+                        </div>
+                    ) : null}
 
-                {!readOnly && showDocumentProperties ? (
-                    <div className="w-full md:mx-auto md:max-w-3xl md:px-8">
-                        <div className="pt-0 md:pt-1">
-                            <DocumentProperties
-                                value={documentProperties}
-                                onChange={setDocumentProperties}
-                                onPersistRequested={() => {
-                                    requestAnimationFrame(() => {
-                                        saveEditor(false);
-                                    });
-                                }}
-                                workspaceSuggestions={{
-                                    mentions: mentionSuggestions,
-                                    hashtags: hashtagSuggestions,
-                                }}
+                    {!readOnly && showDocumentProperties ? (
+                        <div className="w-full md:mx-auto md:max-w-3xl md:px-8">
+                            <div className="pt-0 md:pt-1">
+                                <DocumentProperties
+                                    value={documentProperties}
+                                    onChange={setDocumentProperties}
+                                    onPersistRequested={() => {
+                                        requestAnimationFrame(() => {
+                                            saveEditor(false);
+                                        });
+                                    }}
+                                    workspaceSuggestions={{
+                                        mentions: mentionSuggestions,
+                                        hashtags: hashtagSuggestions,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    ) : null}
+
+                    <div className="mx-auto w-full max-w-3xl">
+                        <div className="px-8">
+                            {meetingEvent && noteType === 'meeting' ? (
+                                <MeetingEventMeta event={meetingEvent} language={language} />
+                            ) : null}
+                            <EditorContent
+                                editor={editor}
+                                role="presentation"
+                                className="simple-editor-content mt-4 md:mt-8"
                             />
                         </div>
                     </div>
-                ) : null}
+                </EditorContext.Provider>
+            </div>
 
-                <div className="mx-auto w-full max-w-3xl">
-                    <div className="px-8">
-                        <EditorContent
-                            editor={editor}
-                            role="presentation"
-                            className="simple-editor-content mt-4 md:mt-8"
-                        />
-                    </div>
-                </div>
-            </EditorContext.Provider>
+            {hasMeetingNotes && !showMeetingNotes ? (
+                <button
+                    type="button"
+                    onClick={() => setShowMeetingNotes(true)}
+                    className="fixed top-14 right-4 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-sidebar shadow-md border border-sidebar-border/60 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+                    aria-label="Show meeting notes"
+                >
+                    <Presentation className="size-4" />
+                </button>
+            ) : null}
+            {hasMeetingNotes && showMeetingNotes ? (
+                <MeetingNotesSidebar
+                    meetingNotes={meetingChildren}
+                    language={language}
+                    currentNoteId={id}
+                    onClose={() => setShowMeetingNotes(false)}
+                />
+            ) : null}
         </div>
     );
 }

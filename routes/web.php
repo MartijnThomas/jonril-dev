@@ -100,6 +100,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('notes/{noteId}/clear', [NotesController::class, 'clear'])
         ->whereUuid('noteId')
         ->name('notes.clear');
+    Route::patch('notes/{noteId}/detach-from-event', [NotesController::class, 'detachFromEvent'])
+        ->whereUuid('noteId')
+        ->name('notes.detach-from-event');
+    Route::patch('notes/{noteId}/attach-to-event', [NotesController::class, 'attachToEvent'])
+        ->whereUuid('noteId')
+        ->name('notes.attach-to-event');
     Route::delete('notes/{noteId}', [NotesController::class, 'destroy'])
         ->whereUuid('noteId')
         ->name('notes.destroy');
