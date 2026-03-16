@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { isValid, parseISO } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import { Check, FileText, MoreHorizontal, Unlink, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -31,6 +31,7 @@ type SidebarTodayEvent = {
     id: string;
     block_id: string | null;
     type: 'timeblock' | 'event';
+    all_day: boolean;
     title: string;
     note_id: string | null;
     starts_at: string | null;
@@ -223,6 +224,41 @@ function resolveTimingState(
     };
 }
 
+function formatAllDayLabel(
+    startsAt: string | null,
+    endsAt: string | null,
+    anchorDate: Date,
+    locale: Locale,
+): string {
+    if (!startsAt) {
+        return 'All day';
+    }
+
+    const start = parseISO(startsAt);
+    if (!isValid(start)) {
+        return 'All day';
+    }
+
+    const end = endsAt ? parseISO(endsAt) : null;
+    const isSingleDay = !end || isValid(end) === false || startsAt === endsAt;
+
+    if (isSingleDay) {
+        return 'All day';
+    }
+
+    const startStr = format(start, 'd MMM', { locale });
+    const endStr = format(end!, 'd MMM', { locale });
+    const anchorStr = format(anchorDate, 'yyyy-MM-dd');
+    const startDateStr = format(start, 'yyyy-MM-dd');
+    const endDateStr = format(end!, 'yyyy-MM-dd');
+
+    if (startDateStr === anchorStr && endDateStr === anchorStr) {
+        return 'All day';
+    }
+
+    return `${startStr} – ${endStr}`;
+}
+
 export function RightSidebarTodayEvents({
     events,
     language,
@@ -260,7 +296,9 @@ export function RightSidebarTodayEvents({
     const headerLabel = capitalizeFirst(
         formatLongDate(parsedAnchorDate, locale, preferredLongDateFormat),
     );
-    const [eventItems, setEventItems] = useState<SidebarTodayEvent[]>(events);
+    const allDayEvents = events.filter((e) => e.all_day);
+    const timedEvents = events.filter((e) => !e.all_day);
+    const [eventItems, setEventItems] = useState<SidebarTodayEvent[]>(timedEvents);
     const [pendingTaskBlockIds, setPendingTaskBlockIds] = useState<string[]>([]);
     const [now, setNow] = useState<Date>(() => new Date());
     const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
@@ -274,7 +312,7 @@ export function RightSidebarTodayEvents({
     const [detachingNoteId, setDetachingNoteId] = useState<string | null>(null);
 
     useEffect(() => {
-        setEventItems(events);
+        setEventItems(events.filter((e) => !e.all_day));
     }, [events]);
     useEffect(() => {
         const intervalId = window.setInterval(() => {
@@ -329,9 +367,42 @@ export function RightSidebarTodayEvents({
                 noteTitle={attachDialogNoteTitle}
             />
 
-            {events.length === 0 ? (
+            {allDayEvents.length > 0 ? (
+                <ul className="mb-2 space-y-0.5">
+                    {allDayEvents.map((event) => {
+                        const dateLabel = formatAllDayLabel(
+                            event.starts_at,
+                            event.ends_at,
+                            parsedAnchorDate,
+                            locale,
+                        );
+
+                        return (
+                            <li key={event.id}>
+                                <div className="flex items-center gap-2 rounded-md px-1 py-1">
+                                    <span
+                                        className={cn(
+                                            'h-1.5 w-1.5 shrink-0 rounded-full',
+                                            workspaceAccent,
+                                        )}
+                                        aria-hidden="true"
+                                    />
+                                    <p className="min-w-0 flex-1 truncate text-[0.82rem] text-foreground/80">
+                                        {event.title}
+                                    </p>
+                                    <span className="shrink-0 text-[0.72rem] text-muted-foreground">
+                                        {dateLabel}
+                                    </span>
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : null}
+
+            {timedEvents.length === 0 && allDayEvents.length === 0 ? (
                 <p className="px-1 py-2 text-sm text-muted-foreground/90">{emptyLabel}</p>
-            ) : (
+            ) : timedEvents.length > 0 ? (
                 <ul className="space-y-1.5">
                     {eventItems.map((event, index) => {
                         const linkedBlockId =
@@ -415,229 +486,182 @@ export function RightSidebarTodayEvents({
                             event.ends_at,
                             now,
                         );
-                        const shouldDimPassedTimeblock =
-                            isTimeblock && !hasLinkedTask && hasPassed;
+                        const shouldDim = (isTimeblock && !hasLinkedTask && hasPassed) || (isLinkedTaskCompleted);
+                        const accentColor = isTimeblock ? timeblockAccent : workspaceAccent;
                         const checkboxBorderClass = isTimeblock ? timeblockBorder : workspaceBorder;
                         const checkboxAccentClass = isTimeblock ? timeblockAccent : workspaceAccent;
-                        const durationLabel = isTimeblock
-                            ? formatDurationLabel(event.starts_at, event.ends_at, language)
+                        const durationLabel = formatDurationLabel(event.starts_at, event.ends_at, language);
+                        const startsSoonLabel = formatStartsSoonLabel(event.starts_at, language, now);
+                        const nextTimedEvent = eventItems[index + 1] ?? null;
+                        const gapLabel = nextTimedEvent
+                            ? formatGapLabel(event.ends_at, nextTimedEvent.starts_at, language)
                             : null;
-                        const startsSoonLabel = formatStartsSoonLabel(
-                            event.starts_at,
-                            language,
-                            now,
-                        );
-                        const happeningNowLabel =
-                            isTimeblock && isActiveNow
-                                ? language === 'nl'
-                                    ? 'Nu bezig'
-                                    : 'Happening now'
-                                : null;
-                        const nextEvent = events[index + 1] ?? null;
-                        const gapLabel = nextEvent
-                            ? formatGapLabel(event.ends_at, nextEvent.starts_at, language)
-                            : null;
+
+                        const eventIdentifier = event.block_id ?? event.id;
 
                         return [
                                 <li key={event.id}>
                                     <article
                                         className={cn(
-                                            'group relative rounded-lg px-3 py-2 shadow-sm',
+                                            'group relative rounded-lg px-3 py-2.5 shadow-sm transition-opacity',
                                             neutralCardClass,
                                             !isTimeblock && 'border border-sidebar-border/60',
-                                            isLinkedTaskCompleted && 'opacity-70',
-                                            shouldDimPassedTimeblock && 'opacity-60',
-                                            isTimeblock &&
-                                                isActiveNow &&
-                                                cn(
-                                                    'border-2 shadow-[0_0_0_1px_rgba(0,0,0,0.02)]',
-                                                    timeblockBorder,
-                                                ),
+                                            shouldDim && 'opacity-60',
+                                            isTimeblock && isActiveNow && cn('border-2', timeblockBorder),
                                         )}
                                     >
-                                        {isTimeblock ? (
-                                            <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-black/10 hover:text-foreground dark:hover:bg-white/10"
-                                                            aria-label="Event options"
-                                                        >
-                                                            <MoreHorizontal className="size-3.5" />
-                                                        </button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="w-52">
-                                                        {event.meeting_note_href ? (
-                                                            <>
-                                                                <DropdownMenuItem asChild>
-                                                                    <Link href={event.meeting_note_href}>
-                                                                        <FileText className="mr-2 size-3.5" />
-                                                                        View meeting note
-                                                                    </Link>
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuSeparator />
+                                        {/* options dropdown */}
+                                        <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <button
+                                                        type="button"
+                                                        className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-black/10 hover:text-foreground dark:hover:bg-white/10"
+                                                        aria-label="Event options"
+                                                    >
+                                                        <MoreHorizontal className="size-3.5" />
+                                                    </button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="w-52">
+                                                    {event.meeting_note_href ? (
+                                                        <>
+                                                            <DropdownMenuItem asChild>
+                                                                <Link href={event.meeting_note_href}>
+                                                                    <FileText className="mr-2 size-3.5" />
+                                                                    View meeting note
+                                                                </Link>
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem
+                                                                onSelect={() => {
+                                                                    if (!event.meeting_note_id) return;
+                                                                    setDetachingNoteId(event.meeting_note_id);
+                                                                    router.patch(
+                                                                        `/notes/${event.meeting_note_id}/detach-from-event`,
+                                                                        {},
+                                                                        {
+                                                                            preserveState: false,
+                                                                            preserveScroll: true,
+                                                                            onFinish: () => setDetachingNoteId(null),
+                                                                        },
+                                                                    );
+                                                                }}
+                                                                disabled={detachingNoteId === event.meeting_note_id}
+                                                                className="text-destructive focus:text-destructive"
+                                                            >
+                                                                <Unlink className="mr-2 size-3.5" />
+                                                                Detach meeting note
+                                                            </DropdownMenuItem>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <DropdownMenuItem
+                                                                onSelect={() => {
+                                                                    setMeetingDialogTitle(event.title);
+                                                                    setMeetingDialogEventId(eventIdentifier ?? undefined);
+                                                                    setMeetingDialogOpen(true);
+                                                                }}
+                                                            >
+                                                                <Users className="mr-2 size-3.5" />
+                                                                Create meeting note
+                                                            </DropdownMenuItem>
+                                                            {canAttachCurrentNote && currentNoteId ? (
                                                                 <DropdownMenuItem
                                                                     onSelect={() => {
-                                                                        if (!event.meeting_note_id) {
-                                                                            return;
-                                                                        }
-
-                                                                        setDetachingNoteId(event.meeting_note_id);
-                                                                        router.patch(
-                                                                            `/notes/${event.meeting_note_id}/detach-from-event`,
-                                                                            {},
-                                                                            {
-                                                                                preserveState: false,
-                                                                                preserveScroll: true,
-                                                                                onFinish: () => setDetachingNoteId(null),
-                                                                            },
-                                                                        );
+                                                                        setAttachDialogEventBlockId(eventIdentifier ?? '');
+                                                                        setAttachDialogEventTitle(event.title);
+                                                                        setAttachDialogNoteId(currentNoteId);
+                                                                        setAttachDialogNoteTitle(pageProps.noteActions?.title ?? null);
+                                                                        setAttachDialogOpen(true);
                                                                     }}
-                                                                    disabled={detachingNoteId === event.meeting_note_id}
-                                                                    className="text-destructive focus:text-destructive"
+                                                                    disabled={!eventIdentifier}
                                                                 >
-                                                                    <Unlink className="mr-2 size-3.5" />
-                                                                    Detach meeting note
+                                                                    <FileText className="mr-2 size-3.5" />
+                                                                    Attach current note
                                                                 </DropdownMenuItem>
-                                                            </>
-                                                        ) : (
-                                                            <>
+                                                            ) : !isOnMeetingNote ? (
                                                                 <DropdownMenuItem
                                                                     onSelect={() => {
-                                                                        setMeetingDialogTitle(event.title);
-                                                                        setMeetingDialogEventId(event.block_id ?? undefined);
-                                                                        setMeetingDialogOpen(true);
+                                                                        setAttachDialogEventBlockId(eventIdentifier ?? '');
+                                                                        setAttachDialogEventTitle(event.title);
+                                                                        setAttachDialogNoteId(null);
+                                                                        setAttachDialogNoteTitle(null);
+                                                                        setAttachDialogOpen(true);
                                                                     }}
+                                                                    disabled={!eventIdentifier}
                                                                 >
-                                                                    <Users className="mr-2 size-3.5" />
-                                                                    Create meeting note
+                                                                    <FileText className="mr-2 size-3.5" />
+                                                                    Link existing note
                                                                 </DropdownMenuItem>
-                                                                {canAttachCurrentNote && currentNoteId ? (
-                                                                    <DropdownMenuItem
-                                                                        onSelect={() => {
-                                                                            if (!event.block_id) {
-                                                                                return;
-                                                                            }
-
-                                                                            setAttachDialogEventBlockId(event.block_id);
-                                                                            setAttachDialogEventTitle(event.title);
-                                                                            setAttachDialogNoteId(currentNoteId);
-                                                                            setAttachDialogNoteTitle(
-                                                                                pageProps.noteActions?.title ?? null,
-                                                                            );
-                                                                            setAttachDialogOpen(true);
-                                                                        }}
-                                                                        disabled={!event.block_id}
-                                                                    >
-                                                                        <FileText className="mr-2 size-3.5" />
-                                                                        Attach current note
-                                                                    </DropdownMenuItem>
-                                                                ) : !isOnMeetingNote ? (
-                                                                    <DropdownMenuItem
-                                                                        onSelect={() => {
-                                                                            setAttachDialogEventBlockId(event.block_id ?? '');
-                                                                            setAttachDialogEventTitle(event.title);
-                                                                            setAttachDialogNoteId(null);
-                                                                            setAttachDialogNoteTitle(null);
-                                                                            setAttachDialogOpen(true);
-                                                                        }}
-                                                                        disabled={!event.block_id}
-                                                                    >
-                                                                        <FileText className="mr-2 size-3.5" />
-                                                                        Link existing note
-                                                                    </DropdownMenuItem>
-                                                                ) : null}
-                                                            </>
-                                                        )}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </div>
-                                        ) : null}
-                                        <div className="flex items-center gap-3">
-                                            {!hasLinkedTask ? (
-                                                <span
-                                                    className={cn(
-                                                        'h-12 w-1 shrink-0 rounded-full',
-                                                        isTimeblock ? timeblockAccent : workspaceAccent,
+                                                            ) : null}
+                                                        </>
                                                     )}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+
+                                        <div className="flex items-start gap-2.5">
+                                            {/* left accent: task checkbox or colored bar */}
+                                            {hasLinkedTask ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={toggleLinkedTask}
+                                                    disabled={isTaskTogglePending}
+                                                    aria-label={language === 'en' ? 'Toggle linked task' : 'Gekoppelde taak wisselen'}
+                                                    className={cn(
+                                                        'mt-[0.2rem] inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 transition-opacity',
+                                                        isTaskTogglePending && 'opacity-60',
+                                                        isLinkedTaskCompleted
+                                                            ? cn(checkboxBorderClass, checkboxAccentClass, 'text-white dark:text-black')
+                                                            : cn(checkboxBorderClass, 'bg-transparent text-transparent'),
+                                                    )}
+                                                >
+                                                    <Check className="h-3.5 w-3.5 stroke-4" />
+                                                </button>
+                                            ) : (
+                                                <span
+                                                    className={cn('mt-[0.2rem] w-1 self-stretch shrink-0 rounded-full', accentColor)}
                                                     aria-hidden="true"
                                                 />
-                                            ) : null}
-                                            <div className="min-w-0">
-                                                {happeningNowLabel ? (
-                                                    <p
-                                                        className={cn(
-                                                            'mb-0.5 truncate text-[0.68rem] font-semibold uppercase tracking-wide',
-                                                            workspaceText,
-                                                            hasLinkedTask && 'ml-[1.625rem]',
-                                                        )}
-                                                    >
-                                                        {happeningNowLabel}
-                                                    </p>
-                                                ) : startsSoonLabel ? (
-                                                    <p
-                                                        className={cn(
-                                                            'mb-0.5 truncate text-[0.68rem] font-semibold uppercase tracking-wide',
-                                                            workspaceText,
-                                                            hasLinkedTask && 'ml-[1.625rem]',
-                                                        )}
-                                                    >
-                                                        {startsSoonLabel}
-                                                    </p>
-                                                ) : null}
-                                                <div className="flex items-center gap-2">
-                                                    {hasLinkedTask ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={toggleLinkedTask}
-                                                            disabled={isTaskTogglePending}
-                                                            aria-label={
-                                                                language === 'en'
-                                                                    ? 'Toggle linked task'
-                                                                    : 'Gekoppelde taak wisselen'
-                                                            }
-                                                            className={cn(
-                                                                'inline-flex h-[1.125rem] w-[1.125rem] shrink-0 items-center justify-center rounded-full border-2 transition-opacity',
-                                                                isTaskTogglePending && 'opacity-60',
-                                                                isLinkedTaskCompleted && 'opacity-70',
-                                                                isLinkedTaskCompleted
-                                                                    ? cn(checkboxBorderClass, checkboxAccentClass, 'text-white dark:text-black')
-                                                                    : cn(checkboxBorderClass, 'bg-transparent text-transparent'),
-                                                            )}
-                                                        >
-                                                            <Check className="h-3.5 w-3.5 stroke-[4]" />
-                                                        </button>
+                                            )}
+
+                                            {/* content */}
+                                            <div className="min-w-0 flex-1 pr-4">
+                                                {/* time row */}
+                                                <p className={cn('mb-0.5 truncate text-[0.72rem] leading-none', isActiveNow ? cn('font-semibold', workspaceText) : 'text-muted-foreground')}>
+                                                    {timeRange}
+                                                    {durationLabel ? <span className="opacity-70"> · {durationLabel}</span> : null}
+                                                    {isActiveNow ? (
+                                                        <span className="ml-1.5">
+                                                            {language === 'nl' ? '· Nu bezig' : '· Now'}
+                                                        </span>
+                                                    ) : startsSoonLabel ? (
+                                                        <span className={cn('ml-1.5', workspaceText)}> · {startsSoonLabel}</span>
                                                     ) : null}
+                                                </p>
+
+                                                {/* title row */}
+                                                <div className="flex items-center gap-1.5">
                                                     {event.meeting_note_href ? (
                                                         <Link
                                                             href={event.meeting_note_href}
                                                             className="shrink-0 text-muted-foreground hover:text-foreground"
                                                             aria-label="Open meeting note"
                                                         >
-                                                            <FileText className="size-3.5" />
+                                                            <FileText className="size-3" />
                                                         </Link>
                                                     ) : null}
-                                                    <p
-                                                        className={cn(
-                                                            'truncate text-[0.88rem] leading-tight font-medium text-foreground',
-                                                            isLinkedTaskCompleted && 'line-through',
-                                                        )}
-                                                    >
+                                                    <p className={cn('truncate text-[0.86rem] font-medium leading-snug text-foreground', isLinkedTaskCompleted && 'line-through')}>
                                                         {event.title}
                                                     </p>
                                                 </div>
 
-                                                <p
-                                                    className={cn(
-                                                        'mt-1 truncate text-[0.72rem] text-zinc-600 dark:text-zinc-300',
-                                                        hasLinkedTask && 'ml-[1.625rem]',
-                                                    )}
-                                                >
-                                                    {timeRange}
-                                                    {durationLabel ? ` (${durationLabel})` : ''}
-                                                    {event.location ? `  @${event.location}` : ''}
-                                                </p>
+                                                {/* location */}
+                                                {event.location ? (
+                                                    <p className="mt-0.5 truncate text-[0.72rem] italic text-muted-foreground">
+                                                        {event.location}
+                                                    </p>
+                                                ) : null}
                                             </div>
                                         </div>
                                     </article>
@@ -653,7 +677,7 @@ export function RightSidebarTodayEvents({
                             ];
                     })}
                 </ul>
-            )}
+            ) : null}
         </section>
     );
 }

@@ -170,4 +170,9 @@ class Workspace extends Model
     {
         return $this->hasMany(Note::class);
     }
+
+    public function calendars(): HasMany
+    {
+        return $this->hasMany(Calendar::class);
+    }
 }

@@ -20,6 +20,7 @@ class Event extends Model
         'title',
         'starts_at',
         'ends_at',
+        'all_day',
         'timezone',
         'journal_date',
         'meta',
@@ -33,6 +34,7 @@ class Event extends Model
         return [
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
+            'all_day' => 'boolean',
             'journal_date' => 'date',
             'meta' => 'array',
         ];

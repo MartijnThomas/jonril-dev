@@ -39,6 +39,7 @@ type JournalPageProps = {
         id: string;
         block_id: string | null;
         type: 'timeblock' | 'event';
+        all_day: boolean;
         title: string;
         note_id: string | null;
         starts_at: string | null;
@@ -50,6 +51,7 @@ type JournalPageProps = {
         task_status: string | null;
         note_title: string | null;
         href: string | null;
+        meeting_note_id: string | null;
         meeting_note_href: string | null;
     }>;
     todayEventsDate?: string | null;
@@ -439,7 +441,7 @@ export function RightSidebarCalendar() {
                 defaultMonth={anchorDate ?? new Date()}
                 showWeekNumber
                 mode="single"
-                className="w-full bg-transparent !p-0 [--cell-size:2.1rem]"
+                className="w-full bg-transparent p-0! [--cell-size:2.1rem]"
                 classNames={{
                     months: 'relative flex w-full',
                     month: 'flex w-full flex-col gap-1',

@@ -96,7 +96,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     }
 
     return (
-        <div className="px-4 py-6">
+        <div className="flex-1 overflow-y-auto px-4 py-6">
             <Heading
                 title={t('settings.title', 'Settings')}
                 description={t(
@@ -137,7 +137,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                 const isCurrentWorkspace = currentPath === workspacePath;
                                 const isWorkspaceOpen = openWorkspaceIds[workspace.id] === true;
 
-                                const sectionHref = (section: 'general' | 'members' | 'advanced') =>
+                                const sectionHref = (section: 'general' | 'members' | 'calendars' | 'advanced') =>
                                     `${workspacePath}?section=${section}`;
 
                                 return (
@@ -240,6 +240,22 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                                 className={cn('w-full justify-start px-2', {
                                                     'bg-muted':
                                                         isCurrentWorkspace &&
+                                                        currentSection === 'calendars',
+                                                })}
+                                            >
+                                                <Link href={sectionHref('calendars')} className="truncate">
+                                                    <span className="truncate">
+                                                        {t('workspace_settings.calendars', 'Calendars')}
+                                                    </span>
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                asChild
+                                                className={cn('w-full justify-start px-2', {
+                                                    'bg-muted':
+                                                        isCurrentWorkspace &&
                                                         currentSection === 'advanced',
                                                 })}
                                             >
@@ -270,7 +286,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                 const isCurrentWorkspace = currentPath === workspacePath;
                                 const isWorkspaceOpen = openWorkspaceIds[workspace.id] === true;
 
-                                const sectionHref = (section: 'general' | 'members' | 'advanced') =>
+                                const sectionHref = (section: 'general' | 'members' | 'calendars' | 'advanced') =>
                                     `${workspacePath}?section=${section}`;
 
                                 return (

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CalendarItem;
 use App\Models\Event;
 use App\Models\Note;
 use App\Models\NoteRevision;
@@ -101,8 +102,10 @@ class NotesController extends Controller
     private function linkMeetingNoteToEvent(Note $note, string $blockId): void
     {
         $event = Event::with('eventable')
-            ->where('block_id', $blockId)
             ->where('workspace_id', $note->workspace_id)
+            ->where(function ($q) use ($blockId): void {
+                $q->where('block_id', $blockId)->orWhere('id', $blockId);
+            })
             ->first();
 
         if (! $event) {
@@ -110,14 +113,14 @@ class NotesController extends Controller
         }
 
         $timeblock = $event->eventable instanceof Timeblock ? $event->eventable : null;
+        $calendarItem = $event->eventable instanceof CalendarItem ? $event->eventable : null;
 
-        // Use block_id (stable across reindexes) instead of event_id (changes on every reindex).
         $note->meta = array_merge(is_array($note->meta) ? $note->meta : [], [
             'event_block_id' => $blockId,
             'starts_at' => $event->starts_at?->toIso8601String(),
             'ends_at' => $event->ends_at?->toIso8601String(),
             'timezone' => $event->timezone,
-            'location' => $timeblock?->location,
+            'location' => $timeblock?->location ?? $calendarItem?->location,
         ]);
         $note->saveQuietly();
     }
@@ -562,8 +565,10 @@ class NotesController extends Controller
         abort_if($hasMeetingChildren, 422, 'This note already has meeting notes attached to it.');
 
         $event = Event::with('eventable')
-            ->where('block_id', $data['event_block_id'])
             ->where('workspace_id', $this->currentWorkspace()->id)
+            ->where(function ($q) use ($data): void {
+                $q->where('block_id', $data['event_block_id'])->orWhere('id', $data['event_block_id']);
+            })
             ->firstOrFail();
 
         if (array_key_exists('parent_id', $data) && $data['parent_id'] !== null) {

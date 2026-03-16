@@ -1,6 +1,8 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { Check, Copy, RotateCcw, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, Copy, RefreshCw, RotateCcw, Trash2, Unplug } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import * as CalendarController from '@/actions/App/Http/Controllers/CalendarController';
+import { Switch } from '@/components/ui/switch';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
 import {
     COLOR_SWATCH_OPTIONS,
@@ -43,6 +45,17 @@ type Member = {
     role: 'owner' | 'member' | string;
 };
 
+type CalendarEntry = {
+    id: string;
+    name: string;
+    provider: string;
+    url: string;
+    username: string;
+    color: string | null;
+    is_active: boolean;
+    last_synced_at: string | null;
+};
+
 type Props = {
     workspace: {
         id: string;
@@ -56,6 +69,7 @@ type Props = {
         can_migrate_to_block?: boolean;
     };
     members: Member[];
+    calendars: CalendarEntry[];
     status?: string;
     migrationSummary?: {
         workspace: {
@@ -71,7 +85,7 @@ type Props = {
     } | null;
 };
 
-export default function WorkspaceSettings({ workspace, members, status, migrationSummary }: Props) {
+export default function WorkspaceSettings({ workspace, members, calendars, status, migrationSummary }: Props) {
     const { t } = useI18n();
     const page = usePage();
     const authUserRole = (
@@ -85,8 +99,8 @@ export default function WorkspaceSettings({ workspace, members, status, migratio
     ).auth?.user?.role;
     const url = useMemo(() => new URL(page.url, window.location.origin), [page.url]);
     const sectionParam = url.searchParams.get('section');
-    const section: 'general' | 'members' | 'advanced' =
-        sectionParam === 'members' || sectionParam === 'advanced'
+    const section: 'general' | 'members' | 'calendars' | 'advanced' =
+        sectionParam === 'members' || sectionParam === 'calendars' || sectionParam === 'advanced'
             ? sectionParam
             : 'general';
     const [workspaceIdCopied, setWorkspaceIdCopied] = useState(false);
@@ -144,6 +158,16 @@ export default function WorkspaceSettings({ workspace, members, status, migratio
         user_id: 0,
         role: 'member',
     });
+
+    const connectCalendarForm = useForm({
+        name: '',
+        url: '',
+        username: '',
+        password: '',
+    });
+
+    const [syncingCalendarId, setSyncingCalendarId] = useState<string | null>(null);
+    const [togglingCalendarId, setTogglingCalendarId] = useState<string | null>(null);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -908,6 +932,210 @@ export default function WorkspaceSettings({ workspace, members, status, migratio
                                         </div>
                                     </div>
                                 </div>
+                    </section>
+                ) : null}
+
+                {section === 'calendars' ? (
+                    <section className="max-w-xl space-y-8">
+                        <Heading
+                            variant="small"
+                            title={t('workspace_settings.calendars', 'Calendars')}
+                            description={t(
+                                'workspace_settings.calendars_description',
+                                'Connect external calendars to sync events into this workspace.',
+                            )}
+                        />
+
+                        {calendars.length > 0 ? (
+                            <div className="space-y-3">
+                                {calendars.map((calendar) => (
+                                    <div
+                                        key={calendar.id}
+                                        className="flex items-center gap-3 rounded-lg border border-border/60 px-4 py-3"
+                                    >
+                                        <div className="relative shrink-0">
+                                            <CalendarDays className="size-5 text-muted-foreground" />
+                                            {calendar.color ? (
+                                                <span
+                                                    className="absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-1 ring-background"
+                                                    style={{ backgroundColor: calendar.color }}
+                                                />
+                                            ) : null}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium">{calendar.name}</p>
+                                            <p className="truncate text-xs text-muted-foreground">{calendar.username} · {calendar.provider.toUpperCase()}</p>
+                                            {calendar.last_synced_at ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('workspace_settings.last_synced', 'Last synced')}: {new Date(calendar.last_synced_at).toLocaleString()}
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('workspace_settings.never_synced', 'Never synced')}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                            <Switch
+                                                size="sm"
+                                                checked={calendar.is_active}
+                                                disabled={togglingCalendarId === calendar.id}
+                                                aria-label={t('workspace_settings.calendar_active_label', 'Show in sidebar')}
+                                                onCheckedChange={(checked) => {
+                                                    setTogglingCalendarId(calendar.id);
+                                                    router.patch(
+                                                        CalendarController.update({ workspace: workspace.id, calendar: calendar.id }).url,
+                                                        { is_active: checked },
+                                                        {
+                                                            preserveScroll: true,
+                                                            onFinish: () => setTogglingCalendarId(null),
+                                                        },
+                                                    );
+                                                }}
+                                            />
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                disabled={syncingCalendarId === calendar.id}
+                                                onClick={() => {
+                                                    setSyncingCalendarId(calendar.id);
+                                                    router.post(
+                                                        CalendarController.sync({ workspace: workspace.id, calendar: calendar.id }).url,
+                                                        {},
+                                                        {
+                                                            preserveScroll: true,
+                                                            onFinish: () => setSyncingCalendarId(null),
+                                                        },
+                                                    );
+                                                }}
+                                            >
+                                                <RefreshCw className={`size-4 ${syncingCalendarId === calendar.id ? 'animate-spin' : ''}`} />
+                                            </Button>
+                                            <Dialog>
+                                                <DialogTrigger asChild>
+                                                    <Button type="button" size="sm" variant="ghost">
+                                                        <Unplug className="size-4 text-destructive" />
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent>
+                                                    <DialogTitle>
+                                                        {t('workspace_settings.disconnect_calendar_title', 'Disconnect calendar')}
+                                                    </DialogTitle>
+                                                    <DialogDescription>
+                                                        {t(
+                                                            'workspace_settings.disconnect_calendar_description',
+                                                            'This will remove the calendar connection and all synced events.',
+                                                        )}
+                                                    </DialogDescription>
+                                                    <DialogFooter className="gap-2">
+                                                        <DialogClose asChild>
+                                                            <Button type="button" variant="secondary">
+                                                                {t('workspace_settings.cancel', 'Cancel')}
+                                                            </Button>
+                                                        </DialogClose>
+                                                        <Button
+                                                            type="button"
+                                                            variant="destructive"
+                                                            onClick={() => {
+                                                                router.delete(
+                                                                    CalendarController.destroy({ workspace: workspace.id, calendar: calendar.id }).url,
+                                                                    { preserveScroll: true },
+                                                                );
+                                                            }}
+                                                        >
+                                                            {t('workspace_settings.disconnect', 'Disconnect')}
+                                                        </Button>
+                                                    </DialogFooter>
+                                                </DialogContent>
+                                            </Dialog>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : null}
+
+                        <div className="space-y-4 rounded-lg border border-border/60 p-4">
+                            <p className="text-sm font-medium">
+                                {t('workspace_settings.connect_caldav', 'Connect a CalDAV calendar')}
+                            </p>
+                            <form
+                                className="space-y-4"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    connectCalendarForm.post(
+                                        CalendarController.store({ workspace: workspace.id }).url,
+                                        {
+                                            preserveScroll: true,
+                                            onSuccess: () => connectCalendarForm.reset(),
+                                        },
+                                    );
+                                }}
+                            >
+                                <div className="grid gap-2">
+                                    <Label htmlFor="calendar-name">
+                                        {t('workspace_settings.calendar_name_label', 'Calendar name')}
+                                    </Label>
+                                    <Input
+                                        id="calendar-name"
+                                        placeholder={t('workspace_settings.calendar_name_placeholder', 'My iCloud Calendar')}
+                                        value={connectCalendarForm.data.name}
+                                        onChange={(e) => connectCalendarForm.setData('name', e.target.value)}
+                                        disabled={connectCalendarForm.processing}
+                                    />
+                                    <InputError message={connectCalendarForm.errors.name} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="calendar-url">
+                                        {t('workspace_settings.calendar_url_label', 'CalDAV URL')}
+                                    </Label>
+                                    <Input
+                                        id="calendar-url"
+                                        type="url"
+                                        placeholder="https://caldav.icloud.com/..."
+                                        value={connectCalendarForm.data.url}
+                                        onChange={(e) => connectCalendarForm.setData('url', e.target.value)}
+                                        disabled={connectCalendarForm.processing}
+                                    />
+                                    <InputError message={connectCalendarForm.errors.url} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="calendar-username">
+                                        {t('workspace_settings.calendar_username_label', 'Username')}
+                                    </Label>
+                                    <Input
+                                        id="calendar-username"
+                                        placeholder="user@icloud.com"
+                                        value={connectCalendarForm.data.username}
+                                        onChange={(e) => connectCalendarForm.setData('username', e.target.value)}
+                                        disabled={connectCalendarForm.processing}
+                                    />
+                                    <InputError message={connectCalendarForm.errors.username} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="calendar-password">
+                                        {t('workspace_settings.calendar_password_label', 'Password / App password')}
+                                    </Label>
+                                    <Input
+                                        id="calendar-password"
+                                        type="password"
+                                        value={connectCalendarForm.data.password}
+                                        onChange={(e) => connectCalendarForm.setData('password', e.target.value)}
+                                        disabled={connectCalendarForm.processing}
+                                    />
+                                    <InputError message={connectCalendarForm.errors.password} />
+                                </div>
+
+                                <InputError message={(connectCalendarForm.errors as Record<string, string>).calendar} />
+
+                                <Button type="submit" disabled={connectCalendarForm.processing}>
+                                    {t('workspace_settings.connect_calendar_action', 'Connect calendar')}
+                                </Button>
+                            </form>
+                        </div>
                     </section>
                 ) : null}
             </SettingsLayout>

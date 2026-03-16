@@ -23,6 +23,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule
             ->command('notes:prune-revisions')
             ->cron((string) config('note-revisions.prune.cron', '0 * * * *'));
+
+        $schedule
+            ->command('calendars:sync')
+            ->hourly()
+            ->withoutOverlapping();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);

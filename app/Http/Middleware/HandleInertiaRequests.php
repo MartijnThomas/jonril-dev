@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Calendar;
+use App\Models\CalendarItem;
 use App\Models\Event;
 use App\Models\Note;
 use App\Models\Timeblock;
@@ -435,11 +437,22 @@ class HandleInertiaRequests extends Middleware
         $startOfDayUtc = $anchorDate->copy()->timezone($userTimezone)->startOfDay()->timezone('UTC');
         $endOfDayUtc = $anchorDate->copy()->timezone($userTimezone)->endOfDay()->timezone('UTC');
 
+        $activeCalendarIds = Calendar::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('is_active', true)
+            ->pluck('id');
+
         $rawEvents = Event::query()
             ->with(['eventable', 'note:id,title,slug,type,journal_granularity,journal_date,workspace_id,parent_id,properties'])
             ->where('workspace_id', $workspace->id)
             ->where('starts_at', '<=', $endOfDayUtc)
             ->where('ends_at', '>=', $startOfDayUtc)
+            ->where(function ($q) use ($activeCalendarIds): void {
+                $q->whereNot('eventable_type', CalendarItem::class)
+                    ->orWhereHasMorph('eventable', CalendarItem::class, function ($q2) use ($activeCalendarIds): void {
+                        $q2->whereIn('calendar_id', $activeCalendarIds);
+                    });
+            })
             ->orderBy('starts_at')
             ->orderBy('ends_at')
             ->get()
@@ -453,16 +466,23 @@ class HandleInertiaRequests extends Middleware
             ->map(function (Event $event) use ($userTimezone): array {
                 $isTimeblock = $event->eventable_type === Timeblock::class;
                 $timeblock = $isTimeblock ? $event->eventable : null;
+                $calendarItem = $event->eventable_type === CalendarItem::class ? $event->eventable : null;
+                $allDay = (bool) $event->all_day;
 
                 return [
                     'id' => $event->id,
-                    'block_id' => $event->block_id,
+                    'block_id' => $event->block_id ?? $event->id,
                     'type' => $isTimeblock ? 'timeblock' : 'event',
+                    'all_day' => $allDay,
                     'title' => (string) $event->title,
                     'note_id' => $event->note_id,
-                    'starts_at' => $event->starts_at?->copy()->timezone($userTimezone)->toIso8601String(),
-                    'ends_at' => $event->ends_at?->copy()->timezone($userTimezone)->toIso8601String(),
-                    'location' => $timeblock instanceof Timeblock ? $timeblock->location : null,
+                    'starts_at' => $allDay
+                        ? $event->starts_at?->toDateString()
+                        : $event->starts_at?->copy()->timezone($userTimezone)->toIso8601String(),
+                    'ends_at' => $allDay
+                        ? $event->ends_at?->copy()->subDay()->toDateString()
+                        : $event->ends_at?->copy()->timezone($userTimezone)->toIso8601String(),
+                    'location' => $isTimeblock ? $timeblock->location : ($calendarItem?->location ?: null),
                     'task_block_id' => $timeblock instanceof Timeblock ? $timeblock->task_block_id : null,
                     'task_checked' => $timeblock instanceof Timeblock ? $timeblock->task_checked : null,
                     'task_status' => $timeblock instanceof Timeblock ? $timeblock->task_status : null,
@@ -472,18 +492,18 @@ class HandleInertiaRequests extends Middleware
                 ];
             });
 
-        // Resolve meeting note hrefs and IDs via block_id (stable across reindexes).
+        // Resolve meeting note hrefs and IDs via block_id (timeblocks) or event id (calendar items).
         $blockIds = $rawEvents->pluck('block_id')->filter()->unique()->values()->all();
-        $meetingNoteMap = []; // block_id => ['id' => ..., 'href' => ...]
+        $meetingNoteMap = []; // block_id|event_id => ['id' => ..., 'href' => ...]
         if (! empty($blockIds)) {
             Note::query()
                 ->where('type', Note::TYPE_MEETING)
                 ->where('workspace_id', $workspace->id)
                 ->get(['id', 'meta', 'slug', 'type', 'journal_granularity', 'journal_date', 'workspace_id'])
                 ->each(function (Note $n) use (&$meetingNoteMap): void {
-                    $blockId = is_array($n->meta) ? ($n->meta['event_block_id'] ?? null) : null;
-                    if ($blockId) {
-                        $meetingNoteMap[$blockId] = [
+                    $key = is_array($n->meta) ? ($n->meta['event_block_id'] ?? null) : null;
+                    if ($key) {
+                        $meetingNoteMap[$key] = [
                             'id' => $n->id,
                             'href' => $this->noteSlugService->urlFor($n),
                         ];

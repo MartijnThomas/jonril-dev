@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\Settings\EditorPreferencesController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
@@ -57,4 +58,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('workspaces.settings.members.remove');
     Route::patch('settings/workspaces/{workspace}/members/role', [WorkspaceController::class, 'updateMemberRole'])
         ->name('workspaces.settings.members.role');
+
+    Route::post('settings/workspaces/{workspace}/calendars', [CalendarController::class, 'store'])
+        ->name('workspaces.settings.calendars.store');
+    Route::delete('settings/workspaces/{workspace}/calendars/{calendar}', [CalendarController::class, 'destroy'])
+        ->name('workspaces.settings.calendars.destroy');
+    Route::post('settings/workspaces/{workspace}/calendars/{calendar}/sync', [CalendarController::class, 'sync'])
+        ->name('workspaces.settings.calendars.sync');
+    Route::patch('settings/workspaces/{workspace}/calendars/{calendar}', [CalendarController::class, 'update'])
+        ->name('workspaces.settings.calendars.update');
 });

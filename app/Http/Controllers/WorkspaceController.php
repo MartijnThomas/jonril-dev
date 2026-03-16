@@ -368,6 +368,22 @@ class WorkspaceController extends Controller
             ->values()
             ->all();
 
+        $calendars = $workspace->calendars()
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($calendar) => [
+                'id' => $calendar->id,
+                'name' => $calendar->name,
+                'provider' => $calendar->provider,
+                'url' => $calendar->url,
+                'username' => $calendar->username,
+                'color' => $calendar->color,
+                'is_active' => $calendar->is_active,
+                'last_synced_at' => $calendar->last_synced_at?->toIso8601String(),
+            ])
+            ->values()
+            ->all();
+
         return [
             'workspace' => [
                 'id' => $workspace->id,
@@ -381,6 +397,7 @@ class WorkspaceController extends Controller
                 'can_migrate_to_block' => $workspace->editor_mode === Workspace::EDITOR_MODE_LEGACY && ! $workspace->isMigratedSource(),
             ],
             'members' => $members,
+            'calendars' => $calendars,
             'migrationSummary' => session('migration_summary', $this->workspaceMigrationSummary($workspace)),
         ];
     }
