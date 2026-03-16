@@ -1521,7 +1521,7 @@ export default function TasksIndex({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={t('tasks_index.page_title', 'Tasks')} />
 
-            <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 p-4 pt-2 md:p-6">
+            <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 p-4 pt-2 md:p-6 flex-1 overflow-y-auto">
                 <section className="mx-auto w-full max-w-3xl rounded-xl bg-card p-4 pt-3 md:p-6">
                     <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
