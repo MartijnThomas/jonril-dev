@@ -475,7 +475,7 @@ export default function NotesIndex({ roots, filters }: Props) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Notes" />
 
-            <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-4 sm:px-6">
+            <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-4 sm:px-6 flex-1 overflow-y-auto">
                 <div className="rounded-xl bg-card p-4">
                     <form
                         className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_260px_auto_auto]"
