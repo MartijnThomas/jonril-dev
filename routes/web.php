@@ -91,6 +91,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)')
         ->name('journal.show.by-period');
 
+    Route::get('notes/{noteId}/history', [NotesController::class, 'showRevisions'])
+        ->whereUuid('noteId')
+        ->name('notes.revisions');
+    Route::get('notes/{noteId}/history/{revisionId}', [NotesController::class, 'showRevision'])
+        ->whereUuid('noteId')
+        ->whereUuid('revisionId')
+        ->name('notes.revisions.show');
+    Route::post('notes/{noteId}/history/{revisionId}/restore', [NotesController::class, 'restoreRevision'])
+        ->whereUuid('noteId')
+        ->whereUuid('revisionId')
+        ->name('notes.revisions.restore');
+
     Route::patch('notes/{noteId}/rename', [NotesController::class, 'rename'])
         ->whereUuid('noteId')
         ->name('notes.rename');

@@ -3,6 +3,7 @@ import {
     Eraser,
     ExternalLink,
     FolderInput,
+    History,
     MoreVertical,
     Pencil,
     TableProperties,
@@ -45,6 +46,7 @@ type Props = {
     canDetachFromEvent?: boolean;
     canOpenBlockPreview?: boolean;
     blockPreviewUrl?: string | null;
+    historyUrl?: string | null;
     triggerClassName?: string;
     triggerIconClassName?: string;
     dropdownAlign?: 'start' | 'center' | 'end';
@@ -66,6 +68,7 @@ export function NoteHeaderActions({
     canDetachFromEvent = false,
     canOpenBlockPreview = false,
     blockPreviewUrl = null,
+    historyUrl = null,
     triggerClassName,
     triggerIconClassName = 'h-4 w-4',
     dropdownAlign = 'start',
@@ -310,6 +313,17 @@ export function NoteHeaderActions({
                                         )}
                                     </span>
                                 </a>
+                            </DropdownMenuItem>
+                        </>
+                    ) : null}
+                    {historyUrl ? (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => router.visit(historyUrl)}>
+                                <span className="inline-flex flex-1 items-center gap-2">
+                                    <History className="h-4 w-4 shrink-0" />
+                                    {t('note_actions.view_history', 'View history')}
+                                </span>
                             </DropdownMenuItem>
                         </>
                     ) : null}

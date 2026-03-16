@@ -33,6 +33,7 @@ type JournalPageProps = {
         canDetachFromEvent?: boolean;
         canOpenBlockPreview?: boolean;
         blockPreviewUrl?: string | null;
+        historyUrl?: string | null;
     } | null;
     moveParentOptions?: Array<{ id: string; title: string; path: string }>;
     currentWorkspace?: {
@@ -317,6 +318,7 @@ export function AppSidebarHeader({
                             blockPreviewUrl={
                                 pageProps.noteActions.blockPreviewUrl ?? null
                             }
+                            historyUrl={pageProps.noteActions.historyUrl ?? null}
                             dropdownSide="left"
                             enablePropertiesToggle
                             triggerIconClassName={headerIconClassName}

@@ -2567,6 +2567,7 @@ test('prune command applies retention windows to note revisions', function () {
     config()->set('note-revisions.retention.keep_hourly_for_days', 1);
     config()->set('note-revisions.retention.keep_daily_for_days', 7);
     config()->set('note-revisions.retention.keep_weekly_for_weeks', 4);
+    config()->set('note-revisions.retention.keep_monthly_for_months', 3);
 
     $user = User::factory()->create();
     $note = $user->notes()->create();
@@ -2623,14 +2624,48 @@ test('prune command applies retention windows to note revisions', function () {
         'updated_at' => $weeklyDropAt,
     ]);
 
+    // Monthly phase: older than 4 weeks (weekly window), within 3 months.
+    $monthlyKeepAt = now()->subWeeks(7)->startOfMonth()->addHours(10);
+    $keepMonthly = NoteRevision::query()->create([
+        'note_id' => $note->id,
+        'user_id' => $user->id,
+        'title' => 'monthly-keep',
+        'content' => ['type' => 'doc', 'content' => []],
+        'properties' => ['context' => 'monthly'],
+        'created_at' => $monthlyKeepAt,
+        'updated_at' => $monthlyKeepAt,
+    ]);
+
     NoteRevision::query()->create([
         'note_id' => $note->id,
         'user_id' => $user->id,
-        'title' => 'very-old',
+        'title' => 'monthly-drop',
         'content' => ['type' => 'doc', 'content' => []],
-        'properties' => ['context' => 'old'],
-        'created_at' => now()->subWeeks(10),
-        'updated_at' => now()->subWeeks(10),
+        'properties' => ['context' => 'monthly'],
+        'created_at' => $monthlyKeepAt->copy()->subHours(4),
+        'updated_at' => $monthlyKeepAt->copy()->subHours(4),
+    ]);
+
+    // Yearly phase: older than 3 months (monthly window).
+    $yearlyKeepAt = now()->subYears(2)->startOfYear()->addDays(10);
+    $keepYearly = NoteRevision::query()->create([
+        'note_id' => $note->id,
+        'user_id' => $user->id,
+        'title' => 'yearly-keep',
+        'content' => ['type' => 'doc', 'content' => []],
+        'properties' => ['context' => 'yearly'],
+        'created_at' => $yearlyKeepAt,
+        'updated_at' => $yearlyKeepAt,
+    ]);
+
+    NoteRevision::query()->create([
+        'note_id' => $note->id,
+        'user_id' => $user->id,
+        'title' => 'yearly-drop',
+        'content' => ['type' => 'doc', 'content' => []],
+        'properties' => ['context' => 'yearly'],
+        'created_at' => $yearlyKeepAt->copy()->subDays(5),
+        'updated_at' => $yearlyKeepAt->copy()->subDays(5),
     ]);
 
     $this->artisan('notes:prune-revisions')->assertSuccessful();
@@ -2640,8 +2675,14 @@ test('prune command applies retention windows to note revisions', function () {
         ->pluck('id')
         ->all();
 
-    expect($remaining)->toContain($keepRecent->id, $keepDaily->id, $keepWeekly->id);
-    expect($remaining)->toHaveCount(3);
+    expect($remaining)->toContain(
+        $keepRecent->id,
+        $keepDaily->id,
+        $keepWeekly->id,
+        $keepMonthly->id,
+        $keepYearly->id,
+    );
+    expect($remaining)->toHaveCount(5);
 
     Carbon::setTestNow();
 });
@@ -2845,4 +2886,86 @@ test('attach to event is forbidden on notes that have meeting note children', fu
             'event_block_id' => 'any-block-id',
         ])
         ->assertStatus(422);
+});
+
+test('user can view note revisions history page', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'My Note',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $note->revisions()->create([
+        'user_id' => $user->id,
+        'title' => 'My Note',
+        'content' => ['type' => 'doc', 'content' => []],
+        'properties' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('notes.revisions', $note->id))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('notes/revisions')
+            ->where('noteId', $note->id)
+            ->has('revisions', 1)
+        );
+});
+
+test('user can view a specific note revision', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'My Note',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $revision = $note->revisions()->create([
+        'user_id' => $user->id,
+        'title' => 'Old Title',
+        'content' => ['type' => 'doc', 'content' => []],
+        'properties' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('notes.revisions.show', [$note->id, $revision->id]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('notes/revisions')
+            ->where('currentRevisionId', $revision->id)
+        );
+});
+
+test('user can restore a note revision', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Current Title',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $revision = $note->revisions()->create([
+        'user_id' => $user->id,
+        'title' => 'Old Title',
+        'content' => ['type' => 'doc', 'content' => [['type' => 'paragraph']]],
+        'properties' => null,
+    ]);
+
+    $revisionCountBefore = $note->revisions()->count();
+
+    $this->actingAs($user)
+        ->post(route('notes.revisions.restore', [$note->id, $revision->id]))
+        ->assertRedirect();
+
+    $note->refresh();
+    expect($note->title)->toBe('Old Title');
+    // A new revision was created for the current state before restoring.
+    expect($note->revisions()->count())->toBe($revisionCountBefore + 1);
 });

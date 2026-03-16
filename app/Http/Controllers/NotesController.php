@@ -399,6 +399,93 @@ class NotesController extends Controller
         return Inertia::back();
     }
 
+    public function showRevisions(string $noteId): \Inertia\Response
+    {
+        $note = $this->currentWorkspace()->notes()->where('id', $noteId)->firstOrFail();
+
+        $revisions = $note->revisions()
+            ->orderByDesc('created_at')
+            ->get(['id', 'note_id', 'user_id', 'title', 'created_at']);
+
+        return $this->renderRevisionPage($note, null, $revisions->all(), isCurrentVersion: true);
+    }
+
+    public function showRevision(string $noteId, string $revisionId): \Inertia\Response
+    {
+        $note = $this->currentWorkspace()->notes()->where('id', $noteId)->firstOrFail();
+        $revision = $note->revisions()->findOrFail($revisionId);
+
+        $revisions = $note->revisions()
+            ->orderByDesc('created_at')
+            ->get(['id', 'note_id', 'user_id', 'title', 'created_at']);
+
+        return $this->renderRevisionPage($note, $revision, $revisions->all(), isCurrentVersion: false);
+    }
+
+    private function renderRevisionPage(Note $note, ?NoteRevision $revision, array $revisions, bool $isCurrentVersion): \Inertia\Response
+    {
+        $usesBlockEditor = $this->currentWorkspace()->editor_mode === Workspace::EDITOR_MODE_BLOCK;
+
+        if ($isCurrentVersion) {
+            $content = $usesBlockEditor
+                ? $this->legacyToBlockNoteConverter->convertNote($note)['document']
+                : $this->normalizeContentForEditor($note->content);
+        } elseif ($revision) {
+            $revisionNote = clone $note;
+            $revisionNote->content = $revision->content;
+            $content = $usesBlockEditor
+                ? $this->legacyToBlockNoteConverter->convertNote($revisionNote)['document']
+                : $this->normalizeContentForEditor($revision->content);
+        } else {
+            $content = null;
+        }
+
+        $noteUrl = $this->noteSlugService->urlFor($note);
+
+        return Inertia::render('notes/revisions', [
+            'noteId' => $note->id,
+            'noteTitle' => $note->title ?? 'Untitled',
+            'noteUrl' => $noteUrl,
+            'isCurrentVersion' => $isCurrentVersion,
+            'currentRevisionId' => $revision?->id,
+            'content' => $content,
+            'editorMode' => $usesBlockEditor ? Workspace::EDITOR_MODE_BLOCK : Workspace::EDITOR_MODE_LEGACY,
+            'language' => $this->userLanguage(),
+            'breadcrumbs' => [
+                ['title' => $note->title ?? 'Untitled', 'href' => $noteUrl],
+                ['title' => 'History', 'href' => route('notes.revisions', ['noteId' => $note->id])],
+            ],
+            'revisions' => array_map(fn (NoteRevision $r) => [
+                'id' => $r->id,
+                'title' => $r->title,
+                'created_at' => $r->created_at,
+            ], $revisions),
+        ]);
+    }
+
+    public function restoreRevision(string $noteId, string $revisionId)
+    {
+        $this->assertWorkspaceWritable($this->currentWorkspace());
+
+        $note = $this->currentWorkspace()->notes()->where('id', $noteId)->firstOrFail();
+        $revision = $note->revisions()->findOrFail($revisionId);
+
+        // Save current state as a new revision before restoring.
+        $note->revisions()->create([
+            'user_id' => Auth::id(),
+            'title' => $note->title,
+            'content' => $note->content,
+            'properties' => $note->properties,
+        ]);
+
+        $note->title = $revision->title;
+        $note->content = $revision->content;
+        $note->properties = $revision->properties;
+        $note->save();
+
+        return redirect($this->noteSlugService->urlFor($note));
+    }
+
     public function rename(Request $request, string $noteId)
     {
         $this->assertWorkspaceWritable($this->currentWorkspace());
@@ -804,6 +891,7 @@ class NotesController extends Controller
                 'canAttachToEvent' => $note->type === Note::TYPE_NOTE && $meetingNotesCollection->isEmpty() && ! $workspaceReadOnly,
                 'canOpenBlockPreview' => $canOpenBlockPreview,
                 'blockPreviewUrl' => $blockPreviewUrl,
+                'historyUrl' => route('notes.revisions', ['noteId' => $note->id]),
             ],
             'properties' => $note->properties ?? [],
             'linkableNotes' => $linkableNotes,

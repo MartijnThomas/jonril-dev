@@ -42,21 +42,25 @@ class PruneNoteRevisions extends Command
             return 0;
         }
 
-        $keepAllForHours = (int) config('note-revisions.retention.keep_all_for_hours', 24);
+        $keepAllForHours = (int) config('note-revisions.retention.keep_all_for_hours', 48);
         $keepHourlyForDays = (int) config('note-revisions.retention.keep_hourly_for_days', 7);
         $keepDailyForDays = (int) config('note-revisions.retention.keep_daily_for_days', 30);
         $keepWeeklyForWeeks = (int) config('note-revisions.retention.keep_weekly_for_weeks', 26);
+        $keepMonthlyForMonths = (int) config('note-revisions.retention.keep_monthly_for_months', 12);
 
         $now = now();
         $keepIds = [];
         $hourlyBuckets = [];
         $dailyBuckets = [];
         $weeklyBuckets = [];
+        $monthlyBuckets = [];
+        $yearlyBuckets = [];
 
         foreach ($revisions as $revision) {
             $ageHours = $revision->created_at->diffInHours($now);
             $ageDays = $revision->created_at->diffInDays($now);
             $ageWeeks = (int) floor($ageDays / 7);
+            $ageMonths = $revision->created_at->diffInMonths($now);
 
             if ($ageHours <= $keepAllForHours) {
                 $keepIds[] = $revision->id;
@@ -90,6 +94,25 @@ class PruneNoteRevisions extends Command
                     $weeklyBuckets[$bucket] = true;
                     $keepIds[] = $revision->id;
                 }
+
+                continue;
+            }
+
+            if ($ageMonths <= $keepMonthlyForMonths) {
+                $bucket = $revision->created_at->format('Y-m');
+                if (! isset($monthlyBuckets[$bucket])) {
+                    $monthlyBuckets[$bucket] = true;
+                    $keepIds[] = $revision->id;
+                }
+
+                continue;
+            }
+
+            // Beyond the monthly window: keep one revision per year indefinitely.
+            $bucket = $revision->created_at->format('Y');
+            if (! isset($yearlyBuckets[$bucket])) {
+                $yearlyBuckets[$bucket] = true;
+                $keepIds[] = $revision->id;
             }
         }
 

@@ -11,13 +11,16 @@ return [
 
     'retention' => [
         // Keep everything from the last X hours.
-        'keep_all_for_hours' => 24,
+        'keep_all_for_hours' => 48,
         // Between keep_all and this window: keep max 1 revision per hour.
         'keep_hourly_for_days' => 7,
         // Between hourly and this window: keep max 1 revision per day.
         'keep_daily_for_days' => 30,
         // Between daily and this window: keep max 1 revision per week.
         'keep_weekly_for_weeks' => 26,
+        // Between weekly and this window: keep max 1 revision per month.
+        'keep_monthly_for_months' => 12,
+        // Beyond monthly: keep max 1 revision per year (indefinitely).
     ],
 
     'prune' => [
