@@ -345,8 +345,19 @@ function createBlockEditingExtension(
                                     }
 
                                     for (const range of findBlockInlineTokenRanges(node.text ?? '')) {
+                                        const rangeFrom = pos + range.from;
+                                        const rangeTo = pos + range.to;
+                                        const selectionInsideRange =
+                                            state.selection.empty &&
+                                            state.selection.from >= rangeFrom &&
+                                            state.selection.from <= rangeTo;
+
+                                        if (selectionInsideRange) {
+                                            continue;
+                                        }
+
                                         decorations.push(
-                                            Decoration.inline(pos + range.from, pos + range.to, {
+                                            Decoration.inline(rangeFrom, rangeTo, {
                                                 class: range.kind,
                                             }),
                                         );

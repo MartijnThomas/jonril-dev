@@ -682,6 +682,65 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
+        $inputDate = trim((string) $request->input('today_events_date', ''));
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $inputDate) === 1) {
+            try {
+                return Carbon::createFromFormat('Y-m-d', $inputDate, $userTimezone)->startOfDay();
+            } catch (\Throwable) {
+                // Fall back to URL/route detection below.
+            }
+        }
+
+        foreach ([
+            trim((string) $request->header('X-Inertia-Current-URL', '')),
+            trim((string) $request->headers->get('referer', '')),
+        ] as $candidateUrl) {
+            if ($candidateUrl === '') {
+                continue;
+            }
+
+            $path = parse_url($candidateUrl, PHP_URL_PATH);
+            if (! is_string($path) || $path === '') {
+                continue;
+            }
+
+            $matches = [];
+            if (
+                preg_match(
+                    '#/(?:w/[^/]+/)?journal/daily/(\d{4}-\d{2}-\d{2})(?:$|/)#',
+                    $path,
+                    $matches,
+                ) === 1
+            ) {
+                try {
+                    return Carbon::createFromFormat(
+                        'Y-m-d',
+                        (string) ($matches[1] ?? ''),
+                        $userTimezone,
+                    )->startOfDay();
+                } catch (\Throwable) {
+                    // Continue probing fallbacks below.
+                }
+            }
+        }
+
+        $noteId = trim((string) $request->input('note_id', ''));
+        if (preg_match('/^[0-9a-f-]{36}$/i', $noteId) === 1) {
+            $note = Note::query()
+                ->select(['type', 'journal_granularity', 'journal_date'])
+                ->find($noteId);
+
+            if (
+                $note?->type === Note::TYPE_JOURNAL &&
+                $note->journal_granularity === Note::JOURNAL_DAILY &&
+                $note->journal_date !== null
+            ) {
+                return Carbon::instance($note->journal_date)
+                    ->setTimezone($userTimezone)
+                    ->startOfDay();
+            }
+        }
+
         return now($userTimezone)->startOfDay();
     }
 }

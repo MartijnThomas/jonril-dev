@@ -97,9 +97,41 @@ export function BlockTokenSuggestionMenu({
         );
     }, [activeToken, workspaceSuggestions.hashtags, workspaceSuggestions.mentions]);
 
+    const isComposingRef = useRef(false);
+
+    useEffect(() => {
+        const onCompositionStart = () => { isComposingRef.current = true; };
+        const onCompositionEnd = () => { isComposingRef.current = false; };
+
+        document.addEventListener('compositionstart', onCompositionStart);
+        document.addEventListener('compositionend', onCompositionEnd);
+
+        return () => {
+            document.removeEventListener('compositionstart', onCompositionStart);
+            document.removeEventListener('compositionend', onCompositionEnd);
+        };
+    }, []);
+
     useEffect(() => {
         const update = () => {
+            if (isComposingRef.current) {
+                return;
+            }
+
             const nextToken = getActiveToken(editor);
+
+            if (
+                nextToken &&
+                activeToken &&
+                nextToken.from === activeToken.from &&
+                nextToken.to <= activeToken.to &&
+                editor.state.selection.empty &&
+                editor.state.selection.from === nextToken.from
+            ) {
+                editor.commands.setTextSelection(activeToken.to);
+                return;
+            }
+
             setPosition(null);
             setActiveToken(nextToken);
         };
@@ -112,7 +144,7 @@ export function BlockTokenSuggestionMenu({
             editor.off('selectionUpdate', update);
             editor.off('update', update);
         };
-    }, [editor]);
+    }, [activeToken, editor]);
 
     useEffect(() => {
         if (!activeToken || items.length === 0 || !containerRef.current) {

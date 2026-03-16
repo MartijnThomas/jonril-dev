@@ -23,7 +23,6 @@ import { BlockTimeblockExtension } from '@/components/tiptap-templates/simple/bl
 import { BlockTreeDocument } from '@/components/tiptap-templates/simple/block-tree/block-tree-document-extension';
 import { createBlockTreeItemExtensions } from '@/components/tiptap-templates/simple/block-tree/block-tree-item-extensions';
 import { BlockWikiLinkMark } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-mark-extension';
-import { BlockWikiLinkSuggestion } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-suggestion-extension';
 import type { CreateBlockTreeEditorExtensionsOptions } from '@/components/tiptap-templates/simple/block-tree-editor-extension-options';
 
 export function createBlockTreeEditorExtensions(
@@ -63,10 +62,6 @@ export function createBlockTreeEditorExtensions(
             raquo: false,
         }),
         BlockWikiLinkMark.configure({
-            notes: options.wikiLinkNotes ?? [],
-            language: options.language ?? 'nl',
-        }),
-        BlockWikiLinkSuggestion.configure({
             notes: options.wikiLinkNotes ?? [],
             language: options.language ?? 'nl',
         }),

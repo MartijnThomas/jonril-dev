@@ -181,3 +181,52 @@ it('anchors daily timeblocks to journal_date while storing utc times for user ti
             ->where('todayEvents.0.task_block_id', $blockId),
         );
 });
+
+it('keeps sidebar events anchored to the daily journal date for non-journal requests from that page', function (): void {
+    $user = User::factory()->create([
+        'settings' => [
+            'language' => 'nl',
+            'timezone' => 'Europe/Amsterdam',
+        ],
+    ]);
+    $workspace = $user->currentWorkspace();
+
+    $blockId = (string) str()->uuid();
+
+    Note::factory()
+        ->for($workspace)
+        ->create([
+            'type' => Note::TYPE_JOURNAL,
+            'journal_granularity' => Note::JOURNAL_DAILY,
+            'journal_date' => '2026-03-12',
+            'content' => [
+                'type' => 'doc',
+                'content' => [[
+                    'type' => 'taskList',
+                    'content' => [[
+                        'type' => 'taskItem',
+                        'attrs' => [
+                            'id' => $blockId,
+                            'checked' => false,
+                        ],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [
+                                ['type' => 'text', 'text' => '08:30-09:00 Daily sync'],
+                            ],
+                        ]],
+                    ]],
+                ]],
+            ],
+        ]);
+
+    $this->actingAs($user)
+        ->withHeader('referer', '/journal/daily/2026-03-12')
+        ->get('/tasks')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('todayEventsDate', '2026-03-12')
+            ->has('todayEvents', 1)
+            ->where('todayEvents.0.title', 'Daily sync')
+            ->where('todayEvents.0.task_block_id', $blockId),
+        );
+});

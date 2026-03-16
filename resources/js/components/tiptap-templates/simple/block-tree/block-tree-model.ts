@@ -1278,6 +1278,11 @@ export function ensureFirstBlockHeadingLevelOne(
     }
 
     const paragraphAttrs = normalizeParagraphAttrs(firstNode.attrs);
+
+    if (paragraphAttrs.blockStyle !== 'paragraph') {
+        return null;
+    }
+
     const headingId =
         typeof paragraphAttrs.id === 'string' && paragraphAttrs.id.trim() !== ''
             ? paragraphAttrs.id.trim()

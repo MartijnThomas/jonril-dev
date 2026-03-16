@@ -4,13 +4,6 @@ import {
     useMemo,
     useState,
 } from 'react';
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandItem,
-    CommandList,
-} from '@/components/ui/command';
 
 export type TokenSuggestionItem = {
     id: string;
@@ -74,30 +67,33 @@ export const TokenSuggestionList = forwardRef<
     }));
 
     return (
-        <Command className="w-64 rounded-md border bg-popover text-popover-foreground shadow-md">
-            <CommandList>
-                <CommandEmpty>No result</CommandEmpty>
-                <CommandGroup heading={heading}>
+        <div className="w-64 rounded-md border bg-popover text-popover-foreground shadow-md overflow-hidden">
+            {!hasItems ? (
+                <div className="px-3 py-2 text-sm text-muted-foreground">No result</div>
+            ) : (
+                <div className="p-1">
+                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">{heading}</div>
                     {items.map((item, index) => (
-                        <CommandItem
+                        <div
                             key={`${item.id}-${index}`}
-                            value={item.label}
-                            onSelect={() => selectItem(index)}
-                            onMouseEnter={() => setSelectedIndex(index)}
-                            className={
-                                index === safeIndex
-                                    ? 'bg-accent text-accent-foreground'
-                                    : ''
-                            }
+                            role="option"
+                            aria-selected={index === safeIndex}
+                            className={`rounded-sm px-2 py-1.5 text-sm cursor-default select-none ${
+                                index === safeIndex ? 'bg-accent text-accent-foreground' : ''
+                            }`}
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                selectItem(index);
+                            }}
                         >
                             {item.isCreate
                                 ? `Create ${char}${item.label}`
                                 : `${char}${item.label}`}
-                        </CommandItem>
+                        </div>
                     ))}
-                </CommandGroup>
-            </CommandList>
-        </Command>
+                </div>
+            )}
+        </div>
     );
 });
 

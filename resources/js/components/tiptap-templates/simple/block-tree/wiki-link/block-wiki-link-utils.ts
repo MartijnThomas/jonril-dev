@@ -503,3 +503,157 @@ export function buildProgressiveJournalSuggestions(
 
     return suggestions.slice(0, 6);
 }
+
+function normalizeQuery(value: string): string {
+    return value.trim().toLowerCase();
+}
+
+export function buildBlockWikiLinkSuggestions(
+    notes: BlockWikiLinkNote[],
+    query: string,
+    language: string = 'nl',
+): BlockWikiLinkSuggestionItem[] {
+    const { rawPath, rawHeading } = parseWikiLinkQuery(query);
+    const normalized = normalizeQuery(rawPath);
+    const existingTargetPaths = new Set<string>();
+    const existingItems: BlockWikiLinkSuggestionItem[] = [];
+    const resolvedTargetPath =
+        normalizeJournalTargetPath(rawPath) ||
+        normalizeNoteTargetPath(rawPath);
+    const noteForHeadingQuery = resolvedTargetPath
+        ? notes.find(
+            (note) =>
+                deriveTargetPathFromNote(note).toLowerCase() ===
+                resolvedTargetPath.toLowerCase(),
+        ) ?? null
+        : null;
+    const hasHeadingQuery = query.includes('#');
+
+    notes.forEach((note) => {
+        const targetPath = deriveTargetPathFromNote(note);
+        const subtitle =
+            note.path ||
+            editableJournalPathFromTargetPath(targetPath) ||
+            targetPath;
+
+        if (
+            normalized &&
+            !note.title.toLowerCase().includes(normalized) &&
+            !subtitle.toLowerCase().includes(normalized) &&
+            !targetPath.toLowerCase().includes(normalized)
+        ) {
+            return;
+        }
+
+        const key = targetPath.toLowerCase();
+        if (existingTargetPaths.has(key)) {
+            return;
+        }
+
+        existingTargetPaths.add(key);
+
+        existingItems.push({
+            id: note.id,
+            title: note.title,
+            targetPath,
+            targetBlockId: null,
+            noteId: note.id,
+            href:
+                note.href ||
+                fallbackBlockWikiHrefFromTargetPath(targetPath, note.id),
+            subtitle,
+            kind: targetPath.startsWith('journal/')
+                ? 'journal'
+                : 'note',
+            insertText: note.title,
+        });
+    });
+
+    if (hasHeadingQuery && noteForHeadingQuery && resolvedTargetPath) {
+        const headingQuery = normalizeHeadingText(rawHeading);
+        const headings = Array.isArray(noteForHeadingQuery.headings)
+            ? noteForHeadingQuery.headings
+            : [];
+        const displayPath =
+            editableJournalPathFromTargetPath(resolvedTargetPath) ||
+            resolvedTargetPath;
+        const headingItems = headings
+            .filter(
+                (heading) =>
+                    heading.id &&
+                    heading.title &&
+                    (
+                        headingQuery === '' ||
+                        normalizeHeadingText(heading.title).includes(
+                            headingQuery,
+                        )
+                    ),
+            )
+            .map((heading) => ({
+                id: `${noteForHeadingQuery.id}#${heading.id}`,
+                title: heading.title,
+                targetPath: resolvedTargetPath,
+                targetBlockId: heading.id,
+                noteId: noteForHeadingQuery.id,
+                href: fallbackBlockWikiHrefFromTargetPath(
+                    resolvedTargetPath,
+                    noteForHeadingQuery.id,
+                    heading.id,
+                ),
+                subtitle: `${displayPath}# ${heading.title}`,
+                kind: 'heading' as const,
+                insertText: `${noteForHeadingQuery.title} # ${heading.title}`,
+            }));
+
+        return headingItems.slice(0, 8);
+    }
+
+    const journalItems =
+        rawPath.length >= 3
+            ? buildProgressiveJournalSuggestions(
+                rawPath,
+                existingTargetPaths,
+                language,
+            )
+            : [];
+
+    const normalizedJournal = normalizeJournalTargetPath(rawPath);
+    const trimmedRawPath = rawPath.trim().replace(/^\/+|\/+$/g, '');
+    const isJournalScopedInput = trimmedRawPath.startsWith('journal/');
+    const normalizedNote = isJournalScopedInput
+        ? ''
+        : normalizeNoteTargetPath(rawPath);
+    const targetPath = normalizedJournal || normalizedNote;
+
+    const createItem =
+        targetPath &&
+        !existingTargetPaths.has(targetPath.toLowerCase())
+            ? ({
+                id: `create:${targetPath}`,
+                title: displayTitleFromTargetPath(
+                    targetPath,
+                    language,
+                ),
+                targetPath,
+                targetBlockId: null,
+                noteId: null,
+                href: fallbackBlockWikiHrefFromTargetPath(targetPath),
+                subtitle: targetPath.startsWith('journal/')
+                    ? 'Open or create journal target'
+                    : 'Create unresolved target',
+                kind: targetPath.startsWith('journal/')
+                    ? 'journal'
+                    : 'create',
+                insertText: displayTitleFromTargetPath(
+                    targetPath,
+                    language,
+                ),
+            } as BlockWikiLinkSuggestionItem)
+            : null;
+
+    return [
+        ...existingItems,
+        ...journalItems,
+        ...(createItem ? [createItem] : []),
+    ].slice(0, 8);
+}

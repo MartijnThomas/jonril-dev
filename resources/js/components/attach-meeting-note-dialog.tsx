@@ -1,15 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
-import { BookOpen, Check, ChevronsUpDown } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { NoteLocationCombobox } from '@/components/note-location-combobox';
 import { Button } from '@/components/ui/button';
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from '@/components/ui/command';
 import {
     Dialog,
     DialogContent,
@@ -18,12 +10,6 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
 
 type NoteOption = {
     id: string;
@@ -49,82 +35,6 @@ type AttachMeetingNoteDialogProps = {
     noteTitle?: string | null;
 };
 
-function NoteCombobox({
-    options,
-    value,
-    onChange,
-    placeholder,
-    emptyText,
-}: {
-    options: (NoteOption | ParentOption)[];
-    value: string;
-    onChange: (id: string) => void;
-    placeholder: string;
-    emptyText: string;
-}) {
-    const [open, setOpen] = useState(false);
-    const selected = options.find((o) => o.id === value) ?? null;
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between font-normal"
-                >
-                    <span className="truncate text-left">
-                        {selected
-                            ? (selected.path
-                                ? `${selected.path} / ${selected.title}`
-                                : selected.title)
-                            : <span className="text-muted-foreground">{placeholder}</span>}
-                    </span>
-                    <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-                <Command>
-                    <CommandInput placeholder="Search…" />
-                    <CommandList>
-                        <CommandEmpty>{emptyText}</CommandEmpty>
-                        <CommandGroup>
-                            {options.map((option) => {
-                                const isJournal = 'is_journal' in option && option.is_journal;
-                                const label = option.path
-                                    ? `${option.path} / ${option.title}`
-                                    : option.title;
-                                return (
-                                    <CommandItem
-                                        key={option.id}
-                                        value={label}
-                                        onSelect={() => {
-                                            onChange(option.id);
-                                            setOpen(false);
-                                        }}
-                                    >
-                                        <Check
-                                            className={cn(
-                                                'mr-2 size-4 shrink-0',
-                                                value === option.id ? 'opacity-100' : 'opacity-0',
-                                            )}
-                                        />
-                                        {isJournal ? (
-                                            <BookOpen className="mr-1.5 size-3.5 shrink-0 text-muted-foreground" />
-                                        ) : null}
-                                        <span className="truncate">{label}</span>
-                                    </CommandItem>
-                                );
-                            })}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-    );
-}
-
 export function AttachMeetingNoteDialog({
     open,
     onOpenChange,
@@ -138,8 +48,14 @@ export function AttachMeetingNoteDialog({
         workspaceMeetingParentOptions?: ParentOption[];
     };
 
-    const allNoteOptions: NoteOption[] = pageProps.workspaceLinkableNotes ?? [];
-    const allParentOptions: ParentOption[] = pageProps.workspaceMeetingParentOptions ?? [];
+    const allNoteOptions = useMemo(
+        () => pageProps.workspaceLinkableNotes ?? [],
+        [pageProps.workspaceLinkableNotes],
+    );
+    const allParentOptions = useMemo(
+        () => pageProps.workspaceMeetingParentOptions ?? [],
+        [pageProps.workspaceMeetingParentOptions],
+    );
 
     const [selectedNoteId, setSelectedNoteId] = useState<string>(noteId ?? '');
     const [parentId, setParentId] = useState<string>('');
@@ -151,6 +67,18 @@ export function AttachMeetingNoteDialog({
     const noteOptions = allNoteOptions.filter((o) => o.id !== parentId);
     const parentOptions = allParentOptions.filter((o) => o.id !== resolvedNoteId);
     const canSubmit = Boolean(resolvedNoteId) && Boolean(parentId);
+    const selectedReadOnlyNoteLabel = useMemo(() => {
+        if (!noteId) {
+            return null;
+        }
+
+        const selected = allNoteOptions.find((option) => option.id === noteId);
+        if (selected) {
+            return selected.path?.trim() || selected.title;
+        }
+
+        return noteTitle;
+    }, [allNoteOptions, noteId, noteTitle]);
 
     const handleSubmit = () => {
         if (!canSubmit) {
@@ -190,21 +118,22 @@ export function AttachMeetingNoteDialog({
                         </div>
                     ) : null}
 
-                    {noteId && noteTitle ? (
+                    {noteId ? (
                         <div className="space-y-1.5">
                             <Label className="text-xs text-muted-foreground">Note</Label>
                             <p className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
-                                {noteTitle}
+                                {selectedReadOnlyNoteLabel ?? 'Selected note'}
                             </p>
                         </div>
                     ) : (
                         <div className="space-y-1.5">
                             <Label className="text-xs text-muted-foreground">Note</Label>
-                            <NoteCombobox
+                            <NoteLocationCombobox
                                 options={noteOptions}
                                 value={selectedNoteId}
                                 onChange={setSelectedNoteId}
                                 placeholder="Select a note…"
+                                searchPlaceholder="Search notes…"
                                 emptyText="No notes found."
                             />
                         </div>
@@ -212,11 +141,12 @@ export function AttachMeetingNoteDialog({
 
                     <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">Attach under</Label>
-                        <NoteCombobox
+                        <NoteLocationCombobox
                             options={parentOptions}
                             value={parentId}
                             onChange={setParentId}
                             placeholder="Select a parent note…"
+                            searchPlaceholder="Search parent notes…"
                             emptyText="No notes found."
                         />
                     </div>

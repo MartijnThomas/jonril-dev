@@ -10,6 +10,7 @@ import {
     setParagraphTaskStatusAtPos,
     toggleParagraphTaskAtPos,
 } from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
+import { BlockWikiLinkSuggestionMenu } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-suggestion-menu';
 
 type BlockTaskStatus =
     | 'backlog'
@@ -267,6 +268,11 @@ export function useBlockEditorUi({
                     editor={editor}
                     workspaceSuggestions={workspaceSuggestions}
                 />
+                <BlockWikiLinkSuggestionMenu
+                    editor={editor}
+                    notes={linkableNotes}
+                    language={language}
+                />
 
                 <BlockTaskActionsMenu
                     open={blockTaskActionsMenu.open}
@@ -404,9 +410,13 @@ export function useBlockEditorUi({
         blockTaskStatusMenu.x,
         blockTaskStatusMenu.y,
         editor,
+        hasMeetingNotes,
         language,
         linkableNotes,
+        meetingNotesCount,
         noteId,
+        onToggleMeetingNotes,
+        showMeetingNotes,
         workspaceSuggestions,
         taskMigratePicker.anchorPoint,
         taskMigratePicker.blockId,

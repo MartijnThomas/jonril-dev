@@ -346,6 +346,15 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                             updatePosition(props.editor, component.element, anchorFrom);
                         },
                         onUpdate(props) {
+                            if (
+                                props.editor.state.selection.empty &&
+                                props.editor.state.selection.from === props.range.from &&
+                                props.range.to > props.range.from
+                            ) {
+                                props.editor.commands.setTextSelection(props.range.to);
+                                return;
+                            }
+
                             component.updateProps(props);
 
                             if (!props.clientRect) {

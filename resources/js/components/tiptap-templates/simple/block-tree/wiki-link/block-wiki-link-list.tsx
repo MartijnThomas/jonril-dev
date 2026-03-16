@@ -18,17 +18,10 @@ export const BlockWikiLinkList = forwardRef<
     BlockWikiLinkListProps
 >(({ items, command }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const hasItems = items.length > 0;
-
-    const safeIndex = useMemo(() => {
-        if (!hasItems) {
-            return 0;
-        }
-
-        return Math.min(selectedIndex, items.length - 1);
-    }, [hasItems, items.length, selectedIndex]);
-
-    const itemsKey = useMemo(() => items.map((item) => item.id).join('|'), [items]);
+    const safeIndex = useMemo(
+        () => (items.length > 0 ? Math.min(selectedIndex, items.length - 1) : 0),
+        [items.length, selectedIndex],
+    );
 
     const selectItem = (index: number) => {
         const item = items[index];
@@ -39,14 +32,12 @@ export const BlockWikiLinkList = forwardRef<
 
     useImperativeHandle(ref, () => ({
         onKeyDown: ({ event }) => {
-            if (!hasItems) {
+            if (items.length === 0) {
                 return false;
             }
 
             if (event.key === 'ArrowUp') {
-                setSelectedIndex((current) =>
-                    (current + items.length - 1) % items.length,
-                );
+                setSelectedIndex((current) => (current + items.length - 1) % items.length);
                 return true;
             }
 
@@ -65,33 +56,24 @@ export const BlockWikiLinkList = forwardRef<
     }));
 
     return (
-        <Command
-            key={itemsKey}
-            className="w-80 rounded-md border bg-popover text-popover-foreground shadow-md"
-        >
+        <Command className="w-80 rounded-md border bg-popover text-popover-foreground shadow-md">
             <CommandList>
                 <CommandEmpty>No wiki-link targets found</CommandEmpty>
                 <CommandGroup heading="Wiki links">
                     {items.map((item, index) => (
                         <CommandItem
                             key={item.id}
-                            value={`${item.title} ${item.targetPath}`}
+                            value={`${item.title} ${item.subtitle ?? ''}`}
                             onSelect={() => selectItem(index)}
                             onMouseEnter={() => setSelectedIndex(index)}
-                            className={
-                                index === safeIndex
-                                    ? 'bg-accent text-accent-foreground'
-                                    : 'data-[selected=true]:bg-transparent data-[selected=true]:text-foreground'
-                            }
+                            className={`flex flex-col items-start ${
+                                index === safeIndex ? 'bg-accent text-accent-foreground' : ''
+                            }`}
                         >
-                            <div className="flex flex-col">
-                                <span>{item.title}</span>
-                                {item.subtitle && (
-                                    <span className="text-xs text-muted-foreground">
-                                        {item.subtitle}
-                                    </span>
-                                )}
-                            </div>
+                            <span>{item.title}</span>
+                            {item.subtitle && (
+                                <span className="text-xs text-muted-foreground">{item.subtitle}</span>
+                            )}
                         </CommandItem>
                     ))}
                 </CommandGroup>

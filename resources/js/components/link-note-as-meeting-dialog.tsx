@@ -1,15 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
-import { Check, ChevronsUpDown } from 'lucide-react';
 import { useState } from 'react';
+import { NoteLocationCombobox } from '@/components/note-location-combobox';
 import { Button } from '@/components/ui/button';
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from '@/components/ui/command';
 import {
     Dialog,
     DialogContent,
@@ -18,12 +10,6 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
 
 type NoteOption = {
     id: string;
@@ -54,10 +40,7 @@ export function LinkNoteAsMeetingDialog({
     ).slice();
 
     const [noteId, setNoteId] = useState<string>('');
-    const [comboboxOpen, setComboboxOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-
-    const selectedNote = noteOptions.find((n) => n.id === noteId) ?? null;
 
     const handleLink = () => {
         if (!noteId) {
@@ -99,57 +82,14 @@ export function LinkNoteAsMeetingDialog({
 
                     <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">Note</Label>
-                        <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={comboboxOpen}
-                                    className="w-full justify-between font-normal"
-                                >
-                                    <span className="truncate text-left">
-                                        {selectedNote
-                                            ? (selectedNote.path
-                                                ? `${selectedNote.path} / ${selectedNote.title}`
-                                                : selectedNote.title)
-                                            : 'Select a note…'}
-                                    </span>
-                                    <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                                <Command>
-                                    <CommandInput placeholder="Search notes…" />
-                                    <CommandList>
-                                        <CommandEmpty>No notes found.</CommandEmpty>
-                                        <CommandGroup>
-                                            {noteOptions.map((option) => (
-                                                <CommandItem
-                                                    key={option.id}
-                                                    value={option.path ? `${option.path} / ${option.title}` : option.title}
-                                                    onSelect={() => {
-                                                        setNoteId(option.id);
-                                                        setComboboxOpen(false);
-                                                    }}
-                                                >
-                                                    <Check
-                                                        className={cn(
-                                                            'mr-2 size-4',
-                                                            noteId === option.id ? 'opacity-100' : 'opacity-0',
-                                                        )}
-                                                    />
-                                                    <span className="truncate">
-                                                        {option.path
-                                                            ? `${option.path} / ${option.title}`
-                                                            : option.title}
-                                                    </span>
-                                                </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
+                        <NoteLocationCombobox
+                            value={noteId}
+                            onChange={setNoteId}
+                            options={noteOptions}
+                            placeholder="Select a note…"
+                            searchPlaceholder="Search notes…"
+                            emptyText="No notes found."
+                        />
                     </div>
                 </div>
 

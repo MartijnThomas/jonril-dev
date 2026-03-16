@@ -1,5 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
+import { NoteLocationCombobox } from '@/components/note-location-combobox';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -9,13 +10,6 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 
 type ParentOption = {
     id: string;
@@ -86,25 +80,17 @@ export function CreateMeetingNoteDialog({
                     </div>
 
                     <div className="space-y-1.5">
-                        <Label htmlFor="meeting-parent" className="text-xs text-muted-foreground">
+                        <Label className="text-xs text-muted-foreground">
                             Parent note
                         </Label>
-                        <Select value={parentId} onValueChange={setParentId}>
-                            <SelectTrigger id="meeting-parent" className="w-full">
-                                <SelectValue placeholder="Select a parent note…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {parentOptions.map((option) => (
-                                    <SelectItem key={option.id} value={option.id}>
-                                        <span className="truncate">
-                                            {option.path
-                                                ? `${option.path} / ${option.title}`
-                                                : option.title}
-                                        </span>
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <NoteLocationCombobox
+                            value={parentId}
+                            onChange={setParentId}
+                            options={parentOptions}
+                            placeholder="Select a parent note…"
+                            searchPlaceholder="Search parent notes…"
+                            emptyText="No notes found."
+                        />
                     </div>
                 </div>
 
