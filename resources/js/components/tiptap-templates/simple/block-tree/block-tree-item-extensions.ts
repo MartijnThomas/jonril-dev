@@ -973,34 +973,19 @@ function createBlockEditingExtension(
                     });
                 },
                 Backspace: () => {
-                    const { $from, from, to } = this.editor.state.selection;
-                    const isHeading = $from.parent.type.name === 'heading';
+                    if (!isAtStartOfCurrentBlock(this.editor)) {
+                        return false;
+                    }
 
-                    if (isAtStartOfCurrentBlock(this.editor)) {
-                        if (isHeading) {
-                            return this.editor.commands.command(({ editor, state, dispatch }) => {
-                                return decreaseCurrentHeadingLevel(editor, state, dispatch);
-                            });
-                        }
-
+                    if (this.editor.state.selection.$from.parent.type.name === 'heading') {
                         return this.editor.commands.command(({ editor, state, dispatch }) => {
-                            return removeParagraphStyleOrDedentCurrentParagraph(editor, state, dispatch);
+                            return decreaseCurrentHeadingLevel(editor, state, dispatch);
                         });
                     }
 
-                    // Intercept backspace when the cursor is within the heading prefix
-                    // region (e.g. "## ") to prevent corrupting the prefix characters.
-                    if (isHeading && from === to) {
-                        const textContent = $from.parent.textContent;
-                        const prefixMatch = textContent.match(/^(#{1,6}\s)/u);
-                        if (prefixMatch && $from.parentOffset <= prefixMatch[0].length) {
-                            return this.editor.commands.command(({ editor, state, dispatch }) => {
-                                return decreaseCurrentHeadingLevel(editor, state, dispatch);
-                            });
-                        }
-                    }
-
-                    return false;
+                    return this.editor.commands.command(({ editor, state, dispatch }) => {
+                        return removeParagraphStyleOrDedentCurrentParagraph(editor, state, dispatch);
+                    });
                 },
             };
         },

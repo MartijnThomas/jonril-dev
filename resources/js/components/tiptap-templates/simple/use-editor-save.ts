@@ -1,7 +1,6 @@
 import { router } from '@inertiajs/react';
 import type { Editor } from '@tiptap/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import {
     ICON_BG_PROPERTY_KEY,
     ICON_COLOR_PROPERTY_KEY,
@@ -117,48 +116,6 @@ function extractFirstHeadingTitle(json: unknown): string {
     return '';
 }
 
-const VALID_BLOCK_TYPES = new Set(['paragraph', 'heading', 'codeBlock', 'horizontalRule']);
-
-function validateEditorDocument(json: unknown): string | null {
-    if (!json || typeof json !== 'object' || (json as { type?: unknown }).type !== 'doc') {
-        return 'Document root is not a valid doc node.';
-    }
-
-    const root = json as { content?: unknown };
-    if (!Array.isArray(root.content)) {
-        return 'Document content is missing or invalid.';
-    }
-
-    for (let i = 0; i < root.content.length; i++) {
-        const node = root.content[i];
-        if (!node || typeof node !== 'object') {
-            return `Block ${i + 1} is not a valid node.`;
-        }
-
-        const n = node as { type?: unknown; attrs?: { level?: unknown } };
-        if (!VALID_BLOCK_TYPES.has(String(n.type))) {
-            return `Block ${i + 1} has an unsupported type: "${String(n.type)}".`;
-        }
-
-        if (n.type === 'heading') {
-            const level = Number(n.attrs?.level ?? 1);
-            if (!Number.isInteger(level) || level < 1 || level > 6) {
-                return `Heading at block ${i + 1} has an invalid level.`;
-            }
-
-            const text = collectNodeText(node);
-            if (text !== '') {
-                const expectedPrefix = '#'.repeat(level) + ' ';
-                if (!text.startsWith(expectedPrefix)) {
-                    return `Heading content is corrupted (block ${i + 1}). Try selecting the heading and deleting it, then re-creating it.`;
-                }
-            }
-        }
-    }
-
-    return null;
-}
-
 export function resolveEditorSaveFlow(
     lastSavedTitle: string,
     nextDocumentJson: unknown,
@@ -221,13 +178,6 @@ export function useEditorSave({
             const serializedTimeblocks = includeTimeblocks
                 ? JSON.stringify(timeblocks)
                 : null;
-
-            const validationError = validateEditorDocument(json);
-            if (validationError) {
-                toast.error(`Cannot save: ${validationError}`);
-                setStatus('error');
-                return;
-            }
 
             if (
                 !force &&
