@@ -1,5 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NoteLocationCombobox } from '@/components/note-location-combobox';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +15,7 @@ type NoteOption = {
     id: string;
     title: string;
     path?: string | null;
+    parent_id?: string | null;
 };
 
 type ParentOption = {
@@ -60,6 +61,21 @@ export function AttachMeetingNoteDialog({
     const [selectedNoteId, setSelectedNoteId] = useState<string>(noteId ?? '');
     const [parentId, setParentId] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+
+        setSelectedNoteId(noteId ?? '');
+
+        if (noteId) {
+            const option = allNoteOptions.find((o) => o.id === noteId);
+            setParentId(option?.parent_id ?? '');
+        } else {
+            setParentId('');
+        }
+    }, [open, noteId, allNoteOptions]);
 
     const resolvedNoteId = noteId ?? selectedNoteId;
 

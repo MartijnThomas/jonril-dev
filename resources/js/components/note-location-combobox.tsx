@@ -20,6 +20,7 @@ export type NoteLocationOption = {
     id: string;
     title: string;
     path?: string | null;
+    parent_id?: string | null;
     is_journal?: boolean;
 };
 
@@ -32,10 +33,6 @@ type NoteLocationComboboxProps = {
     emptyText: string;
     disabled?: boolean;
 };
-
-function displayOptionLabel(option: NoteLocationOption): string {
-    return option.path?.trim() || option.title;
-}
 
 export function NoteLocationCombobox({
     value,
@@ -86,7 +83,7 @@ export function NoteLocationCombobox({
                 >
                     <span className="truncate text-left">
                         {selected ? (
-                            displayOptionLabel(selected)
+                            selected.title
                         ) : (
                             <span className="text-muted-foreground">{placeholder}</span>
                         )}
@@ -94,7 +91,7 @@ export function NoteLocationCombobox({
                     <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+            <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
                 <Command shouldFilter={false}>
                     <CommandInput
                         value={query}
@@ -123,7 +120,16 @@ export function NoteLocationCombobox({
                                     {option.is_journal ? (
                                         <BookOpen className="mr-1.5 size-3.5 shrink-0 text-muted-foreground" />
                                     ) : null}
-                                    <span className="truncate">{displayOptionLabel(option)}</span>
+                                    <span className="flex min-w-0 flex-col">
+                                        <span className="truncate">{option.title}</span>
+                                        {option.path?.trim() ? (
+                                            <span className="truncate text-xs text-muted-foreground/70">
+                                                {option.path}
+                                            </span>
+                                        ) : !option.is_journal ? (
+                                            <span className="text-xs text-muted-foreground/40">Root</span>
+                                        ) : null}
+                                    </span>
                                 </CommandItem>
                             ))}
                         </CommandGroup>

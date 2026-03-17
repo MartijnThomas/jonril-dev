@@ -132,6 +132,8 @@ function RootNoteItem({
                             canRename={!workspaceReadOnly}
                             canDelete={!workspaceReadOnly}
                             canClear={!workspaceReadOnly}
+                            canCreateChild={!workspaceReadOnly}
+                            createChildParentOptions={allOptions}
                             triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                             dropdownAlign="end"
                             dropdownSide="bottom"
@@ -184,6 +186,8 @@ function RootNoteItem({
                             canRename={!workspaceReadOnly}
                             canDelete={!workspaceReadOnly}
                             canClear={!workspaceReadOnly}
+                            canCreateChild={!workspaceReadOnly}
+                            createChildParentOptions={allOptions}
                             triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                             dropdownAlign="end"
                             dropdownSide="bottom"
@@ -300,6 +304,8 @@ function SubTreeNode({
                             canRename={!workspaceReadOnly}
                             canDelete={!workspaceReadOnly}
                             canClear={!workspaceReadOnly}
+                            canCreateChild={!workspaceReadOnly}
+                            createChildParentOptions={allOptions}
                             triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                             dropdownAlign="end"
                             dropdownSide="bottom"
@@ -352,6 +358,8 @@ function SubTreeNode({
                             canRename={!workspaceReadOnly}
                             canDelete={!workspaceReadOnly}
                             canClear={!workspaceReadOnly}
+                            canCreateChild={!workspaceReadOnly}
+                            createChildParentOptions={allOptions}
                             triggerClassName="h-6 w-6 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                             dropdownAlign="end"
                             dropdownSide="bottom"

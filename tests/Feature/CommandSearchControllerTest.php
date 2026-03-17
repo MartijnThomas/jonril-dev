@@ -6,6 +6,7 @@ use App\Models\User;
 test('command search returns note results and excludes journal by default', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
+    $slug = $workspace?->slug;
 
     $note = $user->notes()->create([
         'type' => Note::TYPE_NOTE,
@@ -26,7 +27,7 @@ test('command search returns note results and excludes journal by default', func
 
     $this
         ->actingAs($user)
-        ->getJson('/search/command?mode=notes&q=project')
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=project")
         ->assertOk()
         ->assertJsonPath('mode', 'notes')
         ->assertJsonPath('items.0.id', $note->id)
@@ -37,14 +38,14 @@ test('command search returns note results and excludes journal by default', func
 
     $this
         ->actingAs($user)
-        ->getJson('/search/command?mode=notes&q=journal')
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=journal")
         ->assertOk()
         ->assertJsonPath('mode', 'notes')
         ->assertJsonCount(0, 'items');
 
     $this
         ->actingAs($user)
-        ->getJson('/search/command?mode=notes&q=journal&include_journal=1')
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=journal&include_journal=1")
         ->assertOk()
         ->assertJsonPath('mode', 'notes')
         ->assertJsonPath('items.0.id', $journal->id)
@@ -55,6 +56,7 @@ test('command search returns note results and excludes journal by default', func
 test('command search returns heading results with anchor links', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
+    $slug = $workspace?->slug;
 
     $note = $user->notes()->create([
         'type' => Note::TYPE_NOTE,
@@ -79,7 +81,7 @@ test('command search returns heading results with anchor links', function () {
 
     $response = $this
         ->actingAs($user)
-        ->getJson('/search/command?mode=headings&q=api');
+        ->getJson("/w/{$slug}/search/command?mode=headings&q=api");
 
     $response
         ->assertOk()
@@ -88,4 +90,42 @@ test('command search returns heading results with anchor links', function () {
         ->assertJsonPath('items.0.heading_id', 'heading-123')
         ->assertJsonPath('items.0.href', "/w/{$workspace?->slug}/notes/specs#heading-123")
         ->assertJsonPath('items.0.path', 'Specs');
+});
+
+test('command search is scoped to the current workspace', function () {
+    $user = User::factory()->create();
+    $workspaceA = $user->currentWorkspace();
+
+    $workspaceB = \App\Models\Workspace::factory()->create();
+    $workspaceB->users()->attach($user->id, ['role' => 'member']);
+
+    $noteInA = Note::factory()->create([
+        'workspace_id' => $workspaceA->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Note in workspace A',
+    ]);
+
+    $noteInB = Note::factory()->create([
+        'workspace_id' => $workspaceB->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Note in workspace B',
+    ]);
+
+    $responseA = $this
+        ->actingAs($user)
+        ->getJson("/w/{$workspaceA->slug}/search/command?mode=notes&q=workspace")
+        ->assertOk();
+
+    $idsA = collect($responseA->json('items'))->pluck('id');
+    expect($idsA)->toContain($noteInA->id)
+        ->not->toContain($noteInB->id);
+
+    $responseB = $this
+        ->actingAs($user)
+        ->getJson("/w/{$workspaceB->slug}/search/command?mode=notes&q=workspace")
+        ->assertOk();
+
+    $idsB = collect($responseB->json('items'))->pluck('id');
+    expect($idsB)->toContain($noteInB->id)
+        ->not->toContain($noteInA->id);
 });

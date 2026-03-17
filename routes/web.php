@@ -4,6 +4,7 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CommandSearchController;
 use App\Http\Controllers\DocumentationController;
 use App\Http\Controllers\NotesController;
+use App\Http\Controllers\SidebarEventsController;
 use App\Http\Controllers\TasksController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceSuggestionController;
@@ -89,6 +90,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('w/{workspace:slug}/calendar/refresh', [CalendarController::class, 'refreshAll'])
         ->name('calendar.refresh-all');
 
+    Route::get('w/{workspace:slug}/events', [SidebarEventsController::class, 'index'])
+        ->name('sidebar-events.index');
+    Route::get('w/{workspace:slug}/attachable-events', [SidebarEventsController::class, 'attachable'])
+        ->name('sidebar-events.attachable');
+
     Route::get('w/{workspace:slug}/journal/{granularity}/{period}', [NotesController::class, 'showJournalScoped'])
         ->name('journal.show');
     Route::get('w/{workspace:slug}/journal/{period}', [NotesController::class, 'showJournalScopedByPeriod'])
@@ -154,7 +160,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('docs/{slug}', [DocumentationController::class, 'show'])
         ->where('slug', '.*')
         ->name('docs.show');
-    Route::get('search/command', CommandSearchController::class)
+    Route::get('w/{workspace:slug}/search/command', CommandSearchController::class)
         ->name('search.command');
     Route::patch('tasks/checked', [TasksController::class, 'updateCheckedByReference'])
         ->name('tasks.checked-by-reference');

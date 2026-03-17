@@ -108,6 +108,7 @@ export function AppCommandPalette() {
     const [selectedCommandValue, setSelectedCommandValue] = useState('');
     const noteActions = page.noteActions ?? null;
     const workspaceId = page.currentWorkspace?.id ?? 'global';
+    const workspaceSlug = page.currentWorkspace?.slug ?? null;
     const commandPaletteDisabled = page.currentWorkspace?.is_migrated_source === true;
 
     const openInCommandMode = useCallback(() => {
@@ -685,7 +686,7 @@ export function AppCommandPalette() {
     };
 
     useEffect(() => {
-        if (!open || isCommandMode || effectiveQuery === '') {
+        if (!open || isCommandMode || effectiveQuery === '' || !workspaceSlug) {
             setLoading(false);
             setNoteItems([]);
             setHeadingItems([]);
@@ -706,7 +707,7 @@ export function AppCommandPalette() {
             }
 
             try {
-                const response = await fetch(`/search/command?${params.toString()}`, {
+                const response = await fetch(`/w/${workspaceSlug}/search/command?${params.toString()}`, {
                     method: 'GET',
                     credentials: 'same-origin',
                     signal: controller.signal,
@@ -751,7 +752,7 @@ export function AppCommandPalette() {
             controller.abort();
             window.clearTimeout(timeoutId);
         };
-    }, [open, includeJournal, isHeadingMode, effectiveQuery, isCommandMode]);
+    }, [open, includeJournal, isHeadingMode, effectiveQuery, isCommandMode, workspaceSlug]);
 
     const headingLevelIcon = (level: number | null) => {
         switch (level) {

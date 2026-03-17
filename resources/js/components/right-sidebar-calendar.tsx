@@ -8,13 +8,33 @@ import {
     ChevronsLeft,
     ChevronsRight,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RightSidebarTodayEvents } from '@/components/right-sidebar-today-events';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PREFETCH_CACHE_FOR_MS, PREFETCH_HOVER_DELAY_MS } from '@/lib/prefetch';
 import { cn } from '@/lib/utils';
+
+type SidebarEvent = {
+    id: string;
+    block_id: string | null;
+    type: 'timeblock' | 'event';
+    all_day: boolean;
+    title: string;
+    note_id: string | null;
+    starts_at: string | null;
+    ends_at: string | null;
+    timezone?: string | null;
+    location: string | null;
+    task_block_id: string | null;
+    task_checked: boolean | null;
+    task_status: string | null;
+    note_title: string | null;
+    href: string | null;
+    meeting_note_id: string | null;
+    meeting_note_href: string | null;
+};
 
 type JournalPageProps = {
     noteType?: string;
@@ -35,26 +55,6 @@ type JournalPageProps = {
         color?: string | null;
         timeblock_color?: string | null;
     };
-    todayEvents?: Array<{
-        id: string;
-        block_id: string | null;
-        type: 'timeblock' | 'event';
-        all_day: boolean;
-        title: string;
-        note_id: string | null;
-        starts_at: string | null;
-        ends_at: string | null;
-        timezone?: string | null;
-        location: string | null;
-        task_block_id: string | null;
-        task_checked: boolean | null;
-        task_status: string | null;
-        note_title: string | null;
-        href: string | null;
-        meeting_note_id: string | null;
-        meeting_note_href: string | null;
-    }>;
-    todayEventsDate?: string | null;
 };
 
 const CALENDAR_SELECTED_DAY_CLASS: Record<string, string> = {
@@ -217,6 +217,54 @@ export function RightSidebarCalendar() {
     const [monthPickerOpen, setMonthPickerOpen] = useState(false);
     const [pickerYear, setPickerYear] = useState(viewMonth.getFullYear());
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [events, setEvents] = useState<SidebarEvent[]>([]);
+    const [eventsDate, setEventsDate] = useState<string | null>(null);
+
+    // The date to request: daily journal period, or omit for today (server decides).
+    const eventsDateParam =
+        pageProps.noteType === 'journal' &&
+        pageProps.journalGranularity === 'daily' &&
+        typeof pageProps.journalPeriod === 'string'
+            ? pageProps.journalPeriod
+            : null;
+
+    const fetchEvents = useCallback(
+        (dateParam: string | null) => {
+            if (workspaceSlug === '') {
+                return;
+            }
+
+            const url = dateParam
+                ? `/w/${workspaceSlug}/events?date=${dateParam}`
+                : `/w/${workspaceSlug}/events`;
+
+            void fetch(url, {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            })
+                .then((r) => r.json())
+                .then((data: { date: string; events: SidebarEvent[] }) => {
+                    setEvents(data.events ?? []);
+                    setEventsDate(data.date ?? null);
+                })
+                .catch(() => {
+                    // Keep existing events on error.
+                });
+        },
+        [workspaceSlug],
+    );
+
+    // Fetch when the anchor date changes (e.g. navigating between daily notes).
+    useEffect(() => {
+        fetchEvents(eventsDateParam);
+    }, [eventsDateParam, fetchEvents]);
+
+    // Re-fetch after a timeblock save so the sidebar updates without a full reload.
+    useEffect(() => {
+        const handler = () => fetchEvents(eventsDateParam);
+        window.addEventListener('sarth:timeblocks-updated', handler);
+        return () => window.removeEventListener('sarth:timeblocks-updated', handler);
+    }, [eventsDateParam, fetchEvents]);
 
     const monthLabel = format(viewMonth, 'LLLL yyyy', { locale: dateLocale });
     const monthNames = useMemo(
@@ -334,10 +382,8 @@ export function RightSidebarCalendar() {
                 // Ignore sync errors; still reload events below.
             })
             .finally(() => {
-                router.reload({
-                    only: ['todayEvents', 'todayEventsDate'],
-                    onFinish: () => setIsRefreshing(false),
-                });
+                fetchEvents(eventsDateParam);
+                setIsRefreshing(false);
             });
     };
 
@@ -569,9 +615,9 @@ export function RightSidebarCalendar() {
             />
 
             <RightSidebarTodayEvents
-                events={pageProps.todayEvents ?? []}
+                events={events}
                 language={language}
-                anchorDate={pageProps.todayEventsDate ?? null}
+                anchorDate={eventsDate}
                 timeblockColor={pageProps.currentWorkspace?.timeblock_color ?? pageProps.currentWorkspace?.color ?? null}
                 workspaceColor={pageProps.currentWorkspace?.color ?? null}
                 dateLongFormat={pageProps.auth?.user?.settings?.date_long_format ?? null}

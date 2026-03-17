@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
 import { Check, ChevronsUpDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Command,
@@ -34,12 +34,13 @@ type Props = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     parentOptions: CreateNoteParentOption[];
+    defaultParentId?: string | null;
 };
 
-export function CreateNoteDialog({ open, onOpenChange, parentOptions }: Props) {
+export function CreateNoteDialog({ open, onOpenChange, parentOptions, defaultParentId = null }: Props) {
     const { t } = useI18n();
     const [title, setTitle] = useState('');
-    const [parentId, setParentId] = useState<string | null>(null);
+    const [parentId, setParentId] = useState<string | null>(defaultParentId);
     const [processing, setProcessing] = useState(false);
     const [parentPopoverOpen, setParentPopoverOpen] = useState(false);
     const [parentQuery, setParentQuery] = useState('');
@@ -61,18 +62,17 @@ export function CreateNoteDialog({ open, onOpenChange, parentOptions }: Props) {
         });
     }, [parentOptions, parentQuery]);
 
-    const resetState = () => {
-        setTitle('');
-        setParentId(null);
-        setParentPopoverOpen(false);
-        setParentQuery('');
-    };
+    useEffect(() => {
+        if (open) {
+            setTitle('');
+            setParentId(defaultParentId ?? null);
+            setParentPopoverOpen(false);
+            setParentQuery('');
+        }
+    }, [open, defaultParentId]);
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
-        if (!nextOpen) {
-            resetState();
-        }
     };
 
     const submitCreate = () => {

@@ -1,7 +1,9 @@
 import { router } from '@inertiajs/react';
 import {
+    CalendarCheck,
     Eraser,
     ExternalLink,
+    FilePlus,
     FolderInput,
     History,
     MoreVertical,
@@ -12,6 +14,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { AttachNoteToEventDialog } from '@/components/attach-note-to-event-dialog';
+import { CreateNoteDialog } from '@/components/create-note-dialog';
+import type { CreateNoteParentOption } from '@/components/create-note-dialog';
 import { MoveNoteDialog } from '@/components/move-note-dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +48,9 @@ type Props = {
     canRename: boolean;
     canDelete: boolean;
     canClear: boolean;
+    canCreateChild?: boolean;
+    createChildParentOptions?: CreateNoteParentOption[];
+    canAttachToEvent?: boolean;
     canDetachFromEvent?: boolean;
     canOpenBlockPreview?: boolean;
     blockPreviewUrl?: string | null;
@@ -65,6 +73,9 @@ export function NoteHeaderActions({
     canRename,
     canDelete,
     canClear,
+    canCreateChild = false,
+    createChildParentOptions = [],
+    canAttachToEvent = false,
     canDetachFromEvent = false,
     canOpenBlockPreview = false,
     blockPreviewUrl = null,
@@ -82,6 +93,8 @@ export function NoteHeaderActions({
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [clearOpen, setClearOpen] = useState(false);
     const [detachOpen, setDetachOpen] = useState(false);
+    const [attachToEventOpen, setAttachToEventOpen] = useState(false);
+    const [createChildOpen, setCreateChildOpen] = useState(false);
     const [propertiesVisible, setPropertiesVisible] = useState(true);
     const [nextTitle, setNextTitle] = useState(title);
     const [processing, setProcessing] = useState(false);
@@ -247,6 +260,14 @@ export function NoteHeaderActions({
                             <DropdownMenuSeparator />
                         </>
                     ) : null}
+                    {canCreateChild ? (
+                        <DropdownMenuItem onClick={() => setCreateChildOpen(true)}>
+                            <span className="inline-flex flex-1 items-center gap-2">
+                                <FilePlus className="h-4 w-4 shrink-0" />
+                                {t('note_actions.create_child', 'New child note')}
+                            </span>
+                        </DropdownMenuItem>
+                    ) : null}
                     {canMove ? (
                         <DropdownMenuItem onClick={() => setMoveOpen(true)}>
                             <span className="inline-flex flex-1 items-center gap-2">
@@ -273,6 +294,14 @@ export function NoteHeaderActions({
                             <span className="inline-flex flex-1 items-center gap-2">
                                 <Eraser className="h-4 w-4 shrink-0" />
                                 {t('note_actions.clear', 'Erase note')}
+                            </span>
+                        </DropdownMenuItem>
+                    ) : null}
+                    {canAttachToEvent ? (
+                        <DropdownMenuItem onClick={() => setAttachToEventOpen(true)}>
+                            <span className="inline-flex flex-1 items-center gap-2">
+                                <CalendarCheck className="h-4 w-4 shrink-0" />
+                                {t('note_actions.attach_to_event', 'Attach to event')}
                             </span>
                         </DropdownMenuItem>
                     ) : null}
@@ -338,6 +367,24 @@ export function NoteHeaderActions({
                     currentLocation={currentLocation ?? null}
                     currentParentId={currentParentId ?? null}
                     options={moveParentOptions}
+                />
+            ) : null}
+
+            {canCreateChild ? (
+                <CreateNoteDialog
+                    open={createChildOpen}
+                    onOpenChange={setCreateChildOpen}
+                    parentOptions={createChildParentOptions}
+                    defaultParentId={noteId}
+                />
+            ) : null}
+
+            {canAttachToEvent ? (
+                <AttachNoteToEventDialog
+                    open={attachToEventOpen}
+                    onOpenChange={setAttachToEventOpen}
+                    noteId={noteId}
+                    noteParentId={currentParentId ?? null}
                 />
             ) : null}
 

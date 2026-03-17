@@ -10,6 +10,7 @@ use App\Support\Notes\NoteMetaExtractor;
 use App\Support\Notes\NoteTaskIndexer;
 use App\Support\Notes\TimeblockIndexer;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class NoteObserver
 {
@@ -41,6 +42,10 @@ class NoteObserver
                 $this->noteTaskIndexer->reindexNote($child);
             });
         }
+
+        if ($note->wasRecentlyCreated || $note->wasChanged('title') || $note->wasChanged('parent_id') || $note->wasChanged('type')) {
+            $this->clearNoteDropdownCache($note->workspace_id);
+        }
     }
 
     public function deleted(Note $note): void
@@ -48,6 +53,7 @@ class NoteObserver
         NoteTask::query()->where('note_id', $note->id)->delete();
         NoteHeading::query()->where('note_id', $note->id)->delete();
         $this->timeblockIndexer->deleteNoteTimeblocks($note);
+        $this->clearNoteDropdownCache($note->workspace_id);
     }
 
     public function deleting(Note $note): void
@@ -84,5 +90,12 @@ class NoteObserver
         $this->noteTaskIndexer->reindexNote($note);
         $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes, $userTimezone);
         $this->noteHeadingIndexer->reindexNote($note);
+        $this->clearNoteDropdownCache($note->workspace_id);
+    }
+
+    private function clearNoteDropdownCache(string $workspaceId): void
+    {
+        Cache::forget("notes_dropdown_linkable_{$workspaceId}");
+        Cache::forget("notes_dropdown_parents_{$workspaceId}");
     }
 }

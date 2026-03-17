@@ -25,6 +25,7 @@ import {
     resolveLongDateFormat,
     resolveTimeFormat,
 } from '@/lib/user-date-time-format';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 type SidebarTodayEvent = {
@@ -281,6 +282,7 @@ export function RightSidebarTodayEvents({
             canAttachToEvent?: boolean;
         };
     };
+    const { t } = useI18n();
     const isOnMeetingNote = pageProps.noteActions?.type === 'meeting';
     const currentNoteId = pageProps.noteActions?.id ?? null;
     const canAttachCurrentNote = Boolean(pageProps.noteActions?.canAttachToEvent);
@@ -391,10 +393,11 @@ export function RightSidebarTodayEvents({
                             parsedAnchorDate,
                             locale,
                         );
+                        const eventIdentifier = event.block_id ?? event.id;
 
                         return (
                             <li key={event.id}>
-                                <div className="flex items-center gap-2 rounded-md px-1 py-1">
+                                <div className="group/item flex items-center gap-2 rounded-md px-1 py-1">
                                     <span
                                         className={cn(
                                             'h-1.5 w-1.5 shrink-0 rounded-full',
@@ -402,12 +405,107 @@ export function RightSidebarTodayEvents({
                                         )}
                                         aria-hidden="true"
                                     />
+                                    {event.meeting_note_href ? (
+                                        <Link
+                                            href={event.meeting_note_href}
+                                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                                            aria-label="Open meeting note"
+                                        >
+                                            <FileText className="size-3" />
+                                        </Link>
+                                    ) : null}
                                     <p className="min-w-0 flex-1 truncate text-[0.82rem] text-foreground/80">
                                         {event.title}
                                     </p>
                                     <span className="shrink-0 text-[0.72rem] text-muted-foreground">
                                         {dateLabel}
                                     </span>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <button
+                                                type="button"
+                                                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-black/10 hover:text-foreground group-hover/item:opacity-100 dark:hover:bg-white/10"
+                                                aria-label="Event options"
+                                            >
+                                                <MoreHorizontal className="size-3.5" />
+                                            </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-52">
+                                            {event.meeting_note_href ? (
+                                                <>
+                                                    <DropdownMenuItem asChild>
+                                                        <Link href={event.meeting_note_href}>
+                                                            <FileText className="mr-2 size-3.5" />
+                                                            {t('sidebar_events.view_meeting_note', 'View meeting note')}
+                                                        </Link>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        onSelect={() => {
+                                                            if (!event.meeting_note_id) return;
+                                                            setDetachingNoteId(event.meeting_note_id);
+                                                            router.patch(
+                                                                `/notes/${event.meeting_note_id}/detach-from-event`,
+                                                                {},
+                                                                {
+                                                                    preserveState: false,
+                                                                    preserveScroll: true,
+                                                                    onFinish: () => setDetachingNoteId(null),
+                                                                },
+                                                            );
+                                                        }}
+                                                        disabled={detachingNoteId === event.meeting_note_id}
+                                                        className="text-destructive focus:text-destructive"
+                                                    >
+                                                        <Unlink className="mr-2 size-3.5" />
+                                                        {t('sidebar_events.detach_meeting_note', 'Detach meeting note')}
+                                                    </DropdownMenuItem>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <DropdownMenuItem
+                                                        onSelect={() => {
+                                                            setMeetingDialogTitle(event.title);
+                                                            setMeetingDialogEventId(eventIdentifier ?? undefined);
+                                                            setMeetingDialogOpen(true);
+                                                        }}
+                                                    >
+                                                        <Users className="mr-2 size-3.5" />
+                                                        {t('sidebar_events.create_meeting_note', 'Create meeting note')}
+                                                    </DropdownMenuItem>
+                                                    {canAttachCurrentNote && currentNoteId ? (
+                                                        <DropdownMenuItem
+                                                            onSelect={() => {
+                                                                setAttachDialogEventBlockId(eventIdentifier ?? '');
+                                                                setAttachDialogEventTitle(event.title);
+                                                                setAttachDialogNoteId(currentNoteId);
+                                                                setAttachDialogNoteTitle(pageProps.noteActions?.title ?? null);
+                                                                setAttachDialogOpen(true);
+                                                            }}
+                                                            disabled={!eventIdentifier}
+                                                        >
+                                                            <FileText className="mr-2 size-3.5" />
+                                                            {t('sidebar_events.attach_current_note', 'Attach current note')}
+                                                        </DropdownMenuItem>
+                                                    ) : !isOnMeetingNote ? (
+                                                        <DropdownMenuItem
+                                                            onSelect={() => {
+                                                                setAttachDialogEventBlockId(eventIdentifier ?? '');
+                                                                setAttachDialogEventTitle(event.title);
+                                                                setAttachDialogNoteId(null);
+                                                                setAttachDialogNoteTitle(null);
+                                                                setAttachDialogOpen(true);
+                                                            }}
+                                                            disabled={!eventIdentifier}
+                                                        >
+                                                            <FileText className="mr-2 size-3.5" />
+                                                            {t('sidebar_events.link_existing_note', 'Link existing note')}
+                                                        </DropdownMenuItem>
+                                                    ) : null}
+                                                </>
+                                            )}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
                             </li>
                         );

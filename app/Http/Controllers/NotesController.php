@@ -799,9 +799,9 @@ class NotesController extends Controller
             ->map(fn (Note $candidate) => [
                 'id' => $candidate->id,
                 'title' => $candidate->display_title,
-                'path' => $candidate->path,
+                'path' => $candidate->parent_id ? $resolvePath($candidate->parent_id) : null,
             ])
-            ->sortBy(fn (array $candidate) => strtolower($candidate['path']))
+            ->sortBy(fn (array $candidate) => strtolower((string) $candidate['path'].' '.$candidate['title']))
             ->values();
 
         $noteTrail = $buildTrail($note->id);

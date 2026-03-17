@@ -823,13 +823,27 @@ export function decreaseCurrentHeadingLevel(
             return true;
         }
 
-        let transaction = state.tr.setNodeMarkup(
+        // Delete the heading prefix text first (while the node is still a heading),
+        // then convert to paragraph. updateHeadingTextPrefixInTransaction cannot be
+        // used here because it checks for the heading type and exits early after
+        // setNodeMarkup has already changed the node to a paragraph.
+        const textContent = current.node.textContent;
+        const currentPrefixLength = textContent.match(/^(#{1,6}\s)/u)?.[0]?.length ?? 0;
+
+        let transaction = state.tr;
+
+        if (currentPrefixLength > 0) {
+            transaction = transaction.delete(
+                current.pos + 1,
+                current.pos + 1 + currentPrefixLength,
+            );
+        }
+
+        transaction = transaction.setNodeMarkup(
             current.pos,
             editor.schema.nodes.paragraph,
             normalizeParagraphAttrs({}),
         );
-
-        transaction = updateHeadingTextPrefixInTransaction(transaction, current.pos, null);
 
         dispatch(transaction);
 
@@ -896,13 +910,23 @@ export function convertCurrentHeadingToParagraph(
         return true;
     }
 
-    let transaction = state.tr.setNodeMarkup(
+    const textContent = current.node.textContent;
+    const currentPrefixLength = textContent.match(/^(#{1,6}\s)/u)?.[0]?.length ?? 0;
+
+    let transaction = state.tr;
+
+    if (currentPrefixLength > 0) {
+        transaction = transaction.delete(
+            current.pos + 1,
+            current.pos + 1 + currentPrefixLength,
+        );
+    }
+
+    transaction = transaction.setNodeMarkup(
         current.pos,
         editor.schema.nodes.paragraph,
         normalizeParagraphAttrs({}),
     );
-
-    transaction = updateHeadingTextPrefixInTransaction(transaction, current.pos, null);
 
     dispatch(transaction);
 

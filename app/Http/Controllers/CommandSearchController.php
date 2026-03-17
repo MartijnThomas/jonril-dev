@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Note;
 use App\Models\NoteHeading;
+use App\Models\Workspace;
 use App\Support\Notes\NoteHeadingIndexer;
 use App\Support\Notes\NoteSlugService;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,17 +18,19 @@ class CommandSearchController extends Controller
         private readonly NoteSlugService $noteSlugService,
     ) {}
 
-    public function __invoke(Request $request)
+    public function __invoke(Request $request, Workspace $workspace)
     {
         $user = $request->user();
         if (! $user) {
             abort(403);
         }
 
-        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->values()->all();
-        if ($workspaceIds === []) {
-            abort(403);
-        }
+        abort_unless(
+            $workspace->users()->where('users.id', $user->id)->exists(),
+            403,
+        );
+
+        $workspaceIds = [$workspace->id];
 
         $data = $request->validate([
             'q' => ['nullable', 'string', 'max:160'],
