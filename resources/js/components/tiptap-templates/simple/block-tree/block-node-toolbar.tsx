@@ -156,6 +156,11 @@ export function BlockNodeToolbar({
         const currentValue = getCurrentBlockValue(editor);
 
         if (value === 'paragraph') {
+            if (currentBlock?.type === 'heading') {
+                convertCurrentHeadingToParagraph(editor);
+                return;
+            }
+
             if (currentBlock?.type === 'paragraph') {
                 setCurrentParagraphStyle(editor, 'paragraph');
                 return;

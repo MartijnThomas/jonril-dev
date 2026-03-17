@@ -12,9 +12,9 @@ import {
     getCurrentBlockNode,
     getCurrentBlockNodeFromState,
     headingTextPrefix,
+    convertCurrentHeadingToParagraph,
     dedentCurrentParagraph,
     decreaseCurrentHeadingLevel,
-    ensureFirstBlockHeadingLevelOne,
     indentCurrentParagraph,
     isAtEndOfCurrentBlock,
     isAtStartOfCurrentBlock,
@@ -299,10 +299,7 @@ function createBlockEditingExtension(
                     appendTransaction: (_transactions, _oldState, newState) => {
                         return (
                             syncTaskParagraphStatusesFromText(newState) ??
-                            syncHeadingBlocksFromText(this.editor, newState) ??
-                            ((options.noteType === 'note' || options.noteType === 'journal')
-                                ? ensureFirstBlockHeadingLevelOne(this.editor, newState)
-                                : null)
+                            syncHeadingBlocksFromText(this.editor, newState)
                         );
                     },
                     props: {
@@ -973,11 +970,27 @@ function createBlockEditingExtension(
                     });
                 },
                 Backspace: () => {
+                    const { $from } = this.editor.state.selection;
+                    const isInHeading = $from.parent.type.name === 'heading';
+
+                    if (isInHeading) {
+                        const level = Number($from.parent.attrs.level ?? 1);
+                        const prefix = headingTextPrefix(level);
+                        const text = $from.parent.textContent;
+
+                        // Only the prefix remains — convert to paragraph regardless of cursor position
+                        if (text === prefix || text === prefix.trimEnd()) {
+                            return this.editor.commands.command(({ editor, state, dispatch }) => {
+                                return convertCurrentHeadingToParagraph(editor, state, dispatch);
+                            });
+                        }
+                    }
+
                     if (!isAtStartOfCurrentBlock(this.editor)) {
                         return false;
                     }
 
-                    if (this.editor.state.selection.$from.parent.type.name === 'heading') {
+                    if (isInHeading) {
                         return this.editor.commands.command(({ editor, state, dispatch }) => {
                             return decreaseCurrentHeadingLevel(editor, state, dispatch);
                         });
