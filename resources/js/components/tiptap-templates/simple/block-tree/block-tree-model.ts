@@ -488,7 +488,14 @@ function updateHeadingTextPrefixInTransaction(
     nextLevel: number | null,
 ): Transaction {
     const currentNode = transaction.doc.nodeAt(pos);
-    if (!currentNode || currentNode.type.name !== 'heading') {
+    if (!currentNode) {
+        return transaction;
+    }
+
+    const isHeading = currentNode.type.name === 'heading';
+    const isParagraphStrip = nextLevel === null && currentNode.type.name === 'paragraph';
+
+    if (!isHeading && !isParagraphStrip) {
         return transaction;
     }
 
