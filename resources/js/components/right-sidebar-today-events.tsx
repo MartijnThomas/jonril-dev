@@ -1,7 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
-import { Check, FileText, MoreHorizontal, Unlink, Users } from 'lucide-react';
+import { Check, FileText, MoreHorizontal, RotateCw, Unlink, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AttachMeetingNoteDialog } from '@/components/attach-meeting-note-dialog';
@@ -56,6 +56,8 @@ type RightSidebarTodayEventsProps = {
     dateLongFormat?: string | null;
     timeFormat?: string | null;
     timezone?: string | null;
+    onRefresh?: () => void;
+    isRefreshing?: boolean;
 };
 
 function formatTimeRange(
@@ -268,6 +270,8 @@ export function RightSidebarTodayEvents({
     dateLongFormat = null,
     timeFormat = null,
     timezone = null,
+    onRefresh,
+    isRefreshing = false,
 }: RightSidebarTodayEventsProps) {
     const pageProps = usePage().props as {
         noteActions?: {
@@ -345,10 +349,21 @@ export function RightSidebarTodayEvents({
 
     return (
         <section className="mt-2 border-t border-sidebar-border/60 px-2 pt-2 pb-2">
-            <header className="mb-2 px-1 pt-1.5 pb-1.5">
+            <header className="mb-2 flex items-center justify-between px-1 pt-1.5 pb-1.5">
                 <h3 className="text-[0.82rem] font-medium text-zinc-600 dark:text-zinc-400">
                     {headerLabel}
                 </h3>
+                {onRefresh ? (
+                    <button
+                        type="button"
+                        onClick={onRefresh}
+                        disabled={isRefreshing}
+                        aria-label={language === 'en' ? 'Refresh events' : 'Ververs events'}
+                        className="text-muted-foreground/60 hover:text-muted-foreground disabled:opacity-40"
+                    >
+                        <RotateCw className={cn('size-3.5', isRefreshing && 'animate-spin')} />
+                    </button>
+                ) : null}
             </header>
 
             <CreateMeetingNoteDialog

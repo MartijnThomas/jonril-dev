@@ -211,6 +211,52 @@ test('workspace settings page includes calendars prop', function () {
     );
 });
 
+test('workspace member can refresh all active calendars', function () {
+    Bus::fake();
+
+    Calendar::query()->create([
+        'workspace_id' => $this->workspace->id,
+        'name' => 'Active Cal',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/active/',
+        'username' => 'user@example.com',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    Calendar::query()->create([
+        'workspace_id' => $this->workspace->id,
+        'name' => 'Inactive Cal',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/inactive/',
+        'username' => 'user@example.com',
+        'password' => 'secret',
+        'is_active' => false,
+    ]);
+
+    $response = $this->postJson("/w/{$this->workspace->slug}/calendar/refresh");
+
+    $response->assertOk()->assertJson(['ok' => true]);
+    Bus::assertDispatchedTimes(SyncCalendarJob::class, 1);
+});
+
+test('non-member cannot refresh calendars', function () {
+    $other = User::factory()->create();
+
+    $response = $this->actingAs($other)->postJson("/w/{$this->workspace->slug}/calendar/refresh");
+
+    $response->assertStatus(403);
+});
+
+test('refresh with no active calendars returns ok without dispatching jobs', function () {
+    Bus::fake();
+
+    $response = $this->postJson("/w/{$this->workspace->slug}/calendar/refresh");
+
+    $response->assertOk()->assertJson(['ok' => true]);
+    Bus::assertNothingDispatched();
+});
+
 test('sync job is dispatched on login for user calendars', function () {
     Bus::fake();
 

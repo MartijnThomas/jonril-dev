@@ -216,6 +216,7 @@ export function RightSidebarCalendar() {
     const [viewMonth, setViewMonth] = useState<Date>(anchorDate ?? new Date());
     const [monthPickerOpen, setMonthPickerOpen] = useState(false);
     const [pickerYear, setPickerYear] = useState(viewMonth.getFullYear());
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const monthLabel = format(viewMonth, 'LLLL yyyy', { locale: dateLocale });
     const monthNames = useMemo(
@@ -305,6 +306,40 @@ export function RightSidebarCalendar() {
             clearPrefetchTimeout();
         };
     }, []);
+
+    const refreshEvents = () => {
+        if (isRefreshing || workspaceSlug === '') {
+            return;
+        }
+
+        setIsRefreshing(true);
+
+        const xsrfToken = document.cookie
+            .split('; ')
+            .find((c) => c.startsWith('XSRF-TOKEN='))
+            ?.split('=')
+            .slice(1)
+            .join('=');
+
+        void fetch(`/w/${workspaceSlug}/calendar/refresh`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(xsrfToken ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfToken) } : {}),
+            },
+        })
+            .catch(() => {
+                // Ignore sync errors; still reload events below.
+            })
+            .finally(() => {
+                router.reload({
+                    only: ['todayEvents', 'todayEventsDate'],
+                    onFinish: () => setIsRefreshing(false),
+                });
+            });
+    };
 
     return (
         <section className="space-y-1 overflow-hidden">
@@ -542,6 +577,8 @@ export function RightSidebarCalendar() {
                 dateLongFormat={pageProps.auth?.user?.settings?.date_long_format ?? null}
                 timeFormat={pageProps.auth?.user?.settings?.time_format ?? null}
                 timezone={pageProps.auth?.user?.settings?.timezone ?? null}
+                onRefresh={workspaceSlug !== '' ? refreshEvents : undefined}
+                isRefreshing={isRefreshing}
             />
         </section>
     );

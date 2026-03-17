@@ -283,6 +283,10 @@ export function useEditorSave({
                         }
 
                         markSaveSuccess();
+
+                        if (includeTimeblocks) {
+                            router.reload({ only: ['todayEvents', 'todayEventsDate'] });
+                        }
                     })
                     .catch(() => {
                         setStatus('error');
@@ -301,7 +305,7 @@ export function useEditorSave({
                     preserveScroll: true,
                     preserveState: true,
                     replace: true,
-                    except: ['relatedTasks', 'backlinks'],
+                    only: ['todayEvents', 'todayEventsDate'],
                     showProgress: force,
                     onSuccess: () => {
                         markSaveSuccess();

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CommandSearchController;
 use App\Http\Controllers\DocumentationController;
 use App\Http\Controllers\NotesController;
@@ -84,6 +85,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('notes.start');
     Route::post('notes', [NotesController::class, 'store'])
         ->name('notes.store');
+
+    Route::post('w/{workspace:slug}/calendar/refresh', [CalendarController::class, 'refreshAll'])
+        ->name('calendar.refresh-all');
 
     Route::get('w/{workspace:slug}/journal/{granularity}/{period}', [NotesController::class, 'showJournalScoped'])
         ->name('journal.show');

@@ -691,35 +691,40 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
-        foreach ([
-            trim((string) $request->header('X-Inertia-Current-URL', '')),
-            trim((string) $request->headers->get('referer', '')),
-        ] as $candidateUrl) {
-            if ($candidateUrl === '') {
-                continue;
-            }
+        // Only consult request headers for non-GET requests (e.g., note saves).
+        // For GET navigation requests the Referer is the previous page, which would
+        // incorrectly resolve to a daily journal date when navigating away from one.
+        if (! $request->isMethod('GET')) {
+            foreach ([
+                trim((string) $request->header('X-Inertia-Current-URL', '')),
+                trim((string) $request->headers->get('referer', '')),
+            ] as $candidateUrl) {
+                if ($candidateUrl === '') {
+                    continue;
+                }
 
-            $path = parse_url($candidateUrl, PHP_URL_PATH);
-            if (! is_string($path) || $path === '') {
-                continue;
-            }
+                $path = parse_url($candidateUrl, PHP_URL_PATH);
+                if (! is_string($path) || $path === '') {
+                    continue;
+                }
 
-            $matches = [];
-            if (
-                preg_match(
-                    '#/(?:w/[^/]+/)?journal/daily/(\d{4}-\d{2}-\d{2})(?:$|/)#',
-                    $path,
-                    $matches,
-                ) === 1
-            ) {
-                try {
-                    return Carbon::createFromFormat(
-                        'Y-m-d',
-                        (string) ($matches[1] ?? ''),
-                        $userTimezone,
-                    )->startOfDay();
-                } catch (\Throwable) {
-                    // Continue probing fallbacks below.
+                $matches = [];
+                if (
+                    preg_match(
+                        '#/(?:w/[^/]+/)?journal/daily/(\d{4}-\d{2}-\d{2})(?:$|/)#',
+                        $path,
+                        $matches,
+                    ) === 1
+                ) {
+                    try {
+                        return Carbon::createFromFormat(
+                            'Y-m-d',
+                            (string) ($matches[1] ?? ''),
+                            $userTimezone,
+                        )->startOfDay();
+                    } catch (\Throwable) {
+                        // Continue probing fallbacks below.
+                    }
                 }
             }
         }
