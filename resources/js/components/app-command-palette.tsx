@@ -825,7 +825,7 @@ export function AppCommandPalette() {
 
     const scopePillClassSmall = (active: boolean) =>
         cn(
-            'inline-flex h-6 items-center rounded-full border px-2.5 text-[10px] font-medium transition-colors',
+            'inline-flex h-6 items-center rounded-full border px-2 text-[10px] font-medium transition-colors',
             active
                 ? 'border-transparent bg-primary/10 text-primary'
                 : 'border-border bg-background text-muted-foreground hover:text-foreground',
