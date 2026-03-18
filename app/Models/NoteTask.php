@@ -78,6 +78,7 @@ class NoteTask extends Model
             'checked' => $this->checked,
             'task_status' => $this->task_status,
             'due_date' => $this->due_date?->toDateString(),
+            'deadline_date' => $this->deadline_date?->toDateString(),
             'journal_date' => $this->journal_date?->toDateString(),
         ];
     }

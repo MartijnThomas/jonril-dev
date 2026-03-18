@@ -153,10 +153,12 @@ return [
                     'checked',
                     'task_status',
                     'due_date',
+                    'deadline_date',
                     'journal_date',
                 ],
                 'sortableAttributes' => [
                     'due_date',
+                    'deadline_date',
                     'journal_date',
                 ],
             ],
