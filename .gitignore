@@ -28,3 +28,8 @@ yarn-error.log
 /.vscode
 /.zed
 /data.ms
+
+# Ignore ad-hoc legacy import dumps, but keep the canonical sample fixtures.
+/database/legacy-import/*.json
+!/database/legacy-import/old-notes.json
+!/database/legacy-import/old-note_blocks.json
