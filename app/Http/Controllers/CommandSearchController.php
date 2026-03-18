@@ -42,7 +42,8 @@ class CommandSearchController extends Controller
             'include_journal' => ['nullable', 'boolean'],
             'include_headings' => ['nullable', 'boolean'],
             'include_tasks' => ['nullable', 'boolean'],
-            'include_closed_tasks' => ['nullable', 'boolean'],
+            'task_statuses' => ['nullable', 'array'],
+            'task_statuses.*' => [Rule::in(['open', 'in_progress', 'assigned', 'starred', 'deferred', 'migrated', 'closed', 'canceled'])],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -52,7 +53,12 @@ class CommandSearchController extends Controller
         $includeJournal = (bool) ($data['include_journal'] ?? false);
         $includeHeadings = (bool) ($data['include_headings'] ?? false);
         $includeTasks = (bool) ($data['include_tasks'] ?? false);
-        $includeClosedTasks = (bool) ($data['include_closed_tasks'] ?? false);
+        $taskStatuses = collect($data['task_statuses'] ?? ['open', 'in_progress', 'assigned', 'starred', 'deferred'])
+            ->filter(fn ($status) => is_string($status) && trim($status) !== '')
+            ->map(fn (string $status) => trim(strtolower($status)))
+            ->unique()
+            ->values()
+            ->all();
         $limit = (int) ($data['limit'] ?? 40);
 
         if ($mode === 'headings') {
@@ -83,7 +89,7 @@ class CommandSearchController extends Controller
                 workspaceIds: $workspaceIds,
                 query: $query,
                 includeTasks: $includeTasks,
-                includeClosedTasks: $includeClosedTasks,
+                taskStatuses: $taskStatuses,
                 includeJournal: $includeJournal,
                 limit: $limit,
             ),
@@ -293,17 +299,20 @@ class CommandSearchController extends Controller
         array $workspaceIds,
         string $query,
         bool $includeTasks,
-        bool $includeClosedTasks,
+        array $taskStatuses,
         bool $includeJournal,
         int $limit,
     ): array {
         if (! $includeTasks || $query === '') {
             return [];
         }
+        if ($taskStatuses === []) {
+            return [];
+        }
 
         $tasks = $this->usesMeilisearchDriver()
-            ? $this->searchTasksViaMeilisearch($query, $workspaceIds, $includeClosedTasks, $includeJournal, $limit)
-            : $this->searchTasksViaDatabase($query, $workspaceIds, $includeClosedTasks, $includeJournal, $limit);
+            ? $this->searchTasksViaMeilisearch($query, $workspaceIds, $taskStatuses, $includeJournal, $limit)
+            : $this->searchTasksViaDatabase($query, $workspaceIds, $taskStatuses, $includeJournal, $limit);
 
         if ($tasks->isEmpty()) {
             return [];
@@ -468,7 +477,7 @@ class CommandSearchController extends Controller
     private function searchTasksViaMeilisearch(
         string $query,
         array $workspaceIds,
-        bool $includeClosedTasks,
+        array $taskStatuses,
         bool $includeJournal,
         int $limit,
     ): \Illuminate\Support\Collection {
@@ -484,7 +493,7 @@ class CommandSearchController extends Controller
             'attributesToRetrieve' => ['id'],
             'filter' => $this->taskFilterExpression(
                 workspaceIds: $workspaceIds,
-                includeClosedTasks: $includeClosedTasks,
+                taskStatuses: $taskStatuses,
             ),
         ];
 
@@ -506,12 +515,9 @@ class CommandSearchController extends Controller
         $tasksById = NoteTask::query()
             ->whereIn('id', $taskIds)
             ->whereIn('workspace_id', $workspaceIds)
-            ->when(! $includeClosedTasks, fn (Builder $builder) => $builder
-                ->where('checked', false)
-                ->where(function (Builder $inner): void {
-                    $inner->whereNull('task_status')
-                        ->orWhereRaw('lower(task_status) != ?', ['canceled']);
-                }))
+            ->where(function (Builder $builder) use ($taskStatuses): void {
+                $this->applyTaskStatusConstraint($builder, $taskStatuses);
+            })
             ->when(! $includeJournal, fn (Builder $builder) => $builder->whereHas('note', function (Builder $noteQuery): void {
                 $noteQuery->where(function (Builder $inner): void {
                     $inner->whereNull('type')
@@ -543,7 +549,7 @@ class CommandSearchController extends Controller
     private function searchTasksViaDatabase(
         string $query,
         array $workspaceIds,
-        bool $includeClosedTasks,
+        array $taskStatuses,
         bool $includeJournal,
         int $limit,
     ): \Illuminate\Support\Collection {
@@ -554,12 +560,9 @@ class CommandSearchController extends Controller
                     ->orWhere('note_title', 'like', "%{$query}%")
                     ->orWhere('parent_note_title', 'like', "%{$query}%");
             })
-            ->when(! $includeClosedTasks, fn (Builder $builder) => $builder
-                ->where('checked', false)
-                ->where(function (Builder $inner): void {
-                    $inner->whereNull('task_status')
-                        ->orWhereRaw('lower(task_status) != ?', ['canceled']);
-                }))
+            ->where(function (Builder $builder) use ($taskStatuses): void {
+                $this->applyTaskStatusConstraint($builder, $taskStatuses);
+            })
             ->when(! $includeJournal, fn (Builder $builder) => $builder->whereHas('note', function (Builder $noteQuery): void {
                 $noteQuery->where(function (Builder $inner): void {
                     $inner->whereNull('type')
@@ -679,17 +682,114 @@ class CommandSearchController extends Controller
     /**
      * @param  array<int, string>  $workspaceIds
      */
-    private function taskFilterExpression(array $workspaceIds, bool $includeClosedTasks): string
+    private function taskFilterExpression(array $workspaceIds, array $taskStatuses): string
     {
         $clauses = [
             $this->inExpression('workspace_id', $workspaceIds),
         ];
 
-        if (! $includeClosedTasks) {
-            $clauses[] = '(search_status != '.$this->quoted('completed').' AND search_status != '.$this->quoted('canceled').')';
+        $mappedStatuses = $this->mapTaskStatusesToSearchStatuses($taskStatuses);
+        if ($mappedStatuses !== []) {
+            $clauses[] = $this->inExpression('search_status', $mappedStatuses);
         }
 
         return implode(' AND ', $clauses);
+    }
+
+    /**
+     * @param  array<int, string>  $taskStatuses
+     * @return array<int, string>
+     */
+    private function mapTaskStatusesToSearchStatuses(array $taskStatuses): array
+    {
+        return collect($taskStatuses)
+            ->map(function (string $status): ?string {
+                return match ($status) {
+                    'open' => 'open',
+                    'in_progress' => 'in_progress',
+                    'assigned' => 'assigned',
+                    'starred' => 'starred',
+                    'deferred' => 'backlog',
+                    'migrated' => 'migrated',
+                    'closed' => 'completed',
+                    'canceled' => 'canceled',
+                    default => null,
+                };
+            })
+            ->filter(fn ($status) => is_string($status) && $status !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, string>  $taskStatuses
+     */
+    private function applyTaskStatusConstraint(Builder $builder, array $taskStatuses): void
+    {
+        $normalized = collect($taskStatuses)
+            ->map(fn (string $status) => strtolower(trim($status)))
+            ->unique()
+            ->values()
+            ->all();
+
+        $builder->where(function (Builder $outer) use ($normalized): void {
+            foreach ($normalized as $status) {
+                $outer->orWhere(function (Builder $clause) use ($status): void {
+                    if ($status === 'open') {
+                        $clause->where('checked', false)
+                            ->where(function (Builder $inner): void {
+                                $inner->whereNull('task_status')
+                                    ->orWhereRaw('lower(task_status) not in (?, ?, ?, ?, ?, ?, ?)', [
+                                        'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog', 'question',
+                                    ]);
+                            });
+
+                        return;
+                    }
+
+                    if ($status === 'in_progress') {
+                        $clause->where('checked', false)->whereRaw('lower(task_status) = ?', ['in_progress']);
+
+                        return;
+                    }
+
+                    if ($status === 'assigned') {
+                        $clause->where('checked', false)->whereRaw('lower(task_status) = ?', ['assigned']);
+
+                        return;
+                    }
+
+                    if ($status === 'starred') {
+                        $clause->where('checked', false)->whereRaw('lower(task_status) = ?', ['starred']);
+
+                        return;
+                    }
+
+                    if ($status === 'deferred') {
+                        $clause->where('checked', false)->whereRaw('lower(task_status) in (?, ?)', ['backlog', 'question']);
+
+                        return;
+                    }
+
+                    if ($status === 'migrated') {
+                        $clause->where('checked', false)->whereRaw('lower(task_status) = ?', ['migrated']);
+
+                        return;
+                    }
+
+                    if ($status === 'closed') {
+                        $clause->where('checked', true);
+
+                        return;
+                    }
+
+                    if ($status === 'canceled') {
+                        $clause->where('checked', false)->whereRaw('lower(task_status) = ?', ['canceled']);
+                    }
+                });
+            }
+        });
     }
 
     private function inExpression(string $field, array $values): string

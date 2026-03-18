@@ -227,7 +227,7 @@ test('command search tasks excludes closed and canceled by default', function ()
 
     $responseWithClosed = $this
         ->actingAs($user)
-        ->getJson("/w/{$slug}/search/command?mode=notes&q=jonril&include_tasks=1&include_closed_tasks=1")
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=jonril&include_tasks=1&task_statuses[]=open&task_statuses[]=closed&task_statuses[]=canceled")
         ->assertOk();
 
     $taskIdsWithClosed = collect($responseWithClosed->json('tasks'))->pluck('id')->all();

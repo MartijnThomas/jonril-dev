@@ -1,6 +1,8 @@
 import { router, usePage } from '@inertiajs/react';
 import {
     CalendarDays,
+    ChevronDown,
+    ChevronUp,
     Command as CommandIcon,
     FileText,
 } from 'lucide-react';
@@ -75,6 +77,46 @@ type CommandDefinition = {
     available: boolean;
 };
 
+type TaskStatusFilter =
+    | 'open'
+    | 'in_progress'
+    | 'assigned'
+    | 'starred'
+    | 'deferred'
+    | 'migrated'
+    | 'closed'
+    | 'canceled';
+
+const DEFAULT_TASK_STATUSES: TaskStatusFilter[] = [
+    'open',
+    'in_progress',
+    'assigned',
+    'starred',
+    'deferred',
+];
+
+const TASK_STATUS_LABELS: Record<TaskStatusFilter, string> = {
+    open: 'Open',
+    in_progress: 'In progress',
+    assigned: 'Assigned',
+    starred: 'Starred',
+    deferred: 'Deferred',
+    migrated: 'Migrated',
+    closed: 'Closed',
+    canceled: 'Canceled',
+};
+
+const ALL_TASK_STATUSES: TaskStatusFilter[] = [
+    'open',
+    'in_progress',
+    'assigned',
+    'starred',
+    'deferred',
+    'migrated',
+    'closed',
+    'canceled',
+];
+
 export function AppCommandPalette() {
     const page = usePage().props as {
         noteActions?: NoteActionsContext;
@@ -92,7 +134,8 @@ export function AppCommandPalette() {
         headings: true,
         tasks: true,
     });
-    const [includeClosedTasks, setIncludeClosedTasks] = useState(false);
+    const [showMoreFilters, setShowMoreFilters] = useState(false);
+    const [taskStatuses, setTaskStatuses] = useState<TaskStatusFilter[]>(DEFAULT_TASK_STATUSES);
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [noteItems, setNoteItems] = useState<NoteSearchItem[]>([]);
@@ -752,11 +795,23 @@ export function AppCommandPalette() {
                 [target]: !current[target],
             };
 
-            if (!next.notes && !next.headings) {
+            if (!next.notes && !next.headings && !next.tasks) {
                 return current;
             }
 
             return next;
+        });
+    };
+
+    const toggleTaskStatus = (status: TaskStatusFilter) => {
+        setTaskStatuses((current) => {
+            const isSelected = current.includes(status);
+            if (isSelected) {
+                const next = current.filter((entry) => entry !== status);
+                return next.length === 0 ? current : next;
+            }
+
+            return [...current, status];
         });
     };
 
@@ -788,11 +843,15 @@ export function AppCommandPalette() {
                         include_journal: includeJournal ? '1' : '0',
                         include_headings: shouldSearchHeadings ? '1' : '0',
                         include_tasks: shouldSearchTasks ? '1' : '0',
-                        include_closed_tasks: includeClosedTasks ? '1' : '0',
                         limit: '40',
                     });
                     if (effectiveQuery !== '') {
                         params.set('q', effectiveQuery);
+                    }
+                    if (shouldSearchTasks) {
+                        taskStatuses.forEach((status) => {
+                            params.append('task_statuses[]', status);
+                        });
                     }
 
                     const response = await fetch(`/w/${workspaceSlug}/search/command?${params.toString()}`, {
@@ -848,13 +907,13 @@ export function AppCommandPalette() {
     }, [
         open,
         includeJournal,
-        includeClosedTasks,
         effectiveQuery,
         isCommandMode,
         shouldSearchHeadings,
         shouldSearchNotes,
         shouldSearchTasks,
         shouldRunScopedSearch,
+        taskStatuses,
         workspaceSlug,
     ]);
 
@@ -907,48 +966,76 @@ export function AppCommandPalette() {
                 />
             </div>
             {!isCommandMode && (
-                <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-                    <button
-                        type="button"
-                        className={scopePillClass(searchTargets.notes)}
-                        onClick={() => toggleSearchTarget('notes')}
-                        aria-pressed={searchTargets.notes}
-                    >
-                        Notes
-                    </button>
-                    <button
-                        type="button"
-                        className={scopePillClass(searchTargets.headings)}
-                        onClick={() => toggleSearchTarget('headings')}
-                        aria-pressed={searchTargets.headings}
-                    >
-                        Headings
-                    </button>
-                    <button
-                        type="button"
-                        className={scopePillClass(searchTargets.tasks)}
-                        onClick={() => toggleSearchTarget('tasks')}
-                        aria-pressed={searchTargets.tasks}
-                    >
-                        Tasks
-                    </button>
-                    <button
-                        type="button"
-                        className={scopePillClass(includeJournal)}
-                        onClick={() => setIncludeJournal((value) => !value)}
-                        aria-pressed={includeJournal}
-                    >
-                        Journals
-                    </button>
-                    {searchTargets.tasks && (
+                <div className="border-b">
+                    <div className="flex items-center justify-between gap-2 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                className={scopePillClass(searchTargets.notes)}
+                                onClick={() => toggleSearchTarget('notes')}
+                                aria-pressed={searchTargets.notes}
+                            >
+                                Notes
+                            </button>
+                            <button
+                                type="button"
+                                className={scopePillClass(searchTargets.headings)}
+                                onClick={() => toggleSearchTarget('headings')}
+                                aria-pressed={searchTargets.headings}
+                            >
+                                Headings
+                            </button>
+                            <button
+                                type="button"
+                                className={scopePillClass(searchTargets.tasks)}
+                                onClick={() => toggleSearchTarget('tasks')}
+                                aria-pressed={searchTargets.tasks}
+                            >
+                                Tasks
+                            </button>
+                            <button
+                                type="button"
+                                className={scopePillClass(includeJournal)}
+                                onClick={() => setIncludeJournal((value) => !value)}
+                                aria-pressed={includeJournal}
+                            >
+                                Journals
+                            </button>
+                        </div>
                         <button
                             type="button"
-                            className={scopePillClass(includeClosedTasks)}
-                            onClick={() => setIncludeClosedTasks((value) => !value)}
-                            aria-pressed={includeClosedTasks}
+                            className={cn(
+                                'inline-flex h-7 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
+                                showMoreFilters
+                                    ? 'border-primary/40 bg-primary/10 text-primary'
+                                    : 'border-border bg-background text-muted-foreground hover:text-foreground',
+                            )}
+                            onClick={() => setShowMoreFilters((value) => !value)}
+                            aria-expanded={showMoreFilters}
                         >
-                            Closed/Canceled
+                            More
+                            {showMoreFilters ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                         </button>
+                    </div>
+                    {showMoreFilters && (
+                        <div className="border-t px-3 pb-3 pt-2">
+                            <div className="mb-2 text-xs text-muted-foreground">
+                                Tasks: open, in progress, assigned, starred, deferred (default)
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {ALL_TASK_STATUSES.map((status) => (
+                                    <button
+                                        key={status}
+                                        type="button"
+                                        className={scopePillClass(taskStatuses.includes(status))}
+                                        onClick={() => toggleTaskStatus(status)}
+                                        aria-pressed={taskStatuses.includes(status)}
+                                    >
+                                        {TASK_STATUS_LABELS[status]}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     )}
                 </div>
             )}
