@@ -259,13 +259,16 @@ export default function TasksIndex({
     const statusOptions = useMemo(
         () => [
             { value: 'open', label: t('tasks_index.status_open', 'Open') },
-            { value: 'completed', label: t('tasks_index.status_completed', 'Completed') },
-            { value: 'canceled', label: t('tasks_index.status_canceled', 'Canceled') },
-            { value: 'migrated', label: t('tasks_index.status_migrated', 'Migrated') },
-            { value: 'assigned', label: t('tasks_index.status_assigned', 'Assigned') },
-            { value: 'in_progress', label: t('tasks_index.status_in_progress', 'In progress') },
-            { value: 'starred', label: t('tasks_index.status_starred', 'Starred') },
+            { value: '__divider_1__' as const, label: '' },
+            { value: 'in_progress', label: t('tasks_index.status_in_progress', 'Onderhanden') },
+            { value: 'starred', label: t('tasks_index.status_starred', 'Gemarkeerd') },
             { value: 'backlog', label: t('tasks_index.status_backlog', 'Backlog') },
+            { value: 'assigned', label: t('tasks_index.status_assigned', 'Toegewezen') },
+            { value: '__divider_2__' as const, label: '' },
+            { value: 'migrated', label: t('tasks_index.status_migrated', 'Gemigreerd') },
+            { value: 'canceled', label: t('tasks_index.status_canceled', 'Geannuleerd') },
+            { value: '__divider_3__' as const, label: '' },
+            { value: 'completed', label: t('tasks_index.status_completed', 'Afgerond') },
         ],
         [t],
     );
@@ -1862,6 +1865,10 @@ export default function TasksIndex({
                                 <PopoverContent className="w-[240px] p-0" align="start">
                                     <div className="p-1">
                                         {statusOptions.map((option) => {
+                                            if (option.value.startsWith('__divider_')) {
+                                                return <hr key={option.value} className="-mx-1 my-1 border-border" />;
+                                            }
+
                                             const checked = localFilters.status.includes(option.value);
 
                                             return (
