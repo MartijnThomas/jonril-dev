@@ -225,7 +225,16 @@ export const WikiLinkMark = Mark.create({
                             return false;
                         }
 
-                        const href = element.getAttribute('data-href');
+                        const noteId = element.getAttribute('data-note-id');
+                        const storedHref = element.getAttribute('data-href');
+
+                        let href: string | null = storedHref;
+                        if (noteId) {
+                            const wsMatch = window.location.pathname.match(/^\/w\/([^/]+)\//);
+                            const wsSlug = wsMatch ? decodeURIComponent(wsMatch[1] ?? '') : null;
+                            href = wsSlug ? `/w/${wsSlug}/notes/${noteId}` : `/notes/${noteId}`;
+                        }
+
                         if (!href) {
                             return false;
                         }

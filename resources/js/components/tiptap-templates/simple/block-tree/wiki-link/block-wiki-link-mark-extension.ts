@@ -262,7 +262,9 @@ export const BlockWikiLinkMark = Mark.create<{
                 noteId,
                 targetBlockId || null,
             );
-            const baseHref = rawHref || fallbackHref;
+            // Prefer UUID-based URL when noteId is available so stale slug-based
+            // hrefs stored in existing documents don't break navigation.
+            const baseHref = noteId ? fallbackHref : rawHref || fallbackHref;
 
             if (targetBlockId === '' || baseHref.includes('#')) {
                 return baseHref;
