@@ -760,15 +760,13 @@ class NotesController extends Controller
             return array_reverse($trail);
         };
 
-        // Memoised workspace-wide notes for the deferred editor-suggestions group.
-        // Only executed when the deferred request comes in, not on first render.
-        $workspaceNotesCache = null;
-        $getWorkspaceNotes = function () use (&$workspaceNotesCache, $workspaceId): \Illuminate\Support\Collection {
-            return $workspaceNotesCache ??= Note::query()
-                ->where('workspace_id', $workspaceId)
-                ->orderBy('created_at')
-                ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity']);
-        };
+        $allNotes = Note::query()
+            ->where('workspace_id', $workspaceId)
+            ->orderBy('created_at')
+            ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity']);
+        $allNotesPathById = [];
+        $allNotesById = $allNotes->keyBy('id');
+        $resolveAllNotesPath = fn (string $id) => $this->resolveNotePath($id, $allNotesById, $allNotesPathById);
 
         $noteTrail = $buildTrail($note->id);
         if ($noteTrail === []) {
@@ -916,30 +914,18 @@ class NotesController extends Controller
                 'historyUrl' => route('notes.revisions', ['noteId' => $note->id]),
             ],
             'properties' => $note->properties ?? [],
-            'linkableNotes' => Inertia::defer(function () use ($getWorkspaceNotes) {
-                $allNotes = $getWorkspaceNotes();
-                $pathById = [];
-                $noteById = $allNotes->keyBy('id');
-                $resolvePath = fn (string $id) => $this->resolveNotePath($id, $noteById, $pathById);
-
-                return $allNotes
-                    ->map(fn (Note $linkableNote) => [
-                        'id' => $linkableNote->id,
-                        'title' => $linkableNote->title ?? 'Untitled',
-                        'path' => $linkableNote->parent_id
-                            ? $resolvePath($linkableNote->parent_id)
-                            : null,
-                        'href' => $this->noteSlugService->urlFor($linkableNote),
-                        'headings' => $this->extractLinkableHeadings($linkableNote),
-                    ])
-                    ->values();
-            }, 'editor-suggestions'),
-            'moveParentOptions' => Inertia::defer(function () use ($getWorkspaceNotes, $note) {
-                $allNotes = $getWorkspaceNotes();
-                $pathById = [];
-                $noteById = $allNotes->keyBy('id');
-                $resolvePath = fn (string $id) => $this->resolveNotePath($id, $noteById, $pathById);
-
+            'linkableNotes' => $allNotes
+                ->map(fn (Note $linkableNote) => [
+                    'id' => $linkableNote->id,
+                    'title' => $linkableNote->title ?? 'Untitled',
+                    'path' => $linkableNote->parent_id
+                        ? $resolveAllNotesPath($linkableNote->parent_id)
+                        : null,
+                    'href' => $this->noteSlugService->urlFor($linkableNote),
+                    'headings' => $this->extractLinkableHeadings($linkableNote),
+                ])
+                ->values(),
+            'moveParentOptions' => (function () use ($allNotes, $resolveAllNotesPath, $note): \Illuminate\Support\Collection {
                 $childrenByParent = $allNotes
                     ->filter(fn (Note $candidate) => $candidate->parent_id !== null)
                     ->groupBy('parent_id');
@@ -965,11 +951,11 @@ class NotesController extends Controller
                     ->map(fn (Note $candidate) => [
                         'id' => $candidate->id,
                         'title' => $candidate->display_title,
-                        'path' => $candidate->parent_id ? $resolvePath($candidate->parent_id) : null,
+                        'path' => $candidate->parent_id ? $resolveAllNotesPath($candidate->parent_id) : null,
                     ])
                     ->sortBy(fn (array $candidate) => strtolower((string) $candidate['path'].' '.$candidate['title']))
                     ->values();
-            }, 'editor-suggestions'),
+            })(),
             'meetingChildren' => $meetingChildren,
             'meetingEvent' => $meetingEvent,
             'breadcrumbs' => $breadcrumbs,
@@ -980,12 +966,10 @@ class NotesController extends Controller
             'backlinks' => Inertia::defer(function () use ($note) {
                 return $this->noteRelatedPanelBuilder->backlinks($note);
             }, 'related-panel'),
-            'workspaceSuggestions' => Inertia::defer(function () {
-                return [
-                    'mentions' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->mention_suggestions),
-                    'hashtags' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->hashtag_suggestions),
-                ];
-            }, 'editor-suggestions'),
+            'workspaceSuggestions' => [
+                'mentions' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->mention_suggestions),
+                'hashtags' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->hashtag_suggestions),
+            ],
         ]);
     }
 

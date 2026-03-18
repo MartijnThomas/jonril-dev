@@ -150,22 +150,20 @@ test('show includes linkable note headings metadata for wiki-link heading sugges
         ->actingAs($user)
         ->get(scoped_note_url($workspace, $viewer->slug))
         ->assertInertia(fn (Assert $page) => $page
-            ->loadDeferredProps('editor-suggestions', fn (Assert $deferred) => $deferred
-                ->where('linkableNotes', function ($linkableNotes) use ($target): bool {
-                    $match = collect($linkableNotes)->first(
-                        fn (array $item) => ($item['id'] ?? null) === $target->id,
-                    );
-                    if (! is_array($match)) {
-                        return false;
-                    }
+            ->where('linkableNotes', function ($linkableNotes) use ($target): bool {
+                $match = collect($linkableNotes)->first(
+                    fn (array $item) => ($item['id'] ?? null) === $target->id,
+                );
+                if (! is_array($match)) {
+                    return false;
+                }
 
-                    return ($match['headings'] ?? null) === [[
-                        'id' => 'h-1',
-                        'title' => 'First heading',
-                        'level' => 1,
-                    ]];
-                }),
-            ),
+                return ($match['headings'] ?? null) === [[
+                    'id' => 'h-1',
+                    'title' => 'First heading',
+                    'level' => 1,
+                ]];
+            }),
         );
 });
 
