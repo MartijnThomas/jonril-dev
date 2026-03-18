@@ -20,6 +20,7 @@ class TasksController extends Controller
     public function __construct(
         private readonly NoteSlugService $noteSlugService,
         private readonly JournalNoteService $journalNoteService,
+        private readonly TaskSearchController $taskSearchController,
     ) {}
 
     public function index(Request $request)
@@ -54,7 +55,7 @@ class TasksController extends Controller
 
         // Redirect to default preset when the page is visited with no filters.
         $filterKeys = ['status', 'date_preset', 'date_from', 'date_to', 'workspace_ids', 'workspace_id',
-            'note_scope_ids', 'note_scope_id', 'group_by', 'hashtag', 'show_completed'];
+            'note_scope_ids', 'note_scope_id', 'group_by', 'hashtag', 'show_completed', 'q'];
         if (! $request->hasAny($filterKeys)) {
             $defaultPreset = collect($this->taskFilterPresetsForUser($user))
                 ->first(fn (array $p) => (bool) ($p['default'] ?? false));
@@ -113,10 +114,12 @@ class TasksController extends Controller
             'group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
             'show_completed' => ['nullable', 'boolean'],
             'hashtag' => ['nullable', 'string', 'max:120'],
+            'q' => ['nullable', 'string', 'max:160'],
         ]);
 
         $showCompleted = $request->boolean('show_completed');
         $hashtag = ltrim(trim((string) ($filters['hashtag'] ?? '')), '#');
+        $searchQuery = trim((string) ($filters['q'] ?? ''));
 
         $selectedWorkspaceIds = collect($filters['workspace_ids'] ?? [])
             ->map(fn ($id) => is_string($id) ? trim($id) : '')
@@ -199,6 +202,21 @@ class TasksController extends Controller
 
         if ($hashtag !== '') {
             $query->whereJsonContains('hashtags', $hashtag);
+        }
+
+        if ($searchQuery !== '') {
+            $workspaceScopeForSearch = $selectedWorkspaceIds->isEmpty()
+                ? $workspaceIds
+                : $selectedWorkspaceIds->values()->all();
+            $matchingTaskIds = $this->taskSearchController->matchingTaskIdsForWorkspaces(
+                $searchQuery,
+                $workspaceScopeForSearch,
+            );
+            if ($matchingTaskIds === []) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn('id', $matchingTaskIds);
+            }
         }
 
         $datePreset = is_string($filters['date_preset'] ?? null)
@@ -364,6 +382,7 @@ class TasksController extends Controller
                 'status' => $selectedStatuses->values()->all(),
                 'show_completed' => $showCompleted,
                 'hashtag' => $hashtag,
+                'q' => $searchQuery,
             ],
             'filterPresets' => $this->taskFilterPresetsForUser($user),
             'notes' => $notes,
@@ -1237,7 +1256,8 @@ class TasksController extends Controller
      *   date_from: string,
      *   date_to: string,
      *   status: array<int, string>,
-     *   group_by: 'none'|'note'|'date'
+     *   group_by: 'none'|'note'|'date',
+     *   q: string
      * }
      */
     private function normalizeTaskPresetFilters(array $filters): array
@@ -1283,6 +1303,7 @@ class TasksController extends Controller
             'date_to' => is_string($filters['date_to'] ?? null) ? trim((string) $filters['date_to']) : '',
             'status' => $statuses !== [] ? $statuses : ['open'],
             'group_by' => $groupBy,
+            'q' => is_string($filters['q'] ?? null) ? trim((string) $filters['q']) : '',
         ];
     }
 

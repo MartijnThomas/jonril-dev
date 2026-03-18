@@ -812,6 +812,9 @@ test('tasks index exposes journal_date for tasks in daily journal notes', functi
 });
 
 test('note model events keep task index in sync', function () {
+    config()->set('scout.driver', 'collection');
+    config()->set('scout.queue', false);
+
     $user = User::factory()->create();
 
     $note = $user->notes()->create([
@@ -973,6 +976,125 @@ test('tasks index defaults to current workspace and can filter by workspace', fu
             ->where('tasks.data.0.note.id', $secondaryNote->id)
             ->where('tasks.data.0.content', 'Secondary workspace task'),
         );
+});
+
+test('tasks index combines q with workspace and status filters', function () {
+    config()->set('scout.driver', 'collection');
+    config()->set('scout.queue', false);
+
+    $user = User::factory()->create();
+    $primaryWorkspace = $user->currentWorkspace();
+    expect($primaryWorkspace)->not->toBeNull();
+
+    $secondaryWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'name' => 'Secondary',
+    ]);
+    $user->workspaces()->syncWithoutDetaching([
+        $secondaryWorkspace->id => ['role' => 'owner'],
+    ]);
+
+    Note::query()->create([
+        'workspace_id' => $primaryWorkspace->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Planning note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => ['checked' => false],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [['type' => 'text', 'text' => 'Plan release']],
+                        ]],
+                    ],
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => ['checked' => true],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [['type' => 'text', 'text' => 'Plan retro']],
+                        ]],
+                    ],
+                ],
+            ]],
+        ],
+    ]);
+
+    Note::query()->create([
+        'workspace_id' => $secondaryWorkspace->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Planning note secondary',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => ['checked' => false],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Plan secondary sprint']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks?q=Plan&workspace_ids[]='.$primaryWorkspace->id.'&status[]=open')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/index')
+            ->where('filters.q', 'Plan')
+            ->where('filters.workspace_ids', [$primaryWorkspace->id])
+            ->where('filters.status', ['open'])
+            ->has('tasks.data', 1)
+            ->where('tasks.data.0.content', 'Plan release'));
+});
+
+test('tasks search endpoint returns matching task ids for allowed workspaces', function () {
+    config()->set('scout.driver', 'collection');
+    config()->set('scout.queue', false);
+
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    expect($workspace)->not->toBeNull();
+
+    $matchingNote = Note::query()->create([
+        'workspace_id' => $workspace->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Search tasks note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => ['checked' => false],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Plan milestone']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $matchingTaskId = NoteTask::query()
+        ->where('note_id', $matchingNote->id)
+        ->value('id');
+
+    $this
+        ->actingAs($user)
+        ->getJson('/tasks/search?q=Plan&workspace_ids[]='.$workspace->id)
+        ->assertSuccessful()
+        ->assertJson([
+            'task_ids' => [$matchingTaskId],
+        ]);
 });
 
 test('tasks index note tree filter matches selected note and its direct children', function () {

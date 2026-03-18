@@ -21,6 +21,7 @@ export type Filters = {
     date_to: string;
     status: string[];
     group_by: 'none' | 'note' | 'date';
+    q: string;
 };
 
 export type FilterPreset = {
@@ -58,6 +59,7 @@ export function useTaskFilters({
                 ? initialFilters.note_scope_ids
                 : [],
         group_by: initialFilters.group_by ?? 'none',
+        q: initialFilters.q ?? '',
     });
 
     const [savePresetOpen, setSavePresetOpen] = useState(false);
@@ -179,6 +181,7 @@ export function useTaskFilters({
                 state.group_by && ['none', 'note', 'date'].includes(state.group_by)
                     ? state.group_by
                     : 'none',
+            q: state.q?.trim() ?? '',
         };
     };
 
@@ -213,6 +216,7 @@ export function useTaskFilters({
         }
         if (state.status.length > 0) { query.status = state.status; }
         if (state.group_by) { query.group_by = state.group_by; }
+        if (state.q.trim() !== '') { query.q = state.q.trim(); }
 
         return query;
     };
@@ -249,6 +253,7 @@ export function useTaskFilters({
                     ? [...preset.filters.status]
                     : ['open'],
             group_by: preset.filters.group_by ?? 'none',
+            q: preset.filters.q ?? '',
         };
 
         setLocalFilters(normalized);

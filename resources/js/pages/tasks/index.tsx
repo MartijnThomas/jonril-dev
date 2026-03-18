@@ -12,6 +12,7 @@ import {
     ChevronRight,
     Home,
     Filter,
+    Search,
     Settings2,
     Star,
     X,
@@ -237,6 +238,7 @@ export default function TasksIndex({
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [relativeNow, setRelativeNow] = useState<number>(() => Date.now());
     const [expandedTaskIds, setExpandedTaskIds] = useState<number[]>([]);
+    const [searchInput, setSearchInput] = useState(filters.q ?? '');
 
     const favoriteFilterPresets = useMemo(
         () => filterPresets.filter((preset) => preset.favorite),
@@ -254,6 +256,10 @@ export default function TasksIndex({
 
         return () => window.clearInterval(timer);
     }, []);
+
+    useEffect(() => {
+        setSearchInput(localFilters.q ?? '');
+    }, [localFilters.q]);
     const updateTaskChecked = (
         task: TaskItem,
         checked: boolean,
@@ -1085,12 +1091,20 @@ export default function TasksIndex({
             });
         }
 
+        if (localFilters.q.trim() !== '') {
+            pills.push({
+                key: 'search',
+                label: localFilters.q.trim(),
+            });
+        }
+
         return pills;
     }, [
         formatDateRangeLabel,
         groupingSelectionLabel,
         hasDateFilterSelection,
         localFilters.group_by,
+        localFilters.q,
         localFilters.status,
         selectionPills,
         statusSelectionLabels,
@@ -1407,6 +1421,47 @@ export default function TasksIndex({
                             mobileFiltersOpen ? 'block' : 'hidden md:block',
                         )}
                     >
+                        <form
+                            className="flex items-center gap-2"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                applyFilters({ q: searchInput.trim() }, true);
+                            }}
+                        >
+                            <div className="relative flex-1">
+                                <Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    value={searchInput}
+                                    onChange={(event) =>
+                                        setSearchInput(event.target.value)
+                                    }
+                                    placeholder={t(
+                                        'tasks_index.search_placeholder',
+                                        'Search tasks, notes, parents...',
+                                    )}
+                                    className="pl-8"
+                                />
+                            </div>
+                            <Button type="submit" variant="secondary" size="sm">
+                                {t('tasks_index.apply', 'Apply')}
+                            </Button>
+                            {localFilters.q.trim() !== '' ? (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setSearchInput('');
+                                        applyFilters({ q: '' }, true);
+                                    }}
+                                >
+                                    {t(
+                                        'tasks_index.clear_selection',
+                                        'Clear selection',
+                                    )}
+                                </Button>
+                            ) : null}
+                        </form>
                         <div className="grid grid-cols-1 gap-3 md:flex md:items-start md:justify-between md:gap-4">
                             <Popover>
                                 <div className="min-w-0">

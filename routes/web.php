@@ -6,6 +6,7 @@ use App\Http\Controllers\DocumentationController;
 use App\Http\Controllers\NotesController;
 use App\Http\Controllers\SidebarEventsController;
 use App\Http\Controllers\TasksController;
+use App\Http\Controllers\TaskSearchController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceSuggestionController;
 use App\Http\Controllers\WorkspaceSwitchController;
@@ -162,6 +163,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('tasks', [TasksController::class, 'index'])
         ->name('tasks.index');
+    Route::get('tasks/search', TaskSearchController::class)
+        ->name('tasks.search');
     Route::get('docs', [DocumentationController::class, 'index'])
         ->name('docs.index');
     Route::get('docs/{slug}', [DocumentationController::class, 'show'])
