@@ -412,7 +412,7 @@ class CommandSearchController extends Controller
         $indexName = (string) config('scout.prefix', '').(new Note)->searchableAs();
         $options = [
             'limit' => max(1, min($limit, 100)),
-            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'journal_path_nl', 'journal_path_en', 'headings', 'headings_with_level'],
+            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'journal_path_nl', 'journal_path_en', 'headings', 'headings_with_level', 'content_text'],
             'showMatchesPosition' => true,
             'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
             'attributesToSearchOn' => array_values(array_filter([
@@ -421,6 +421,7 @@ class CommandSearchController extends Controller
                 $includeNotes ? 'journal_path_nl' : null,
                 $includeNotes ? 'journal_path_en' : null,
                 $includeHeadings ? 'headings' : null,
+                $includeNotes ? 'content_text' : null,
             ])),
         ];
 
@@ -431,14 +432,14 @@ class CommandSearchController extends Controller
             : ($response['hits'] ?? []);
 
         return collect($hits)
-            ->map(function (array $hit): ?array {
+            ->map(function (array $hit) use ($query): ?array {
                 $id = (string) ($hit['id'] ?? '');
                 if ($id === '') {
                     return null;
                 }
 
                 $matchSource = $this->matchSourceFromHit($hit);
-                $matchText = $this->matchTextFromHit($hit, $matchSource);
+                $matchText = $this->matchTextFromHit($hit, $matchSource, $query);
 
                 return [
                     'id' => $id,
@@ -469,6 +470,9 @@ class CommandSearchController extends Controller
         }
         if (isset($positions['headings'])) {
             return 'heading';
+        }
+        if (isset($positions['content_text'])) {
+            return 'content';
         }
 
         return null;
@@ -584,7 +588,7 @@ class CommandSearchController extends Controller
             ]);
     }
 
-    private function matchTextFromHit(array $hit, ?string $matchSource): ?string
+    private function matchTextFromHit(array $hit, ?string $matchSource, string $query): ?string
     {
         if ($matchSource === 'title') {
             return is_string($hit['title'] ?? null) ? $hit['title'] : null;
@@ -627,6 +631,74 @@ class CommandSearchController extends Controller
             $fallback = $headings[$matchIndex] ?? $headings[0] ?? null;
 
             return is_string($fallback) ? "### {$fallback}" : null;
+        }
+
+        if ($matchSource === 'content') {
+            return $this->contentSnippetFromHit($hit, $query);
+        }
+
+        return null;
+    }
+
+    private function contentSnippetFromHit(array $hit, string $query): ?string
+    {
+        $content = $hit['content_text'] ?? null;
+        if (! is_string($content) || trim($content) === '') {
+            return null;
+        }
+
+        $cleanContent = trim(preg_replace('/\s+/u', ' ', $content) ?? $content);
+        if ($cleanContent === '') {
+            return null;
+        }
+
+        $start = $this->contentMatchStartFromHit($hit);
+        if ($start === null && trim($query) !== '') {
+            $position = mb_stripos($cleanContent, trim($query));
+            $start = $position !== false ? $position : null;
+        }
+
+        if ($start === null) {
+            $snippet = mb_substr($cleanContent, 0, 120);
+
+            return mb_strlen($cleanContent) > mb_strlen($snippet)
+                ? rtrim($snippet).'...'
+                : $snippet;
+        }
+
+        $before = 40;
+        $after = 80;
+        $snippetStart = max(0, $start - $before);
+        $snippetLength = $before + $after + 20;
+        $snippet = trim(mb_substr($cleanContent, $snippetStart, $snippetLength));
+        if ($snippet === '') {
+            return null;
+        }
+
+        if ($snippetStart > 0) {
+            $snippet = '...'.$snippet;
+        }
+        if (($snippetStart + $snippetLength) < mb_strlen($cleanContent)) {
+            $snippet .= '...';
+        }
+
+        return $snippet;
+    }
+
+    private function contentMatchStartFromHit(array $hit): ?int
+    {
+        $positions = $hit['_matchesPosition']['content_text'] ?? null;
+        if (! is_array($positions) || $positions === []) {
+            return null;
+        }
+
+        $first = $positions[0] ?? null;
+        if (! is_array($first)) {
+            return null;
+        }
+
+        if (isset($first['start']) && is_numeric($first['start'])) {
+            return (int) $first['start'];
         }
 
         return null;

@@ -163,6 +163,7 @@ class Note extends Model
             'journal_path_en' => $this->journalSearchPath('en'),
             'headings' => $headings,
             'headings_with_level' => $headingsWithLevel,
+            'content_text' => $extracted['content_text'] ?? '',
             'workspace_id' => $this->workspace_id,
             'type' => $this->type,
             'journal_granularity' => $this->journal_granularity,

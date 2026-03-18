@@ -147,6 +147,7 @@ return [
                     'journal_path_nl',
                     'journal_path_en',
                     'headings',
+                    'content_text',
                 ],
                 'filterableAttributes' => [
                     'workspace_id',

@@ -36,6 +36,7 @@ test('note searchable payload includes parent path titles', function () {
         'journal_path_en' => null,
         'headings' => ['Auth Work'],
         'headings_with_level' => ['## Auth Work'],
+        'content_text' => 'Auth Work',
         'workspace_id' => $child->workspace_id,
         'type' => Note::TYPE_NOTE,
         'journal_granularity' => null,

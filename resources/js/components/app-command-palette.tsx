@@ -34,7 +34,7 @@ type NoteSearchItem = {
     journal_granularity?: string | null;
     icon?: string | null;
     icon_color?: string | null;
-    match_source?: 'title' | 'path' | 'heading' | null;
+    match_source?: 'title' | 'path' | 'heading' | 'content' | null;
     match_text?: string | null;
 };
 
@@ -780,19 +780,28 @@ export function AppCommandPalette() {
 
     const renderResultDetails = (item: NoteSearchItem) => {
         const pathText = item.path ?? item.href;
-        const headingText = typeof item.match_text === 'string' ? item.match_text : '';
+        const matchText = typeof item.match_text === 'string' ? item.match_text : '';
 
-        if (item.match_source === 'heading' && headingText.trim() !== '') {
+        if (item.match_source === 'heading' && matchText.trim() !== '') {
             return (
                 <>
                     <div className="truncate text-xs text-muted-foreground">{pathText}</div>
-                    {renderHighlightedLine(headingText, 'truncate text-xs text-muted-foreground')}
+                    {renderHighlightedLine(matchText, 'truncate text-xs text-muted-foreground')}
                 </>
             );
         }
 
         if (item.match_source === 'path' && pathText.trim() !== '') {
             return renderHighlightedLine(pathText, 'truncate text-xs text-muted-foreground');
+        }
+
+        if (item.match_source === 'content' && matchText.trim() !== '') {
+            return (
+                <>
+                    <div className="truncate text-xs text-muted-foreground">{pathText}</div>
+                    {renderHighlightedLine(matchText, 'truncate text-xs text-muted-foreground')}
+                </>
+            );
         }
 
         return <div className="truncate text-xs text-muted-foreground">{pathText}</div>;
