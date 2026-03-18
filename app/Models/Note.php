@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\NoteSearchExtractor;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -157,13 +158,21 @@ class Note extends Model
             ->all();
 
         return [
+            'id' => $this->id,
             'title' => $this->display_title,
+            'workspace_slug' => $this->searchWorkspaceSlug(),
+            'href' => $this->searchHref(),
+            'path' => $this->path,
             'path_titles' => implode(' / ', $pathSegments),
             'journal_path_nl' => $this->journalSearchPath('nl'),
             'journal_path_en' => $this->journalSearchPath('en'),
+            'journal_period' => $this->searchJournalPeriod(),
             'headings' => $headings,
             'headings_with_level' => $headingsWithLevel,
             'content_text' => $extracted['content_text'] ?? '',
+            'icon' => $this->icon,
+            'icon_color' => $this->icon_color,
+            'icon_bg' => $this->icon_bg,
             'workspace_id' => $this->workspace_id,
             'type' => $this->type,
             'journal_granularity' => $this->journal_granularity,
@@ -274,6 +283,58 @@ class Note extends Model
         $trimmed = trim($title);
 
         return $trimmed !== '' ? $trimmed : 'Untitled';
+    }
+
+    private function searchWorkspaceSlug(): string
+    {
+        $loadedSlug = $this->workspace?->slug;
+        if (is_string($loadedSlug) && trim($loadedSlug) !== '') {
+            return trim($loadedSlug);
+        }
+
+        $workspace = Workspace::query()
+            ->where('id', $this->workspace_id)
+            ->select(['id', 'slug'])
+            ->first();
+
+        return is_string($workspace?->slug) && trim($workspace->slug) !== ''
+            ? trim($workspace->slug)
+            : 'workspace';
+    }
+
+    private function searchHref(): string
+    {
+        $workspaceSlug = $this->searchWorkspaceSlug();
+        if (
+            $this->type === self::TYPE_JOURNAL
+            && is_string($this->journal_granularity)
+            && $this->journal_granularity !== ''
+            && $this->journal_date !== null
+        ) {
+            $period = $this->searchJournalPeriod();
+            if (is_string($period) && $period !== '') {
+                return "/w/{$workspaceSlug}/journal/{$period}";
+            }
+        }
+
+        return "/w/{$workspaceSlug}/notes/{$this->id}";
+    }
+
+    private function searchJournalPeriod(): ?string
+    {
+        if (
+            $this->type !== self::TYPE_JOURNAL
+            || ! is_string($this->journal_granularity)
+            || $this->journal_granularity === ''
+            || $this->journal_date === null
+        ) {
+            return null;
+        }
+
+        return app(JournalNoteService::class)->periodFor(
+            $this->journal_granularity,
+            $this->journal_date,
+        );
     }
 
     /**

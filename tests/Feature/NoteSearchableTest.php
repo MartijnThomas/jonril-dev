@@ -29,14 +29,24 @@ test('note searchable payload includes parent path titles', function () {
         ],
     ]);
 
+    $workspaceSlug = $child->workspace?->slug;
+
     expect($child->toSearchableArray())->toBe([
+        'id' => $child->id,
         'title' => 'Fix auth flow',
+        'workspace_slug' => $workspaceSlug,
+        'href' => "/w/{$workspaceSlug}/notes/{$child->id}",
+        'path' => 'Engineering / Fix auth flow',
         'path_titles' => 'Engineering',
         'journal_path_nl' => null,
         'journal_path_en' => null,
+        'journal_period' => null,
         'headings' => ['Auth Work'],
         'headings_with_level' => ['## Auth Work'],
         'content_text' => 'Auth Work',
+        'icon' => null,
+        'icon_color' => null,
+        'icon_bg' => null,
         'workspace_id' => $child->workspace_id,
         'type' => Note::TYPE_NOTE,
         'journal_granularity' => null,

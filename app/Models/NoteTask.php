@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Notes\JournalNoteService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Laravel\Scout\Searchable;
@@ -68,12 +69,49 @@ class NoteTask extends Model
      */
     public function toSearchableArray(): array
     {
+        $note = $this->relationLoaded('note')
+            ? $this->note
+            : $this->note()->select([
+                'id',
+                'workspace_id',
+                'title',
+                'slug',
+                'type',
+                'properties',
+                'journal_granularity',
+                'journal_date',
+                'parent_id',
+            ])->first();
+        $workspaceSlug = $this->searchWorkspaceSlug();
+        $noteDisplayTitle = $note?->display_title ?? (is_string($this->note_title) ? $this->note_title : 'Untitled');
+        $notePath = $note?->path ?? $noteDisplayTitle;
+        $noteJournalPathNl = $note?->journalSearchPath('nl');
+        $noteJournalPathEn = $note?->journalSearchPath('en');
+        $noteHref = $this->searchNoteHref($note, $workspaceSlug);
+        $taskHref = $noteHref !== null && is_string($this->block_id) && trim($this->block_id) !== ''
+            ? "{$noteHref}#{$this->block_id}"
+            : $noteHref;
+
         return [
+            'id' => $this->id,
             'note_title' => $this->note_title,
             'parent_note_title' => $this->parent_note_title,
             'content_text' => $this->content_text,
             'hashtags' => $this->hashtags ?? [],
             'mentions' => $this->mentions ?? [],
+            'workspace_slug' => $workspaceSlug,
+            'block_id' => $this->block_id,
+            'href' => $taskHref,
+            'note_href' => $noteHref,
+            'note_display_title' => $noteDisplayTitle,
+            'note_path' => $notePath,
+            'note_journal_path_nl' => $noteJournalPathNl,
+            'note_journal_path_en' => $noteJournalPathEn,
+            'note_type' => $note?->type,
+            'note_journal_granularity' => $note?->journal_granularity,
+            'note_icon' => $note?->icon,
+            'note_icon_color' => $note?->icon_color,
+            'note_icon_bg' => $note?->icon_bg,
             'workspace_id' => $this->workspace_id,
             'note_id' => $this->note_id,
             'parent_note_id' => $this->parent_note_id,
@@ -85,6 +123,40 @@ class NoteTask extends Model
             'deadline_date' => $this->deadline_date?->toDateString(),
             'journal_date' => $this->journal_date?->toDateString(),
         ];
+    }
+
+    private function searchWorkspaceSlug(): string
+    {
+        $workspace = $this->relationLoaded('workspace')
+            ? $this->workspace
+            : $this->workspace()->select(['id', 'slug'])->first();
+
+        return is_string($workspace?->slug) && trim($workspace->slug) !== ''
+            ? trim($workspace->slug)
+            : 'workspace';
+    }
+
+    private function searchNoteHref(?Note $note, string $workspaceSlug): ?string
+    {
+        if (! is_string($this->note_id) || trim($this->note_id) === '') {
+            return null;
+        }
+
+        if (
+            $note?->type === Note::TYPE_JOURNAL
+            && is_string($note->journal_granularity)
+            && $note->journal_granularity !== ''
+            && $note->journal_date !== null
+        ) {
+            $period = app(JournalNoteService::class)->periodFor(
+                $note->journal_granularity,
+                $note->journal_date,
+            );
+
+            return "/w/{$workspaceSlug}/journal/{$period}";
+        }
+
+        return "/w/{$workspaceSlug}/notes/{$this->note_id}";
     }
 
     private function normalizedSearchStatus(): string

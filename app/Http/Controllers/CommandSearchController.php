@@ -139,72 +139,43 @@ class CommandSearchController extends Controller
             return [];
         }
 
-        $matchMetaById = collect();
         if ($this->usesMeilisearchDriver()) {
-            $matches = $this->matchingNotesViaMeilisearch(
+            return $this->matchingNotesViaMeilisearch(
                 query: $query,
                 workspaceIds: $workspaceIds,
                 includeNotes: $includeNotes,
                 includeJournal: $includeJournal,
                 includeHeadings: $includeHeadings,
                 limit: $limit,
+                userLocale: $this->userLocaleForSearch(),
             );
-            $noteIds = collect($matches)
-                ->pluck('id')
-                ->values()
-                ->all();
-            if ($noteIds === []) {
-                return [];
-            }
-            $matchMetaById = collect($matches)->keyBy('id');
-
-            $notesById = Note::query()
-                ->whereIn('id', $noteIds)
-                ->get([
-                    'id',
-                    'workspace_id',
-                    'title',
-                    'slug',
-                    'type',
-                    'properties',
-                    'journal_granularity',
-                    'journal_date',
-                    'parent_id',
-                ])
-                ->keyBy('id');
-
-            $notes = collect($noteIds)
-                ->map(fn (string $noteId) => $notesById->get($noteId))
-                ->filter()
-                ->values();
-        } else {
-            $notes = Note::search($query)
-                ->query(fn (Builder $queryBuilder) => $queryBuilder
-                    ->whereIn('workspace_id', $workspaceIds)
-                    ->when(! $includeJournal, fn (Builder $innerQueryBuilder) => $this->applyNoteTypeConstraint($innerQueryBuilder, false))
-                )
-                ->take($limit)
-                ->get([
-                    'id',
-                    'workspace_id',
-                    'title',
-                    'slug',
-                    'type',
-                    'properties',
-                    'journal_granularity',
-                    'journal_date',
-                    'parent_id',
-                ]);
         }
+
+        $notes = Note::search($query)
+            ->query(fn (Builder $queryBuilder) => $queryBuilder
+                ->whereIn('workspace_id', $workspaceIds)
+                ->when(! $includeJournal, fn (Builder $innerQueryBuilder) => $this->applyNoteTypeConstraint($innerQueryBuilder, false))
+            )
+            ->take($limit)
+            ->get([
+                'id',
+                'workspace_id',
+                'title',
+                'slug',
+                'type',
+                'properties',
+                'journal_granularity',
+                'journal_date',
+                'parent_id',
+            ]);
 
         $journalIconSettings = $this->journalIconSettingsForUser();
         $userLocale = $this->userLocaleForSearch();
 
         return $notes
-            ->map(function (Note $note) use ($journalIconSettings, $matchMetaById, $userLocale): array {
+            ->map(function (Note $note) use ($journalIconSettings, $userLocale): array {
                 $href = $this->noteSlugService->urlFor($note);
                 [$icon, $iconColor] = $this->resolveNoteIconPayload($note, $journalIconSettings);
-                $matchMeta = $matchMetaById->get((string) $note->id);
 
                 return [
                     'id' => $note->id,
@@ -217,8 +188,8 @@ class CommandSearchController extends Controller
                     'icon' => $icon,
                     'icon_color' => $iconColor,
                     'icon_bg' => $note->icon_bg,
-                    'match_source' => is_array($matchMeta) ? ($matchMeta['source'] ?? null) : null,
-                    'match_text' => is_array($matchMeta) ? ($matchMeta['text'] ?? null) : null,
+                    'match_source' => null,
+                    'match_text' => null,
                 ];
             })
             ->values()
@@ -310,9 +281,18 @@ class CommandSearchController extends Controller
             return [];
         }
 
-        $tasks = $this->usesMeilisearchDriver()
-            ? $this->searchTasksViaMeilisearch($query, $workspaceIds, $taskStatuses, $includeJournal, $limit)
-            : $this->searchTasksViaDatabase($query, $workspaceIds, $taskStatuses, $includeJournal, $limit);
+        if ($this->usesMeilisearchDriver()) {
+            return $this->searchTasksViaMeilisearch(
+                query: $query,
+                workspaceIds: $workspaceIds,
+                taskStatuses: $taskStatuses,
+                includeJournal: $includeJournal,
+                limit: $limit,
+                userLocale: $this->userLocaleForSearch(),
+            );
+        }
+
+        $tasks = $this->searchTasksViaDatabase($query, $workspaceIds, $taskStatuses, $includeJournal, $limit);
 
         if ($tasks->isEmpty()) {
             return [];
@@ -393,7 +373,7 @@ class CommandSearchController extends Controller
 
     /**
      * @param  array<int, string>  $workspaceIds
-     * @return array<int, string>
+     * @return array<int, array<string, mixed>>
      */
     private function matchingNotesViaMeilisearch(
         string $query,
@@ -402,6 +382,7 @@ class CommandSearchController extends Controller
         bool $includeJournal,
         bool $includeHeadings,
         int $limit,
+        string $userLocale,
     ): array {
         $host = (string) config('scout.meilisearch.host', '');
         if ($host === '') {
@@ -412,7 +393,25 @@ class CommandSearchController extends Controller
         $indexName = (string) config('scout.prefix', '').(new Note)->searchableAs();
         $options = [
             'limit' => max(1, min($limit, 100)),
-            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'journal_path_nl', 'journal_path_en', 'headings', 'headings_with_level', 'content_text'],
+            'attributesToRetrieve' => [
+                'id',
+                'title',
+                'href',
+                'workspace_slug',
+                'journal_period',
+                'path',
+                'path_titles',
+                'journal_path_nl',
+                'journal_path_en',
+                'headings',
+                'headings_with_level',
+                'content_text',
+                'type',
+                'journal_granularity',
+                'icon',
+                'icon_color',
+                'icon_bg',
+            ],
             'showMatchesPosition' => true,
             'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
             'attributesToSearchOn' => array_values(array_filter([
@@ -432,7 +431,7 @@ class CommandSearchController extends Controller
             : ($response['hits'] ?? []);
 
         return collect($hits)
-            ->map(function (array $hit) use ($query): ?array {
+            ->map(function (array $hit) use ($query, $userLocale): ?array {
                 $id = (string) ($hit['id'] ?? '');
                 if ($id === '') {
                     return null;
@@ -440,11 +439,24 @@ class CommandSearchController extends Controller
 
                 $matchSource = $this->matchSourceFromHit($hit);
                 $matchText = $this->matchTextFromHit($hit, $matchSource, $query);
+                $path = $this->notePathFromHit($hit, $userLocale);
+                $href = is_string($hit['href'] ?? null) && trim($hit['href']) !== ''
+                    ? (string) $hit['href']
+                    : $this->fallbackHrefFromHit($hit);
 
                 return [
                     'id' => $id,
-                    'source' => $matchSource,
-                    'text' => $matchText,
+                    'title' => is_string($hit['title'] ?? null) ? (string) $hit['title'] : 'Untitled',
+                    'href' => $href,
+                    'slug' => null,
+                    'path' => $path,
+                    'type' => is_string($hit['type'] ?? null) ? (string) $hit['type'] : null,
+                    'journal_granularity' => is_string($hit['journal_granularity'] ?? null) ? (string) $hit['journal_granularity'] : null,
+                    'icon' => is_string($hit['icon'] ?? null) ? (string) $hit['icon'] : null,
+                    'icon_color' => is_string($hit['icon_color'] ?? null) ? (string) $hit['icon_color'] : null,
+                    'icon_bg' => is_string($hit['icon_bg'] ?? null) ? (string) $hit['icon_bg'] : null,
+                    'match_source' => $matchSource,
+                    'match_text' => $matchText,
                 ];
             })
             ->filter(fn (?array $value) => is_array($value))
@@ -480,7 +492,7 @@ class CommandSearchController extends Controller
 
     /**
      * @param  array<int, string>  $workspaceIds
-     * @return \Illuminate\Support\Collection<int, NoteTask>
+     * @return array<int, array<string, mixed>>
      */
     private function searchTasksViaMeilisearch(
         string $query,
@@ -488,17 +500,36 @@ class CommandSearchController extends Controller
         array $taskStatuses,
         bool $includeJournal,
         int $limit,
-    ): \Illuminate\Support\Collection {
+        string $userLocale,
+    ): array {
         $host = (string) config('scout.meilisearch.host', '');
         if ($host === '') {
-            return collect();
+            return [];
         }
 
         $client = new Client($host, config('scout.meilisearch.key'));
         $indexName = (string) config('scout.prefix', '').(new NoteTask)->searchableAs();
         $options = [
             'limit' => max(1, min($limit, 100)),
-            'attributesToRetrieve' => ['id'],
+            'attributesToRetrieve' => [
+                'id',
+                'note_id',
+                'block_id',
+                'content_text',
+                'task_status',
+                'checked',
+                'href',
+                'note_href',
+                'note_display_title',
+                'note_path',
+                'note_journal_path_nl',
+                'note_journal_path_en',
+                'note_type',
+                'note_journal_granularity',
+                'note_icon',
+                'note_icon_color',
+                'note_icon_bg',
+            ],
             'attributesToSearchOn' => ['content_text'],
             'filter' => $this->taskFilterExpression(
                 workspaceIds: $workspaceIds,
@@ -511,44 +542,12 @@ class CommandSearchController extends Controller
         $hits = $response instanceof SearchResult
             ? $response->getHits()
             : ($response['hits'] ?? []);
-        $taskIds = collect($hits)
-            ->map(fn (array $hit) => (int) ($hit['id'] ?? 0))
-            ->filter(fn (int $taskId) => $taskId > 0)
+
+        return collect($hits)
+            ->map(fn (array $hit): ?array => $this->taskItemFromSearchHit($hit, $includeJournal, $userLocale))
+            ->filter()
             ->values()
             ->all();
-
-        if ($taskIds === []) {
-            return collect();
-        }
-
-        $tasksById = NoteTask::query()
-            ->whereIn('id', $taskIds)
-            ->whereIn('workspace_id', $workspaceIds)
-            ->where(function (Builder $builder) use ($taskStatuses): void {
-                $this->applyTaskStatusConstraint($builder, $taskStatuses);
-            })
-            ->when(! $includeJournal, fn (Builder $builder) => $builder->whereHas('note', function (Builder $noteQuery): void {
-                $noteQuery->where(function (Builder $inner): void {
-                    $inner->whereNull('type')
-                        ->orWhere('type', '!=', Note::TYPE_JOURNAL);
-                });
-            }))
-            ->with('note:id,type')
-            ->get([
-                'id',
-                'workspace_id',
-                'note_id',
-                'block_id',
-                'content_text',
-                'checked',
-                'task_status',
-            ])
-            ->keyBy('id');
-
-        return collect($taskIds)
-            ->map(fn (int $taskId) => $tasksById->get($taskId))
-            ->filter()
-            ->values();
     }
 
     /**
@@ -722,6 +721,102 @@ class CommandSearchController extends Controller
         }
 
         return null;
+    }
+
+    private function notePathFromHit(array $hit, string $userLocale): string
+    {
+        if ($userLocale === 'nl' && is_string($hit['journal_path_nl'] ?? null) && trim($hit['journal_path_nl']) !== '') {
+            return (string) $hit['journal_path_nl'];
+        }
+
+        if ($userLocale === 'en' && is_string($hit['journal_path_en'] ?? null) && trim($hit['journal_path_en']) !== '') {
+            return (string) $hit['journal_path_en'];
+        }
+
+        if (is_string($hit['path'] ?? null) && trim($hit['path']) !== '') {
+            return (string) $hit['path'];
+        }
+
+        if (is_string($hit['journal_path_nl'] ?? null) && trim($hit['journal_path_nl']) !== '') {
+            return (string) $hit['journal_path_nl'];
+        }
+
+        if (is_string($hit['journal_path_en'] ?? null) && trim($hit['journal_path_en']) !== '') {
+            return (string) $hit['journal_path_en'];
+        }
+
+        if (is_string($hit['path_titles'] ?? null) && trim($hit['path_titles']) !== '') {
+            return (string) $hit['path_titles'];
+        }
+
+        return is_string($hit['title'] ?? null) ? (string) $hit['title'] : 'Untitled';
+    }
+
+    private function fallbackHrefFromHit(array $hit): string
+    {
+        $workspaceSlug = is_string($hit['workspace_slug'] ?? null) && trim($hit['workspace_slug']) !== ''
+            ? trim((string) $hit['workspace_slug'])
+            : 'workspace';
+        $id = is_string($hit['id'] ?? null) ? (string) $hit['id'] : '';
+        if ($id === '') {
+            return "/w/{$workspaceSlug}/notes";
+        }
+
+        if (
+            ($hit['type'] ?? null) === Note::TYPE_JOURNAL
+            && is_string($hit['journal_period'] ?? null)
+            && trim((string) $hit['journal_period']) !== ''
+        ) {
+            return "/w/{$workspaceSlug}/journal/{$hit['journal_period']}";
+        }
+
+        return "/w/{$workspaceSlug}/notes/{$id}";
+    }
+
+    private function taskItemFromSearchHit(array $hit, bool $includeJournal, string $userLocale): ?array
+    {
+        $noteType = is_string($hit['note_type'] ?? null) ? (string) $hit['note_type'] : null;
+        if (! $includeJournal && $noteType === Note::TYPE_JOURNAL) {
+            return null;
+        }
+
+        $taskId = (string) ($hit['id'] ?? '');
+        $noteId = (string) ($hit['note_id'] ?? '');
+        if ($taskId === '' || $noteId === '') {
+            return null;
+        }
+
+        $noteHref = is_string($hit['note_href'] ?? null) ? (string) $hit['note_href'] : null;
+        $taskHref = is_string($hit['href'] ?? null) && trim($hit['href']) !== ''
+            ? (string) $hit['href']
+            : (is_string($noteHref) && trim($noteHref) !== '' && is_string($hit['block_id'] ?? null) && trim((string) $hit['block_id']) !== ''
+                ? "{$noteHref}#{$hit['block_id']}"
+                : $noteHref);
+
+        $path = $userLocale === 'nl'
+            ? (is_string($hit['note_journal_path_nl'] ?? null) && trim($hit['note_journal_path_nl']) !== '' ? (string) $hit['note_journal_path_nl'] : null)
+            : (is_string($hit['note_journal_path_en'] ?? null) && trim($hit['note_journal_path_en']) !== '' ? (string) $hit['note_journal_path_en'] : null);
+        if ($path === null) {
+            $path = is_string($hit['note_path'] ?? null) ? (string) $hit['note_path'] : null;
+        }
+
+        return [
+            'id' => $taskId,
+            'note_id' => $noteId,
+            'title' => (string) ($hit['content_text'] ?? ''),
+            'task_title' => (string) ($hit['content_text'] ?? ''),
+            'note_title' => is_string($hit['note_display_title'] ?? null) ? (string) $hit['note_display_title'] : 'Untitled',
+            'note_href' => $noteHref,
+            'href' => $taskHref ?? '',
+            'path' => $path,
+            'type' => $noteType,
+            'journal_granularity' => is_string($hit['note_journal_granularity'] ?? null) ? (string) $hit['note_journal_granularity'] : null,
+            'icon' => is_string($hit['note_icon'] ?? null) ? (string) $hit['note_icon'] : null,
+            'icon_color' => is_string($hit['note_icon_color'] ?? null) ? (string) $hit['note_icon_color'] : null,
+            'icon_bg' => is_string($hit['note_icon_bg'] ?? null) ? (string) $hit['note_icon_bg'] : null,
+            'task_status' => is_string($hit['task_status'] ?? null) ? (string) $hit['task_status'] : null,
+            'checked' => (bool) ($hit['checked'] ?? false),
+        ];
     }
 
     private function notePathForCommandResult(Note $note, string $locale): string
