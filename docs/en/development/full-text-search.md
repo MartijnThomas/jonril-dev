@@ -165,6 +165,26 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
   - `task_terms` (flattened searchable task terms for this note, derived from `note_tasks`)
 - Add `searchableAs()` for a dedicated index (for example `notes`).
 
+Suggested document shape:
+
+```php
+[
+    'title' => '...',
+    'content_text' => '...',
+    'heading_terms' => ['Sprint planning', 'API decisions'],
+    'mentions' => ['lea', 'mia'],
+    'hashtags' => ['launch', 'backend'],
+    'tags' => ['roadmap'],
+    'property_terms' => ['context', 'acme'],
+    'task_terms' => ['Prepare backlog'],
+    'workspace_id' => '...',
+    'type' => 'note',
+    'journal_granularity' => null,
+    'journal_date' => null,
+    'parent_id' => null,
+]
+```
+
 ### Phase B: Implement deterministic content extraction
 - Create dedicated extractors (for example `NoteSearchTextExtractor` + `NoteSearchMetaExtractor`) that:
   - extract visible body text from note JSON (headings/paragraphs/list/task text)

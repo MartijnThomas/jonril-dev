@@ -50,6 +50,16 @@ it('extracts tags property terms and task terms deterministically', function () 
     );
 
     expect($result['content_text'])->toBe('');
+    expect($result)->toHaveKeys([
+        'content_text',
+        'heading_terms',
+        'mentions',
+        'hashtags',
+        'tags',
+        'property_terms',
+        'task_terms',
+    ]);
+    expect($result['heading_terms'])->toBe([]);
     expect($result['tags'])->toBe(['roadmap', 'backend']);
     expect($result['task_terms'])->toBe(['Prepare backlog', 'Refine sprint']);
     expect($result['property_terms'])->toContain('context');
