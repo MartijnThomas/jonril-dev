@@ -6,6 +6,7 @@ import {
     ChevronLeft,
     ChevronRight,
     LoaderCircle,
+    Search,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
@@ -259,6 +260,9 @@ export function AppSidebarHeader({
     const mobileTitle = breadcrumbs.at(-1)?.title ?? '';
     const showMobilePath = isMobile && breadcrumbs.length > 1;
     const headerIconClassName = 'size-[18px]';
+    const openCommandPalette = () => {
+        window.dispatchEvent(new Event('open-command-palette'));
+    };
 
     return (
         <div className="z-20 shrink-0">
@@ -275,6 +279,18 @@ export function AppSidebarHeader({
                 </div>
                 <div className="flex items-center gap-2">
                     <SaveStatusIcon status={saveStatus} />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                        onClick={openCommandPalette}
+                        aria-label="Open command palette"
+                    >
+                        <Search className="size-3.5" />
+                        <span className="hidden sm:inline">Search</span>
+                        <span className="hidden sm:inline text-[10px] text-muted-foreground/80">⌘K</span>
+                    </Button>
                     {isJournal && (
                         <div className="flex items-center gap-1">
                             <Button
