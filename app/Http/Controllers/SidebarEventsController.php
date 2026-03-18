@@ -184,6 +184,7 @@ class SidebarEventsController extends Controller
             Note::query()
                 ->where('type', Note::TYPE_MEETING)
                 ->where('workspace_id', $workspace->id)
+                ->with('workspace:id,slug')
                 ->get(['id', 'meta', 'slug', 'type', 'journal_granularity', 'journal_date', 'workspace_id'])
                 ->each(function (Note $n) use (&$meetingNoteMap): void {
                     $key = is_array($n->meta) ? ($n->meta['event_block_id'] ?? null) : null;
