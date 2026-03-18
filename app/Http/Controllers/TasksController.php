@@ -225,6 +225,7 @@ class TasksController extends Controller
             });
         }
 
+        $hasSearchOrdering = false;
         if ($searchQuery !== '') {
             $workspaceScopeForSearch = $selectedWorkspaceIds->isEmpty()
                 ? $workspaceIds
@@ -243,13 +244,31 @@ class TasksController extends Controller
                 $query->whereRaw('1 = 0');
             } else {
                 $query->whereIn('id', $matchingTaskIds);
+                $orderedIds = implode(',', array_map(
+                    fn ($id) => (string) (int) $id,
+                    $matchingTaskIds,
+                ));
+                if ($orderedIds !== '') {
+                    if (config('database.default') === 'mysql') {
+                        $query->orderByRaw("FIELD(id, {$orderedIds})");
+                    } else {
+                        $cases = collect($matchingTaskIds)
+                            ->values()
+                            ->map(fn ($id, $index) => 'WHEN id = '.(int) $id.' THEN '.(int) $index)
+                            ->implode(' ');
+                        $query->orderByRaw("CASE {$cases} ELSE ".count($matchingTaskIds).' END');
+                    }
+                    $hasSearchOrdering = true;
+                }
             }
         }
 
-        $query
-            ->orderByRaw('due_date IS NULL')
-            ->orderBy('due_date')
-            ->orderBy('updated_at', 'desc');
+        if (! $hasSearchOrdering) {
+            $query
+                ->orderByRaw('due_date IS NULL')
+                ->orderBy('due_date')
+                ->orderBy('updated_at', 'desc');
+        }
 
         $tasks = $query
             ->paginate(50)

@@ -34,6 +34,7 @@ test('note task searchable payload contains scout fields', function (): void {
         'checked' => false,
         'task_status' => 'backlog',
         'search_status' => 'backlog',
+        'search_status_rank' => 70,
         'due_date' => '2026-03-20',
         'deadline_date' => '2026-03-21',
         'journal_date' => '2026-03-19',

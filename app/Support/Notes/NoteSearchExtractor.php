@@ -9,6 +9,12 @@ class NoteSearchExtractor
      * @return array{
      *     content_text: string,
      *     heading_terms: array<int, string>,
+     *     heading_h1_terms: array<int, string>,
+     *     heading_h2_terms: array<int, string>,
+     *     heading_h3_terms: array<int, string>,
+     *     heading_h4_terms: array<int, string>,
+     *     heading_h5_terms: array<int, string>,
+     *     heading_h6_terms: array<int, string>,
      *     mentions: array<int, string>,
      *     hashtags: array<int, string>,
      *     tags: array<int, string>,
@@ -21,12 +27,20 @@ class NoteSearchExtractor
         $mentions = [];
         $hashtags = [];
         $headingTerms = [];
+        $headingTermsByLevel = [
+            1 => [],
+            2 => [],
+            3 => [],
+            4 => [],
+            5 => [],
+            6 => [],
+        ];
 
         $doc = $this->normalizeDoc($content);
         $contentText = '';
         if (is_array($doc)) {
             $contentText = $this->normalizeText(
-                $this->extractNodeText($doc, $mentions, $hashtags, $headingTerms),
+                $this->extractNodeText($doc, $mentions, $hashtags, $headingTerms, $headingTermsByLevel),
             );
         } elseif (is_string($content)) {
             $contentText = $this->normalizeText($content);
@@ -38,6 +52,12 @@ class NoteSearchExtractor
         return [
             'content_text' => $contentText,
             'heading_terms' => $this->normalizeUniqueList($headingTerms),
+            'heading_h1_terms' => $this->normalizeUniqueList($headingTermsByLevel[1]),
+            'heading_h2_terms' => $this->normalizeUniqueList($headingTermsByLevel[2]),
+            'heading_h3_terms' => $this->normalizeUniqueList($headingTermsByLevel[3]),
+            'heading_h4_terms' => $this->normalizeUniqueList($headingTermsByLevel[4]),
+            'heading_h5_terms' => $this->normalizeUniqueList($headingTermsByLevel[5]),
+            'heading_h6_terms' => $this->normalizeUniqueList($headingTermsByLevel[6]),
             'mentions' => $this->normalizeUniqueList($mentions),
             'hashtags' => $this->normalizeUniqueList($hashtags),
             'tags' => $propertyExtraction['tags'],
@@ -69,12 +89,14 @@ class NoteSearchExtractor
      * @param  array<int, string>  $mentions
      * @param  array<int, string>  $hashtags
      * @param  array<int, string>  $headingTerms
+     * @param  array<int, array<int, string>>  $headingTermsByLevel
      */
     private function extractNodeText(
         array $node,
         array &$mentions,
         array &$hashtags,
         array &$headingTerms,
+        array &$headingTermsByLevel,
     ): string {
         $type = (string) ($node['type'] ?? '');
         if ($type === 'text') {
@@ -119,7 +141,13 @@ class NoteSearchExtractor
                 continue;
             }
 
-            $parts[] = $this->extractNodeText($child, $mentions, $hashtags, $headingTerms);
+            $parts[] = $this->extractNodeText(
+                $child,
+                $mentions,
+                $hashtags,
+                $headingTerms,
+                $headingTermsByLevel,
+            );
         }
 
         $combined = implode(' ', $parts);
@@ -127,6 +155,8 @@ class NoteSearchExtractor
             $headingText = $this->normalizeHeadingText($combined);
             if ($headingText !== '') {
                 $headingTerms[] = $headingText;
+                $level = $this->normalizeHeadingLevel($node['attrs']['level'] ?? null);
+                $headingTermsByLevel[$level][] = $headingText;
             }
         }
 
@@ -176,6 +206,17 @@ class NoteSearchExtractor
         $stripped = preg_replace('/^\s*#{1,6}\s+/u', '', $normalized);
 
         return is_string($stripped) ? $stripped : $normalized;
+    }
+
+    private function normalizeHeadingLevel(mixed $value): int
+    {
+        if (is_numeric($value)) {
+            $numeric = (int) $value;
+
+            return max(1, min(6, $numeric));
+        }
+
+        return 6;
     }
 
     private function normalizeTokenLabel(string $value): string

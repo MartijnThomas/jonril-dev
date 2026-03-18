@@ -30,6 +30,12 @@ it('extracts deterministic content text headings mentions and hashtags from note
     expect($result['content_text'])->toContain('Sprint Planning');
     expect($result['content_text'])->toContain('Discuss with @Lea and #Launch team');
     expect($result['heading_terms'])->toBe(['Sprint Planning']);
+    expect($result['heading_h1_terms'])->toBe([]);
+    expect($result['heading_h2_terms'])->toBe(['Sprint Planning']);
+    expect($result['heading_h3_terms'])->toBe([]);
+    expect($result['heading_h4_terms'])->toBe([]);
+    expect($result['heading_h5_terms'])->toBe([]);
+    expect($result['heading_h6_terms'])->toBe([]);
     expect($result['mentions'])->toBe(['lea', 'mia']);
     expect($result['hashtags'])->toBe(['launch']);
 });
@@ -53,6 +59,12 @@ it('extracts tags property terms and task terms deterministically', function () 
     expect($result)->toHaveKeys([
         'content_text',
         'heading_terms',
+        'heading_h1_terms',
+        'heading_h2_terms',
+        'heading_h3_terms',
+        'heading_h4_terms',
+        'heading_h5_terms',
+        'heading_h6_terms',
         'mentions',
         'hashtags',
         'tags',
@@ -60,6 +72,12 @@ it('extracts tags property terms and task terms deterministically', function () 
         'task_terms',
     ]);
     expect($result['heading_terms'])->toBe([]);
+    expect($result['heading_h1_terms'])->toBe([]);
+    expect($result['heading_h2_terms'])->toBe([]);
+    expect($result['heading_h3_terms'])->toBe([]);
+    expect($result['heading_h4_terms'])->toBe([]);
+    expect($result['heading_h5_terms'])->toBe([]);
+    expect($result['heading_h6_terms'])->toBe([]);
     expect($result['tags'])->toBe(['roadmap', 'backend']);
     expect($result['task_terms'])->toBe(['Prepare backlog', 'Refine sprint']);
     expect($result['property_terms'])->toContain('context');
@@ -93,4 +111,6 @@ it('accepts json string content and keeps heading terms unique', function () {
     $result = app(NoteSearchExtractor::class)->extract($content);
 
     expect($result['heading_terms'])->toBe(['Roadmap']);
+    expect($result['heading_h1_terms'])->toBe(['Roadmap']);
+    expect($result['heading_h2_terms'])->toBe(['Roadmap']);
 });

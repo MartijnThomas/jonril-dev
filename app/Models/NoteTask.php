@@ -80,6 +80,7 @@ class NoteTask extends Model
             'checked' => $this->checked,
             'task_status' => $this->task_status,
             'search_status' => $this->normalizedSearchStatus(),
+            'search_status_rank' => $this->normalizedSearchStatusRank(),
             'due_date' => $this->due_date?->toDateString(),
             'deadline_date' => $this->deadline_date?->toDateString(),
             'journal_date' => $this->journal_date?->toDateString(),
@@ -102,6 +103,21 @@ class NoteTask extends Model
         }
 
         return 'open';
+    }
+
+    private function normalizedSearchStatusRank(): int
+    {
+        return match ($this->normalizedSearchStatus()) {
+            'open' => 100,
+            'in_progress' => 90,
+            'assigned' => 80,
+            'backlog' => 70,
+            'starred' => 60,
+            'completed' => 40,
+            'migrated' => 20,
+            'canceled' => 10,
+            default => 0,
+        };
     }
 
     public function note(): BelongsTo
