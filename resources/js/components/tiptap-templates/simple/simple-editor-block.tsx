@@ -442,15 +442,20 @@ function SimpleEditorComponent({
     }, [editor, id, initialContent, readOnly]);
 
     useEffect(() => {
-        if (!editor) {
+        if (!editor || editor.isDestroyed) {
             return;
         }
 
-        editor.view.dom.setAttribute('lang', language);
-        editor.view.dom.setAttribute(
-            'spellcheck',
-            editorSpellcheckEnabled ? 'true' : 'false',
-        );
+        // editor.view throws when called before the view is mounted (immediatelyRender: false)
+        try {
+            editor.view.dom.setAttribute('lang', language);
+            editor.view.dom.setAttribute(
+                'spellcheck',
+                editorSpellcheckEnabled ? 'true' : 'false',
+            );
+        } catch {
+            // view not yet mounted; attributes are already set via editorProps.attributes
+        }
     }, [editor, language, editorSpellcheckEnabled]);
 
     useEffect(() => {
