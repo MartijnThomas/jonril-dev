@@ -819,7 +819,15 @@ export function AppCommandPalette() {
         cn(
             'inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition-colors',
             active
-                ? 'border-primary/40 bg-primary/10 text-primary'
+                ? 'border-transparent bg-primary/10 text-primary'
+                : 'border-border bg-background text-muted-foreground hover:text-foreground',
+        );
+
+    const scopePillClassSmall = (active: boolean) =>
+        cn(
+            'inline-flex h-6 items-center rounded-full border px-2.5 text-[11px] font-medium transition-colors',
+            active
+                ? 'border-transparent bg-primary/10 text-primary'
                 : 'border-border bg-background text-muted-foreground hover:text-foreground',
         );
 
@@ -1027,7 +1035,7 @@ export function AppCommandPalette() {
                                     <button
                                         key={status}
                                         type="button"
-                                        className={scopePillClass(taskStatuses.includes(status))}
+                                        className={scopePillClassSmall(taskStatuses.includes(status))}
                                         onClick={() => toggleTaskStatus(status)}
                                         aria-pressed={taskStatuses.includes(status)}
                                     >
