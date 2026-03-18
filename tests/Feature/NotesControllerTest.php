@@ -29,7 +29,7 @@ test('start creates a note for the authenticated user and redirects to it', func
 
     expect($note)->not()->toBeNull();
     expect($note->slug)->not()->toBeNull();
-    $response->assertRedirect(scoped_note_url($workspace, $note->slug));
+    $response->assertRedirect(scoped_note_url($workspace, $note->id));
 });
 
 test('start initializes block mode notes with an h1 first block', function () {
@@ -75,7 +75,7 @@ test('migrated source workspace is read-only in notes UI and update endpoint', f
     ]);
 
     $this->actingAs($user)
-        ->get(scoped_note_url($workspace, $note->slug))
+        ->get(scoped_note_url($workspace, $note->id))
         ->assertInertia(fn (Assert $page) => $page
             ->where('editorReadOnly', true)
             ->where('noteUpdateUrl', '')
@@ -148,7 +148,7 @@ test('show includes linkable note headings metadata for wiki-link heading sugges
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $viewer->slug))
+        ->get(scoped_note_url($workspace, $viewer->id))
         ->assertInertia(fn (Assert $page) => $page
             ->where('linkableNotes', function ($linkableNotes) use ($target): bool {
                 $match = collect($linkableNotes)->first(
@@ -182,7 +182,7 @@ test('show includes the workspace editor mode', function () {
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $note->slug))
+        ->get(scoped_note_url($workspace, $note->id))
         ->assertInertia(fn (Assert $page) => $page
             ->component('notes/show')
             ->where('noteId', $note->id)
@@ -207,12 +207,12 @@ test('legacy admin sees block preview toggle in note actions', function () {
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $note->slug))
+        ->get(scoped_note_url($workspace, $note->id))
         ->assertInertia(fn (Assert $page) => $page
             ->where('noteActions.canOpenBlockPreview', true)
             ->where(
                 'noteActions.blockPreviewUrl',
-                scoped_note_url($workspace, $note->slug).'?preview_block=1',
+                scoped_note_url($workspace, $note->id).'?preview_block=1',
             ),
         );
 });
@@ -234,7 +234,7 @@ test('legacy non-admin does not see block preview toggle in note actions', funct
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $note->slug))
+        ->get(scoped_note_url($workspace, $note->id))
         ->assertInertia(fn (Assert $page) => $page
             ->where('noteActions.canOpenBlockPreview', false)
             ->where('noteActions.blockPreviewUrl', null),
@@ -285,7 +285,7 @@ test('block workspace renders legacy-shaped note content as block content withou
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $note->slug))
+        ->get(scoped_note_url($workspace, $note->id))
         ->assertInertia(fn (Assert $page) => $page
             ->component('notes/show')
             ->where('editorMode', Workspace::EDITOR_MODE_BLOCK)
@@ -333,7 +333,7 @@ test('legacy workspace supports read-only block preview without mutating note', 
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $note->slug).'?preview_block=1')
+        ->get(scoped_note_url($workspace, $note->id).'?preview_block=1')
         ->assertInertia(fn (Assert $page) => $page
             ->component('notes/show')
             ->where('editorMode', Workspace::EDITOR_MODE_BLOCK)
@@ -419,7 +419,7 @@ test('show includes the user language for the editor', function () {
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $note->slug))
+        ->get(scoped_note_url($workspace, $note->id))
         ->assertInertia(fn (Assert $page) => $page
             ->component('notes/show')
             ->where('language', 'en'),
@@ -451,7 +451,7 @@ test('rename updates db title and rebuilds parent and child slugs', function () 
             'title' => 'Project X',
         ]);
 
-    $response->assertRedirect(scoped_note_url($workspace, 'project-x'));
+    $response->assertRedirect(scoped_note_url($workspace, $parent->id));
 
     $parent->refresh();
     $child->refresh();
@@ -495,7 +495,7 @@ test('rename also updates first heading level one when present', function () {
         ->patch("/notes/{$note->id}/rename", [
             'title' => 'Renamed',
         ])
-        ->assertRedirect(scoped_note_url($workspace, 'renamed'));
+        ->assertRedirect(scoped_note_url($workspace, $note->id));
 
     $note->refresh();
     expect(data_get($note->content, 'content.0.content.0.text'))->toBe('Renamed');
@@ -529,7 +529,7 @@ test('rename does not modify content when no heading level one exists', function
         ->patch("/notes/{$note->id}/rename", [
             'title' => 'Renamed no h1',
         ])
-        ->assertRedirect(scoped_note_url($workspace, 'renamed-no-h1'));
+        ->assertRedirect(scoped_note_url($workspace, $note->id));
 
     $note->refresh();
     expect($note->content)->toBe($originalContent);
@@ -567,7 +567,7 @@ test('move updates parent and rebuilds slug for note and descendants', function 
         ->patch("/notes/{$moving->id}/move", [
             'parent_id' => $rootB->id,
         ])
-        ->assertRedirect(scoped_note_url($workspace, 'root-b/moving'));
+        ->assertRedirect(scoped_note_url($workspace, $moving->id));
 
     $moving->refresh();
     $child->refresh();
@@ -598,7 +598,7 @@ test('move supports moving a note to root', function () {
         ->patch("/notes/{$child->id}/move", [
             'parent_id' => null,
         ])
-        ->assertRedirect(scoped_note_url($workspace, 'child'));
+        ->assertRedirect(scoped_note_url($workspace, $child->id));
 
     $child->refresh();
     expect($child->parent_id)->toBeNull();
@@ -1543,7 +1543,7 @@ test('json save returns updated slug url after h1 title change', function () {
     $response
         ->assertOk()
         ->assertJson([
-            'note_url' => scoped_note_url($workspace, 'new-title'),
+            'note_url' => scoped_note_url($workspace, $note->id),
             'note_update_url' => scoped_note_url($workspace, $note->id),
         ]);
 
@@ -1605,14 +1605,14 @@ test('regular save updates content with unchanged h1 and keeps slug stable', fun
 
     $response = $this
         ->actingAs($user)
-        ->from(scoped_note_url($workspace, $note->slug))
+        ->from(scoped_note_url($workspace, $note->id))
         ->put($url, [
             'content' => $content,
             'properties' => [],
             'save_mode' => 'auto',
         ]);
 
-    $response->assertRedirect(scoped_note_url($workspace, $note->slug));
+    $response->assertRedirect(scoped_note_url($workspace, $note->id));
 
     $note->refresh();
     expect($note->slug)->toBe('stable-title');
@@ -1746,7 +1746,7 @@ test('start can create a child note when parent_id is provided', function () {
 
     expect($child)->not()->toBeNull();
     expect($child->slug)->not()->toBeNull();
-    $response->assertRedirect(scoped_note_url($workspace, $child->slug));
+    $response->assertRedirect(scoped_note_url($workspace, $child->id));
 });
 
 test('start can create a note with a title and optional parent', function () {
@@ -1772,7 +1772,7 @@ test('start can create a note with a title and optional parent', function () {
     expect($created)->not()->toBeNull();
     expect($created?->title)->toBe('My New Note');
     expect($created?->slug)->toContain('my-new-note');
-    $response->assertRedirect(scoped_note_url($workspace, (string) $created?->slug));
+    $response->assertRedirect(scoped_note_url($workspace, (string) $created?->id));
 });
 
 test('store creates a regular note with h1 content and redirects to note id', function () {
@@ -1801,7 +1801,7 @@ test('store creates a regular note with h1 content and redirects to note id', fu
     expect(data_get($created?->content, 'content.0.type'))->toBe('heading');
     expect(data_get($created?->content, 'content.0.attrs.level'))->toBe(1);
     expect(data_get($created?->content, 'content.0.content.0.text'))->toBe('My Document');
-    $response->assertRedirect(scoped_note_url($workspace, (string) $created?->slug));
+    $response->assertRedirect(scoped_note_url($workspace, (string) $created?->id));
 });
 
 test('update can move a note under another note of the same user', function () {
@@ -1961,7 +1961,7 @@ test('show returns breadcrumb path for the current note', function () {
             ->where('breadcrumbs.2.title', 'Project 1')
             ->where('breadcrumbs.2.href', scoped_note_url($workspace, $project->id))
             ->where('breadcrumbs.3.title', 'Some note')
-            ->where('breadcrumbs.3.href', scoped_note_url($workspace, 'acme/project-1/some-note')),
+            ->where('breadcrumbs.3.href', scoped_note_url($workspace, $leaf->id)),
         );
 });
 

@@ -1,4 +1,5 @@
 import { router } from '@inertiajs/react';
+import { show, showScoped } from '@/actions/App/Http/Controllers/NotesController';
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -22,11 +23,11 @@ function fallbackNoteHref(noteId: string): string {
     if (typeof window !== 'undefined') {
         const slug = workspaceSlugFromPathname(window.location.pathname);
         if (slug) {
-            return `/w/${slug}/notes/${noteId}`;
+            return showScoped.url({ workspace: slug, note: noteId });
         }
     }
 
-    return `/notes/${noteId}`;
+    return show.url(noteId);
 }
 
 function buildMigrationMetaDecorations(doc: any, notes: LinkableNote[]): DecorationSet {

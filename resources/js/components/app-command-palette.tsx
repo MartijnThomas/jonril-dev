@@ -1,4 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
+import { clear, destroy, rename } from '@/actions/App/Http/Controllers/NotesController';
 import {
     CalendarDays,
     ChevronDown,
@@ -563,7 +564,7 @@ export function AppCommandPalette() {
 
             setOpen(false);
             router.patch(
-                `/notes/${noteId}/rename`,
+                rename.url(noteId),
                 { title },
                 {
                     preserveState: false,
@@ -586,7 +587,7 @@ export function AppCommandPalette() {
 
             setOpen(false);
             router.patch(
-                `/notes/${noteId}/clear`,
+                clear.url(noteId),
                 {},
                 {
                     preserveState: false,
@@ -607,7 +608,7 @@ export function AppCommandPalette() {
         }
 
         setOpen(false);
-        router.delete(`/notes/${noteId}`, {
+        router.delete(destroy.url(noteId), {
             preserveState: false,
             preserveScroll: false,
         });

@@ -216,6 +216,10 @@ class NotesController extends Controller
         $this->assertWorkspaceMembership($workspace);
         $resolved = $this->resolveNoteOrFailInWorkspace($workspace, $note);
 
+        if (! Str::isUuid($note)) {
+            return redirect($this->noteSlugService->urlFor($resolved), 301);
+        }
+
         return $this->renderNotePage($resolved, request());
     }
 

@@ -69,6 +69,10 @@ export function fallbackBlockWikiHrefFromTargetPath(
                 }
             }
 
+            if (noteId) {
+                return `/w/${workspaceSlug}/notes/${noteId}${hash}`;
+            }
+
             return `/w/${workspaceSlug}/notes/${encodeWikiTargetPath(normalizedTargetPath)}${hash}`;
         }
     }

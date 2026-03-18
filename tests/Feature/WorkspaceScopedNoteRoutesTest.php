@@ -37,11 +37,16 @@ test('workspace scoped note url resolves note by slug', function () {
         ->actingAs($user)
         ->get($url);
 
-    $response->assertOk();
-    $response->assertInertia(fn (Assert $page) => $page
-        ->where('noteId', $note->id)
-        ->where('noteUrl', "/w/{$workspace->slug}/notes/{$note->slug}")
-        ->where('noteUpdateUrl', "/w/{$workspace->slug}/notes/{$note->id}"));
+    $response->assertRedirect("/w/{$workspace->slug}/notes/{$note->id}");
+
+    $this
+        ->actingAs($user)
+        ->get("/w/{$workspace->slug}/notes/{$note->id}")
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteId', $note->id)
+            ->where('noteUrl', "/w/{$workspace->slug}/notes/{$note->id}")
+            ->where('noteUpdateUrl', "/w/{$workspace->slug}/notes/{$note->id}"));
 });
 
 test('workspace scoped note url resolves note by nested slug', function () {
@@ -63,17 +68,21 @@ test('workspace scoped note url resolves note by nested slug', function () {
         'parent_id' => $parent->id,
     ]);
 
-    $response = $this
+    $this
         ->actingAs($user)
         ->get(route('notes.show', [
             'workspace' => $workspace->slug,
             'note' => $child->slug,
-        ], absolute: false));
+        ], absolute: false))
+        ->assertRedirect("/w/{$workspace->slug}/notes/{$child->id}");
 
-    $response->assertOk();
-    $response->assertInertia(fn (Assert $page) => $page
-        ->where('noteId', $child->id)
-        ->where('noteUrl', "/w/{$workspace->slug}/notes/{$child->slug}"));
+    $this
+        ->actingAs($user)
+        ->get("/w/{$workspace->slug}/notes/{$child->id}")
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteId', $child->id)
+            ->where('noteUrl', "/w/{$workspace->slug}/notes/{$child->id}"));
 });
 
 test('workspace scoped journal url resolves for workspace', function () {

@@ -45,9 +45,7 @@ class NoteSlugService
             return "/w/{$workspaceSlug}/journal/{$period}";
         }
 
-        $reference = $note->slug ?: $note->id;
-
-        return "/w/{$workspaceSlug}/notes/{$reference}";
+        return "/w/{$workspaceSlug}/notes/{$note->id}";
     }
 
     public function updateUrlFor(Note $note): string

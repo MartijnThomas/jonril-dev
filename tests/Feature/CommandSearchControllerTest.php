@@ -88,7 +88,7 @@ test('command search returns heading results with anchor links', function () {
         ->assertJsonPath('mode', 'headings')
         ->assertJsonPath('items.0.note_id', $note->id)
         ->assertJsonPath('items.0.heading_id', 'heading-123')
-        ->assertJsonPath('items.0.href', "/w/{$workspace?->slug}/notes/specs#heading-123")
+        ->assertJsonPath('items.0.href', "/w/{$workspace?->slug}/notes/{$note->id}#heading-123")
         ->assertJsonPath('items.0.path', 'Specs');
 });
 
