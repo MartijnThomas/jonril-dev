@@ -136,6 +136,73 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
 
 ---
 
+## Note indexing plan (implementation-ready)
+
+### Goal
+- Add full-text search for notes themselves (title + body + metadata) using Scout/Meilisearch, without regressing note page performance or editor save flow.
+
+### Phase A: Define note search document shape
+- Add `Searchable` to `App\Models\Note`.
+- Implement `Note::toSearchableArray()` with at least:
+  - `title`
+  - `content_text` (extracted plain text from JSON block content)
+  - `workspace_id`
+  - `type`
+  - `journal_granularity`
+  - `journal_date`
+  - `tags` (from properties)
+  - `mentions`
+  - `hashtags`
+  - `parent_id`
+- Add `searchableAs()` for a dedicated index (for example `notes`).
+
+### Phase B: Implement deterministic content extraction
+- Create a dedicated extractor service (for example `NoteSearchTextExtractor`) that:
+  - walks the current note JSON structure
+  - extracts visible text from headings/paragraphs/list items/task items
+  - ignores non-searchable noise (IDs, attrs-only nodes, formatting marks)
+- Keep extraction deterministic and side-effect free so reindexing is stable.
+
+### Phase C: Configure Meilisearch index settings
+- Add `notes` settings in `config/scout.php`:
+  - `searchableAttributes`: `title`, `content_text`, `tags`, `hashtags`, `mentions`
+  - `filterableAttributes`: `workspace_id`, `type`, `journal_granularity`, `journal_date`, `parent_id`
+  - `sortableAttributes`: `updated_at`, `journal_date`, `title`
+- Run `php artisan scout:sync-index-settings`.
+
+### Phase D: Wire sync lifecycle
+- Ensure note create/update/delete events trigger Scout sync via model `Searchable`.
+- Keep queue-based indexing (`SCOUT_QUEUE=true`) in non-local environments.
+- For bulk consistency, keep `ReindexNoteJob` as authoritative when note structure changes significantly.
+
+### Phase E: Add note search endpoint + controller strategy
+- Add a dedicated notes search controller (parallel to `TaskSearchController`).
+- Suggested runtime approach:
+  - with `q`: Meilisearch for candidate IDs + filters, MySQL for final payload mapping/pagination
+  - without `q`: existing MySQL listing path
+- Reuse current workspace authorization and route scoping rules.
+
+### Phase F: UI integration
+- Add a note search input in the relevant page(s) with debounced query behavior.
+- Keep current filters in URL so search is shareable and back/forward-safe.
+- Preserve keyboard navigation and existing empty/loading states.
+
+### Phase G: rollout and verification
+- One-time backfill:
+  - `php artisan scout:import "App\Models\Note"`
+- Add tests:
+  - payload test for `Note::toSearchableArray()`
+  - controller feature tests for `q + workspace/type/date` combinations
+  - regression test that note updates are reflected in search results
+- Validate on production-like data before enabling to all users.
+
+### Optional after rollout
+- Add ranking tuning (title > content) using Meilisearch ranking/searchable settings.
+- Add typo tolerance tuning if precision/recall needs adjustment.
+- Consider a combined command palette source (notes + headings + tasks) once note index quality is stable.
+
+---
+
 ## Operational notes
 
 - `127.0.0.1:7700` should remain private to app host.
