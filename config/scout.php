@@ -144,7 +144,8 @@ return [
                 'searchableAttributes' => [
                     'title',
                     'path_titles',
-                    'journal_path',
+                    'journal_path_nl',
+                    'journal_path_en',
                     'headings',
                 ],
                 'filterableAttributes' => [

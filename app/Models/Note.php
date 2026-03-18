@@ -159,7 +159,8 @@ class Note extends Model
         return [
             'title' => $this->display_title,
             'path_titles' => implode(' / ', $pathSegments),
-            'journal_path' => $this->journalSearchPath(),
+            'journal_path_nl' => $this->journalSearchPath('nl'),
+            'journal_path_en' => $this->journalSearchPath('en'),
             'headings' => $headings,
             'headings_with_level' => $headingsWithLevel,
             'workspace_id' => $this->workspace_id,

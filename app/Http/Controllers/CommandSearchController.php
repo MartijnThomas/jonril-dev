@@ -305,13 +305,14 @@ class CommandSearchController extends Controller
         $indexName = (string) config('scout.prefix', '').(new Note)->searchableAs();
         $options = [
             'limit' => max(1, min($limit, 100)),
-            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'journal_path', 'headings', 'headings_with_level'],
+            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'journal_path_nl', 'journal_path_en', 'headings', 'headings_with_level'],
             'showMatchesPosition' => true,
             'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
             'attributesToSearchOn' => array_values(array_filter([
                 $includeNotes ? 'title' : null,
                 $includeNotes ? 'path_titles' : null,
-                $includeNotes ? 'journal_path' : null,
+                $includeNotes ? 'journal_path_nl' : null,
+                $includeNotes ? 'journal_path_en' : null,
                 $includeHeadings ? 'headings' : null,
             ])),
         ];
@@ -353,7 +354,7 @@ class CommandSearchController extends Controller
         if (isset($positions['title'])) {
             return 'title';
         }
-        if (isset($positions['journal_path'])) {
+        if (isset($positions['journal_path_nl']) || isset($positions['journal_path_en'])) {
             return 'path';
         }
         if (isset($positions['path_titles'])) {
@@ -373,8 +374,18 @@ class CommandSearchController extends Controller
         }
 
         if ($matchSource === 'path') {
-            if (is_string($hit['journal_path'] ?? null)) {
-                return $hit['journal_path'];
+            $matchedPathField = $this->matchedPathFieldFromHit($hit);
+            if ($matchedPathField === 'journal_path_nl' && is_string($hit['journal_path_nl'] ?? null)) {
+                return $hit['journal_path_nl'];
+            }
+            if ($matchedPathField === 'journal_path_en' && is_string($hit['journal_path_en'] ?? null)) {
+                return $hit['journal_path_en'];
+            }
+            if (is_string($hit['journal_path_nl'] ?? null)) {
+                return $hit['journal_path_nl'];
+            }
+            if (is_string($hit['journal_path_en'] ?? null)) {
+                return $hit['journal_path_en'];
             }
 
             return is_string($hit['path_titles'] ?? null) ? $hit['path_titles'] : null;
@@ -399,6 +410,26 @@ class CommandSearchController extends Controller
             $fallback = $headings[$matchIndex] ?? $headings[0] ?? null;
 
             return is_string($fallback) ? "### {$fallback}" : null;
+        }
+
+        return null;
+    }
+
+    private function matchedPathFieldFromHit(array $hit): ?string
+    {
+        $positions = $hit['_matchesPosition'] ?? null;
+        if (! is_array($positions)) {
+            return null;
+        }
+
+        if (isset($positions['journal_path_nl'])) {
+            return 'journal_path_nl';
+        }
+        if (isset($positions['journal_path_en'])) {
+            return 'journal_path_en';
+        }
+        if (isset($positions['path_titles'])) {
+            return 'path_titles';
         }
 
         return null;
