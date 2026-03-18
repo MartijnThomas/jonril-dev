@@ -360,6 +360,9 @@ class CommandSearchController extends Controller
                     'id' => (string) $task->id,
                     'note_id' => (string) $note->id,
                     'title' => (string) ($task->content_text ?? ''),
+                    'task_title' => (string) ($task->content_text ?? ''),
+                    'note_title' => $note->display_title,
+                    'note_href' => $baseHref,
                     'href' => $href,
                     'path' => $this->notePathForCommandResult($note, $userLocale),
                     'type' => $note->type,
@@ -368,6 +371,7 @@ class CommandSearchController extends Controller
                     'icon_color' => $iconColor,
                     'icon_bg' => $note->icon_bg,
                     'task_status' => $task->task_status,
+                    'checked' => (bool) $task->checked,
                 ];
             })
             ->filter()

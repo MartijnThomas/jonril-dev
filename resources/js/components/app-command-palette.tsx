@@ -20,6 +20,8 @@ import {
     CommandShortcut,
 } from '@/components/ui/command';
 import { useI18n } from '@/lib/i18n';
+import { TASK_STATUS_ICONS } from '@/lib/task-status-icons';
+import type { TaskStatus } from '@/lib/task-status-icons';
 import { cn } from '@/lib/utils';
 
 type NoteSearchItem = {
@@ -40,6 +42,9 @@ type TaskSearchItem = {
     id: string;
     note_id: string;
     title: string;
+    task_title?: string | null;
+    note_title?: string | null;
+    note_href?: string | null;
     href: string;
     path: string | null;
     type: string | null;
@@ -48,6 +53,11 @@ type TaskSearchItem = {
     icon_color?: string | null;
     icon_bg?: string | null;
     task_status?: string | null;
+    checked?: boolean;
+};
+
+type SearchResultItem = NoteSearchItem & {
+    matchedTasks: TaskSearchItem[];
 };
 
 type NoteActionsContext = {
@@ -788,6 +798,97 @@ export function AppCommandPalette() {
         return <div className="truncate text-xs text-muted-foreground">{pathText}</div>;
     };
 
+    const resolveTaskStatusForDisplay = (task: TaskSearchItem): TaskStatus => {
+        if (task.checked === true) {
+            return 'completed';
+        }
+
+        const normalized = (task.task_status ?? '').toLowerCase();
+        if (
+            normalized === 'assigned' ||
+            normalized === 'in_progress' ||
+            normalized === 'backlog' ||
+            normalized === 'deferred' ||
+            normalized === 'starred' ||
+            normalized === 'migrated' ||
+            normalized === 'canceled' ||
+            normalized === 'completed'
+        ) {
+            return normalized;
+        }
+
+        if (normalized === 'question') {
+            return 'deferred';
+        }
+
+        return 'open';
+    };
+
+    const renderTaskMatch = (task: TaskSearchItem) => {
+        const displayStatus = resolveTaskStatusForDisplay(task);
+        const statusMeta = TASK_STATUS_ICONS[displayStatus];
+        const StatusIcon = statusMeta.icon;
+        const taskText = task.task_title?.trim() || task.title?.trim() || 'Task';
+
+        return (
+            <div key={`task-match-${task.id}`} className="flex items-center gap-1.5">
+                <StatusIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                {renderHighlightedLine(taskText, 'truncate text-xs text-muted-foreground')}
+            </div>
+        );
+    };
+
+    const resultItems = useMemo<SearchResultItem[]>(() => {
+        const tasksByNoteId = new Map<string, TaskSearchItem[]>();
+        for (const task of taskItems) {
+            const existing = tasksByNoteId.get(task.note_id);
+            if (existing) {
+                existing.push(task);
+            } else {
+                tasksByNoteId.set(task.note_id, [task]);
+            }
+        }
+
+        const seenNoteIds = new Set<string>();
+        const merged: SearchResultItem[] = noteItems.map((item) => {
+            seenNoteIds.add(item.id);
+
+            return {
+                ...item,
+                matchedTasks: shouldSearchTasks ? (tasksByNoteId.get(item.id) ?? []) : [],
+            };
+        });
+
+        if (!shouldSearchTasks) {
+            return merged;
+        }
+
+        for (const task of taskItems) {
+            if (seenNoteIds.has(task.note_id)) {
+                continue;
+            }
+
+            const fallbackTitle = task.note_title?.trim() || task.path?.trim() || 'Untitled';
+            merged.push({
+                id: task.note_id,
+                title: fallbackTitle,
+                href: task.note_href?.trim() || task.href,
+                slug: null,
+                path: task.path,
+                type: task.type,
+                journal_granularity: task.journal_granularity ?? null,
+                icon: task.icon ?? null,
+                icon_color: task.icon_color ?? null,
+                match_source: null,
+                match_text: null,
+                matchedTasks: tasksByNoteId.get(task.note_id) ?? [task],
+            });
+            seenNoteIds.add(task.note_id);
+        }
+
+        return merged;
+    }, [noteItems, taskItems, shouldSearchTasks]);
+
     const toggleSearchTarget = (target: 'notes' | 'headings' | 'tasks') => {
         setSearchTargets((current) => {
             const next = {
@@ -1131,58 +1232,26 @@ export function AppCommandPalette() {
                             ))}
                     </CommandGroup>
                 )}
-                {!isCommandMode && effectiveQuery !== '' && shouldSearchTasks && (
-                    <CommandGroup heading="Tasks">
-                        {taskItems.map((item) => (
+                {!isCommandMode && effectiveQuery !== '' && (
+                    <CommandGroup heading="Results">
+                        {resultItems.map((item) => (
                             <CommandItem
-                                key={`task-${item.id}`}
-                                value={`${item.title} ${item.path ?? ''}`}
+                                key={item.id}
+                                value={`${item.title} ${item.slug ?? ''} ${item.path ?? ''} ${item.matchedTasks.map((task) => task.task_title ?? task.title ?? '').join(' ')}`}
                                 onSelect={() => {
+                                    const firstTaskHref = item.matchedTasks[0]?.href;
+                                    const targetHref =
+                                        item.match_source === null && firstTaskHref
+                                            ? firstTaskHref
+                                            : item.href;
+
                                     upsertRecentItem({
-                                        id: item.note_id,
-                                        title: item.title,
-                                        href: item.href,
-                                        slug: null,
-                                        path: item.path,
-                                        type: item.type,
-                                        journal_granularity: item.journal_granularity ?? null,
-                                        icon: item.icon ?? null,
-                                        icon_color: item.icon_color ?? null,
+                                        ...item,
+                                        href: targetHref,
                                     });
                                     setOpen(false);
                                     router.get(
-                                        item.href,
-                                        {},
-                                        {
-                                            preserveState: false,
-                                            preserveScroll: false,
-                                        },
-                                    );
-                                }}
-                            >
-                                {renderNoteIcon(item)}
-                                <div className="min-w-0 flex-1">
-                                    {renderHighlightedLine(item.title || 'Task', 'truncate')}
-                                    <div className="truncate text-xs text-muted-foreground">
-                                        {item.path ?? item.href}
-                                    </div>
-                                </div>
-                                <CommandShortcut>↵</CommandShortcut>
-                            </CommandItem>
-                        ))}
-                    </CommandGroup>
-                )}
-                {!isCommandMode && effectiveQuery !== '' && shouldSearchNotes && (
-                    <CommandGroup heading="Notes">
-                        {noteItems.map((item) => (
-                            <CommandItem
-                                key={item.id}
-                                value={`${item.title} ${item.slug ?? ''} ${item.path ?? ''}`}
-                                onSelect={() => {
-                                    upsertRecentItem(item);
-                                    setOpen(false);
-                                    router.get(
-                                        item.href,
+                                        targetHref,
                                         {},
                                         {
                                             preserveState: false,
@@ -1195,35 +1264,11 @@ export function AppCommandPalette() {
                                 <div className="min-w-0 flex-1">
                                     {renderResultTitle(item)}
                                     {renderResultDetails(item)}
-                                </div>
-                                <CommandShortcut>↵</CommandShortcut>
-                            </CommandItem>
-                        ))}
-                    </CommandGroup>
-                )}
-                {!isCommandMode && effectiveQuery !== '' && !shouldSearchNotes && shouldSearchHeadings && (
-                    <CommandGroup heading="Results">
-                        {noteItems.map((item) => (
-                            <CommandItem
-                                key={item.id}
-                                value={`${item.title} ${item.path ?? ''}`}
-                                onSelect={() => {
-                                    upsertRecentItem(item);
-                                    setOpen(false);
-                                    router.get(
-                                        item.href,
-                                        {},
-                                        {
-                                            preserveState: false,
-                                            preserveScroll: false,
-                                        },
-                                    );
-                                }}
-                            >
-                                {renderNoteIcon(item)}
-                                <div className="min-w-0 flex-1">
-                                    {renderResultTitle(item)}
-                                    {renderResultDetails(item)}
+                                    {item.matchedTasks.length > 0 && (
+                                        <div className="mt-1 space-y-1">
+                                            {item.matchedTasks.map((task) => renderTaskMatch(task))}
+                                        </div>
+                                    )}
                                 </div>
                                 <CommandShortcut>↵</CommandShortcut>
                             </CommandItem>
