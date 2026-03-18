@@ -15,11 +15,24 @@ test('note searchable payload includes parent path titles', function () {
         'type' => Note::TYPE_NOTE,
         'title' => 'Fix auth flow',
         'parent_id' => $parent->id,
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 2],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Auth Work'],
+                    ],
+                ],
+            ],
+        ],
     ]);
 
     expect($child->toSearchableArray())->toBe([
         'title' => 'Fix auth flow',
         'path_titles' => 'Engineering',
+        'headings' => ['Auth Work'],
         'workspace_id' => $child->workspace_id,
         'type' => Note::TYPE_NOTE,
         'journal_granularity' => null,

@@ -3,13 +3,6 @@ import {
     CalendarDays,
     Command as CommandIcon,
     FileText,
-    Hash,
-    Heading1,
-    Heading2,
-    Heading3,
-    Heading4,
-    Heading5,
-    Heading6,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clear, destroy, rename } from '@/actions/App/Http/Controllers/NotesController';
@@ -30,22 +23,6 @@ import { cn } from '@/lib/utils';
 type NoteSearchItem = {
     id: string;
     title: string;
-    href: string;
-    slug: string | null;
-    path: string | null;
-    type: string | null;
-    journal_granularity?: string | null;
-    icon?: string | null;
-    icon_color?: string | null;
-};
-
-type HeadingSearchItem = {
-    id: string;
-    note_id: string;
-    heading_id: string;
-    heading: string;
-    level: number | null;
-    note_title: string;
     href: string;
     slug: string | null;
     path: string | null;
@@ -93,15 +70,14 @@ export function AppCommandPalette() {
     };
     const { t } = useI18n();
     const [open, setOpen] = useState(false);
-    const [includeJournal, setIncludeJournal] = useState(false);
+    const [includeJournal, setIncludeJournal] = useState(true);
     const [searchTargets, setSearchTargets] = useState({
         notes: true,
-        headings: false,
+        headings: true,
     });
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [noteItems, setNoteItems] = useState<NoteSearchItem[]>([]);
-    const [headingItems, setHeadingItems] = useState<HeadingSearchItem[]>([]);
     const [recentItems, setRecentItems] = useState<RecentNoteItem[]>([]);
     const quickSwitchActiveRef = useRef(false);
     const quickSwitchPressCountRef = useRef(0);
@@ -288,7 +264,6 @@ export function AppCommandPalette() {
     }, [commandPaletteDisabled]);
 
     const isCommandMode = query.trimStart().startsWith(':');
-    const hasHeadingPrefix = !isCommandMode && query.startsWith('# ');
     const commandText = useMemo(
         () => {
             if (!isCommandMode) {
@@ -300,12 +275,13 @@ export function AppCommandPalette() {
         [isCommandMode, query],
     );
     const effectiveQuery = useMemo(
-        () => (hasHeadingPrefix ? query.slice(2).trim() : query.trim()),
-        [hasHeadingPrefix, query],
+        () => query.trim(),
+        [query],
     );
-    const shouldSearchNotes = !isCommandMode && !hasHeadingPrefix && searchTargets.notes;
-    const shouldSearchHeadings = !isCommandMode && (hasHeadingPrefix || searchTargets.headings);
-    const shouldShowRecent = !isCommandMode && !hasHeadingPrefix && effectiveQuery === '';
+    const shouldSearchNotes = !isCommandMode && searchTargets.notes;
+    const shouldSearchHeadings = !isCommandMode && searchTargets.headings;
+    const shouldRunScopedSearch = !isCommandMode && (searchTargets.notes || searchTargets.headings);
+    const shouldShowRecent = !isCommandMode && effectiveQuery === '';
     const recentStorageKey = useMemo(
         () => `command-palette:recent-notes:${workspaceId}`,
         [workspaceId],
@@ -713,7 +689,6 @@ export function AppCommandPalette() {
         if (!open || isCommandMode || effectiveQuery === '' || !workspaceSlug) {
             setLoading(false);
             setNoteItems([]);
-            setHeadingItems([]);
             return;
         }
 
@@ -722,10 +697,12 @@ export function AppCommandPalette() {
             setLoading(true);
 
             try {
-                const fetchItems = async (mode: 'notes' | 'headings') => {
+                const fetchItems = async () => {
                     const params = new URLSearchParams({
-                        mode,
+                        mode: 'notes',
+                        include_notes: shouldSearchNotes ? '1' : '0',
                         include_journal: includeJournal ? '1' : '0',
+                        include_headings: shouldSearchHeadings ? '1' : '0',
                         limit: '40',
                     });
                     if (effectiveQuery !== '') {
@@ -747,31 +724,24 @@ export function AppCommandPalette() {
                     }
 
                     const payload = (await response.json()) as {
-                        mode: 'notes' | 'headings';
+                        mode: 'notes';
                         items?: unknown[];
                     };
 
                     return Array.isArray(payload.items) ? payload.items : [];
                 };
 
-                const [nextNotes, nextHeadings] = await Promise.all([
-                    shouldSearchNotes
-                        ? fetchItems('notes')
-                        : Promise.resolve([] as unknown[]),
-                    shouldSearchHeadings
-                        ? fetchItems('headings')
-                        : Promise.resolve([] as unknown[]),
-                ]);
+                const nextNotes = shouldRunScopedSearch
+                    ? await fetchItems()
+                    : [];
 
                 setNoteItems(nextNotes as NoteSearchItem[]);
-                setHeadingItems(nextHeadings as HeadingSearchItem[]);
             } catch {
                 if (controller.signal.aborted) {
                     return;
                 }
 
                 setNoteItems([]);
-                setHeadingItems([]);
             } finally {
                 if (!controller.signal.aborted) {
                     setLoading(false);
@@ -790,27 +760,9 @@ export function AppCommandPalette() {
         isCommandMode,
         shouldSearchHeadings,
         shouldSearchNotes,
+        shouldRunScopedSearch,
         workspaceSlug,
     ]);
-
-    const headingLevelIcon = (level: number | null) => {
-        switch (level) {
-            case 1:
-                return Heading1;
-            case 2:
-                return Heading2;
-            case 3:
-                return Heading3;
-            case 4:
-                return Heading4;
-            case 5:
-                return Heading5;
-            case 6:
-                return Heading6;
-            default:
-                return Hash;
-        }
-    };
 
     return (
         <CommandDialog
@@ -820,7 +772,6 @@ export function AppCommandPalette() {
                 if (!nextOpen) {
                     setQuery('');
                     setNoteItems([]);
-                    setHeadingItems([]);
                     setLoading(false);
                 }
             }}
@@ -849,10 +800,10 @@ export function AppCommandPalette() {
                                   'command_palette.command_placeholder',
                                   'Run command, e.g. :rename New title',
                               )
-                            : shouldSearchHeadings && !shouldSearchNotes
-                            ? 'Search headings...'
                             : shouldSearchNotes && shouldSearchHeadings
                             ? 'Search notes and headings...'
+                            : shouldSearchHeadings
+                            ? 'Search headings...'
                             : 'Search notes (title, path)...'
                     }
                     className="pr-2"
@@ -884,11 +835,6 @@ export function AppCommandPalette() {
                     >
                         Journals
                     </button>
-                    {hasHeadingPrefix && (
-                        <span className="text-muted-foreground text-xs">
-                            # prefix: headings only
-                        </span>
-                    )}
                 </div>
             )}
             <CommandList>
@@ -905,10 +851,10 @@ export function AppCommandPalette() {
                               )
                         : loading
                         ? 'Searching...'
-                        : shouldSearchHeadings && !shouldSearchNotes
-                          ? 'No headings found.'
-                          : shouldSearchNotes && shouldSearchHeadings
+                        : shouldSearchNotes && shouldSearchHeadings
                             ? 'No results found.'
+                          : shouldSearchHeadings
+                            ? 'No headings found.'
                           : 'No notes found.'}
                 </CommandEmpty>
                 {isCommandMode && commandDefinitions.some((command) => command.available) && (
@@ -1004,25 +950,14 @@ export function AppCommandPalette() {
                         ))}
                     </CommandGroup>
                 )}
-                {!isCommandMode && effectiveQuery !== '' && shouldSearchHeadings && (
-                    <CommandGroup heading="Headings">
-                        {headingItems.map((item) => (
+                {!isCommandMode && effectiveQuery !== '' && !shouldSearchNotes && shouldSearchHeadings && (
+                    <CommandGroup heading="Results">
+                        {noteItems.map((item) => (
                             <CommandItem
                                 key={item.id}
-                                value={`# ${item.heading} ${item.note_title} ${item.slug ?? ''} ${item.path ?? ''}`}
+                                value={`${item.title} ${item.path ?? ''}`}
                                 onSelect={() => {
-                                    upsertRecentItem({
-                                        id: item.note_id,
-                                        title: item.note_title,
-                                        href: item.href,
-                                        slug: item.slug,
-                                        path: item.path,
-                                        type: item.type,
-                                        journal_granularity:
-                                            item.journal_granularity ?? null,
-                                        icon: item.icon ?? null,
-                                        icon_color: item.icon_color ?? null,
-                                    });
+                                    upsertRecentItem(item);
                                     setOpen(false);
                                     router.get(
                                         item.href,
@@ -1034,15 +969,11 @@ export function AppCommandPalette() {
                                     );
                                 }}
                             >
-                                {(() => {
-                                    const Icon = headingLevelIcon(item.level);
-                                    return <Icon className="h-4 w-4" />;
-                                })()}
+                                {renderNoteIcon(item)}
                                 <div className="min-w-0 flex-1">
-                                    <div className="truncate">{item.heading}</div>
+                                    <div className="truncate">{item.title}</div>
                                     <div className="truncate text-xs text-muted-foreground">
-                                        {item.note_title}
-                                        {item.path ? ` · ${item.path}` : ''}
+                                        {item.path ?? item.href}
                                     </div>
                                 </div>
                                 <CommandShortcut>↵</CommandShortcut>

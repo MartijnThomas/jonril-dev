@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Notes\NoteSearchExtractor;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -147,6 +148,7 @@ class Note extends Model
         return [
             'title' => $this->display_title,
             'path_titles' => implode(' / ', $pathSegments),
+            'headings' => app(NoteSearchExtractor::class)->extract($this->content)['heading_terms'],
             'workspace_id' => $this->workspace_id,
             'type' => $this->type,
             'journal_granularity' => $this->journal_granularity,

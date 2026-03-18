@@ -37,13 +37,17 @@ class CommandSearchController extends Controller
         $data = $request->validate([
             'q' => ['nullable', 'string', 'max:160'],
             'mode' => ['nullable', Rule::in(['notes', 'headings'])],
+            'include_notes' => ['nullable', 'boolean'],
             'include_journal' => ['nullable', 'boolean'],
+            'include_headings' => ['nullable', 'boolean'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         $mode = $data['mode'] ?? 'notes';
         $query = trim((string) ($data['q'] ?? ''));
+        $includeNotes = (bool) ($data['include_notes'] ?? true);
         $includeJournal = (bool) ($data['include_journal'] ?? false);
+        $includeHeadings = (bool) ($data['include_headings'] ?? false);
         $limit = (int) ($data['limit'] ?? 40);
 
         if ($mode === 'headings') {
@@ -65,7 +69,9 @@ class CommandSearchController extends Controller
             'items' => $this->searchNotes(
                 workspaceIds: $workspaceIds,
                 query: $query,
+                includeNotes: $includeNotes,
                 includeJournal: $includeJournal,
+                includeHeadings: $includeHeadings,
                 limit: $limit,
             ),
         ]);
@@ -102,10 +108,15 @@ class CommandSearchController extends Controller
     private function searchNotes(
         array $workspaceIds,
         string $query,
+        bool $includeNotes,
         bool $includeJournal,
+        bool $includeHeadings,
         int $limit,
     ): array {
         if ($query === '') {
+            return [];
+        }
+        if (! $includeNotes && ! $includeHeadings) {
             return [];
         }
 
@@ -113,7 +124,9 @@ class CommandSearchController extends Controller
             $noteIds = $this->matchingNoteIdsViaMeilisearch(
                 query: $query,
                 workspaceIds: $workspaceIds,
+                includeNotes: $includeNotes,
                 includeJournal: $includeJournal,
+                includeHeadings: $includeHeadings,
                 limit: $limit,
             );
             if ($noteIds === []) {
@@ -267,7 +280,9 @@ class CommandSearchController extends Controller
     private function matchingNoteIdsViaMeilisearch(
         string $query,
         array $workspaceIds,
+        bool $includeNotes,
         bool $includeJournal,
+        bool $includeHeadings,
         int $limit,
     ): array {
         $host = (string) config('scout.meilisearch.host', '');
@@ -281,6 +296,11 @@ class CommandSearchController extends Controller
             'limit' => max(1, min($limit, 100)),
             'attributesToRetrieve' => ['id'],
             'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
+            'attributesToSearchOn' => array_values(array_filter([
+                $includeNotes ? 'title' : null,
+                $includeNotes ? 'path_titles' : null,
+                $includeHeadings ? 'headings' : null,
+            ])),
         ];
 
         /** @var SearchResult|array{hits?: array<int, array{id:mixed}>} $response */

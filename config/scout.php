@@ -144,6 +144,7 @@ return [
                 'searchableAttributes' => [
                     'title',
                     'path_titles',
+                    'headings',
                 ],
                 'filterableAttributes' => [
                     'workspace_id',
