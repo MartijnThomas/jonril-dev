@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 use Laravel\Scout\Searchable;
 
 class Note extends Model
@@ -158,6 +159,7 @@ class Note extends Model
         return [
             'title' => $this->display_title,
             'path_titles' => implode(' / ', $pathSegments),
+            'journal_path' => $this->journalSearchPath(),
             'headings' => $headings,
             'headings_with_level' => $headingsWithLevel,
             'workspace_id' => $this->workspace_id,
@@ -293,6 +295,30 @@ class Note extends Model
         }
 
         return 3;
+    }
+
+    public function journalSearchPath(?string $locale = null): ?string
+    {
+        if ($this->type !== self::TYPE_JOURNAL || ! $this->journal_date) {
+            return null;
+        }
+
+        $resolvedLocale = is_string($locale) && trim($locale) !== ''
+            ? trim($locale)
+            : (string) config('app.locale');
+
+        $date = $this->journal_date->copy()->locale($resolvedLocale);
+        $year = $date->format('Y');
+        $month = Str::ucfirst($date->isoFormat('MMMM'));
+        $week = 'Week '.$date->isoWeek();
+        $granularity = is_string($this->journal_granularity) ? $this->journal_granularity : self::JOURNAL_DAILY;
+
+        return match ($granularity) {
+            self::JOURNAL_YEARLY => $year,
+            self::JOURNAL_MONTHLY => "{$year} > {$month}",
+            self::JOURNAL_WEEKLY => "{$year} > {$week}",
+            default => "{$year} > {$month} > {$week}",
+        };
     }
 
     /**

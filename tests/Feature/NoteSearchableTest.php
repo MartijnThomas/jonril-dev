@@ -32,6 +32,7 @@ test('note searchable payload includes parent path titles', function () {
     expect($child->toSearchableArray())->toBe([
         'title' => 'Fix auth flow',
         'path_titles' => 'Engineering',
+        'journal_path' => null,
         'headings' => ['Auth Work'],
         'headings_with_level' => ['## Auth Work'],
         'workspace_id' => $child->workspace_id,

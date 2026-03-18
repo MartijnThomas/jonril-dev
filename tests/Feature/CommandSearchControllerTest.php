@@ -80,7 +80,11 @@ test('command search returns note results and excludes journal by default', func
         ->assertJsonPath('mode', 'notes')
         ->assertJsonPath('items.0.id', $journal->id)
         ->assertJsonPath('items.0.icon', 'calendar')
-        ->assertJsonPath('items.0.icon_color', 'default');
+        ->assertJsonPath('items.0.icon_color', 'default')
+        ->assertJsonPath(
+            'items.0.path',
+            $journal->journalSearchPath($user->languagePreference()),
+        );
 
     $slugOnlyResponse = $this
         ->actingAs($user)

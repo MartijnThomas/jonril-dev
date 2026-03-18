@@ -179,9 +179,10 @@ class CommandSearchController extends Controller
         }
 
         $journalIconSettings = $this->journalIconSettingsForUser();
+        $userLocale = $this->userLocaleForSearch();
 
         return $notes
-            ->map(function (Note $note) use ($journalIconSettings, $matchMetaById): array {
+            ->map(function (Note $note) use ($journalIconSettings, $matchMetaById, $userLocale): array {
                 $href = $this->noteSlugService->urlFor($note);
                 [$icon, $iconColor] = $this->resolveNoteIconPayload($note, $journalIconSettings);
                 $matchMeta = $matchMetaById->get((string) $note->id);
@@ -191,7 +192,7 @@ class CommandSearchController extends Controller
                     'title' => $note->display_title,
                     'href' => $href,
                     'slug' => $note->slug,
-                    'path' => $note->path,
+                    'path' => $this->notePathForCommandResult($note, $userLocale),
                     'type' => $note->type,
                     'journal_granularity' => $note->journal_granularity,
                     'icon' => $icon,
@@ -235,9 +236,10 @@ class CommandSearchController extends Controller
             ->get();
 
         $journalIconSettings = $this->journalIconSettingsForUser();
+        $userLocale = $this->userLocaleForSearch();
 
         return $headings
-            ->map(function (NoteHeading $heading) use ($journalIconSettings): ?array {
+            ->map(function (NoteHeading $heading) use ($journalIconSettings, $userLocale): ?array {
                 $note = $heading->note;
                 if (! $note) {
                     return null;
@@ -257,7 +259,7 @@ class CommandSearchController extends Controller
                     'note_title' => $note->display_title,
                     'href' => "{$href}#{$blockId}",
                     'slug' => $note->slug,
-                    'path' => $note->path,
+                    'path' => $this->notePathForCommandResult($note, $userLocale),
                     'type' => $note->type,
                     'journal_granularity' => $note->journal_granularity,
                     'icon' => $icon,
@@ -303,12 +305,13 @@ class CommandSearchController extends Controller
         $indexName = (string) config('scout.prefix', '').(new Note)->searchableAs();
         $options = [
             'limit' => max(1, min($limit, 100)),
-            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'headings', 'headings_with_level'],
+            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'journal_path', 'headings', 'headings_with_level'],
             'showMatchesPosition' => true,
             'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
             'attributesToSearchOn' => array_values(array_filter([
                 $includeNotes ? 'title' : null,
                 $includeNotes ? 'path_titles' : null,
+                $includeNotes ? 'journal_path' : null,
                 $includeHeadings ? 'headings' : null,
             ])),
         ];
@@ -350,6 +353,9 @@ class CommandSearchController extends Controller
         if (isset($positions['title'])) {
             return 'title';
         }
+        if (isset($positions['journal_path'])) {
+            return 'path';
+        }
         if (isset($positions['path_titles'])) {
             return 'path';
         }
@@ -367,6 +373,10 @@ class CommandSearchController extends Controller
         }
 
         if ($matchSource === 'path') {
+            if (is_string($hit['journal_path'] ?? null)) {
+                return $hit['journal_path'];
+            }
+
             return is_string($hit['path_titles'] ?? null) ? $hit['path_titles'] : null;
         }
 
@@ -392,6 +402,20 @@ class CommandSearchController extends Controller
         }
 
         return null;
+    }
+
+    private function notePathForCommandResult(Note $note, string $locale): string
+    {
+        return $note->journalSearchPath($locale) ?? $note->path;
+    }
+
+    private function userLocaleForSearch(): string
+    {
+        $language = request()->user()?->languagePreference() ?? (string) config('app.locale', 'en');
+
+        return in_array($language, ['nl', 'en'], true)
+            ? $language
+            : (string) config('app.locale', 'en');
     }
 
     /**
