@@ -36,6 +36,7 @@ type NoteSearchItem = {
     icon_color?: string | null;
     match_source?: 'title' | 'path' | 'heading' | 'content' | null;
     match_text?: string | null;
+    match_block_id?: string | null;
 };
 
 type TaskSearchItem = {
@@ -1248,11 +1249,17 @@ export function AppCommandPalette() {
                                 key={item.id}
                                 value={`${item.title} ${item.slug ?? ''} ${item.path ?? ''} ${item.matchedTasks.map((task) => task.task_title ?? task.title ?? '').join(' ')}`}
                                 onSelect={() => {
-                                    const firstTaskHref = item.matchedTasks[0]?.href;
+                                    const firstTaskHref = item.matchedTasks.find((task) => typeof task.href === 'string' && task.href.trim() !== '')?.href;
+                                    const headingHref =
+                                        item.match_source === 'heading' &&
+                                        typeof item.match_block_id === 'string' &&
+                                        item.match_block_id.trim() !== ''
+                                            ? `${item.href}#${item.match_block_id}`
+                                            : null;
                                     const targetHref =
-                                        item.match_source === null && firstTaskHref
-                                            ? firstTaskHref
-                                            : item.href;
+                                        headingHref ??
+                                        firstTaskHref ??
+                                        item.href;
 
                                     upsertRecentItem({
                                         ...item,

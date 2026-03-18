@@ -169,6 +169,7 @@ class Note extends Model
             'journal_period' => $this->searchJournalPeriod(),
             'headings' => $headings,
             'headings_with_level' => $headingsWithLevel,
+            'heading_block_ids' => $extracted['heading_block_ids'] ?? [],
             'content_text' => $extracted['content_text'] ?? '',
             'icon' => $this->icon,
             'icon_color' => $this->icon_color,

@@ -30,6 +30,7 @@ it('extracts deterministic content text headings mentions and hashtags from note
     expect($result['content_text'])->toContain('Sprint Planning');
     expect($result['content_text'])->toContain('Discuss with @Lea and #Launch team');
     expect($result['heading_terms'])->toBe(['Sprint Planning']);
+    expect($result['heading_block_ids'])->toBe(['h-1']);
     expect($result['heading_h1_terms'])->toBe([]);
     expect($result['heading_h2_terms'])->toBe(['Sprint Planning']);
     expect($result['heading_h3_terms'])->toBe([]);
@@ -59,6 +60,7 @@ it('extracts tags property terms and task terms deterministically', function () 
     expect($result)->toHaveKeys([
         'content_text',
         'heading_terms',
+        'heading_block_ids',
         'heading_h1_terms',
         'heading_h2_terms',
         'heading_h3_terms',
@@ -111,6 +113,7 @@ it('accepts json string content and keeps heading terms unique', function () {
     $result = app(NoteSearchExtractor::class)->extract($content);
 
     expect($result['heading_terms'])->toBe(['Roadmap']);
+    expect($result['heading_block_ids'])->toBe(['h-1']);
     expect($result['heading_h1_terms'])->toBe(['Roadmap']);
     expect($result['heading_h2_terms'])->toBe(['Roadmap']);
 });

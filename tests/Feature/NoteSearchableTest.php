@@ -43,6 +43,7 @@ test('note searchable payload includes parent path titles', function () {
         'journal_period' => null,
         'headings' => ['Auth Work'],
         'headings_with_level' => ['## Auth Work'],
+        'heading_block_ids' => [''],
         'content_text' => 'Auth Work',
         'icon' => null,
         'icon_color' => null,

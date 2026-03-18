@@ -9,6 +9,7 @@ class NoteSearchExtractor
      * @return array{
      *     content_text: string,
      *     heading_terms: array<int, string>,
+     *     heading_block_ids: array<int, string>,
      *     heading_h1_terms: array<int, string>,
      *     heading_h2_terms: array<int, string>,
      *     heading_h3_terms: array<int, string>,
@@ -27,6 +28,7 @@ class NoteSearchExtractor
         $mentions = [];
         $hashtags = [];
         $headingTerms = [];
+        $headingBlockIdsByTerm = [];
         $headingTermsByLevel = [
             1 => [],
             2 => [],
@@ -47,11 +49,21 @@ class NoteSearchExtractor
             $this->extractInlineSignalsFromText($contentText, $mentions, $hashtags);
         }
 
+        if (is_array($doc)) {
+            $this->collectHeadingBlockIds($doc, $headingBlockIdsByTerm);
+        }
+
         $propertyExtraction = $this->extractPropertyTerms($properties);
+        $headingTerms = $this->normalizeUniqueList($headingTerms);
+        $headingBlockIds = collect($headingTerms)
+            ->map(fn (string $term): string => (string) ($headingBlockIdsByTerm[$term] ?? ''))
+            ->values()
+            ->all();
 
         return [
             'content_text' => $contentText,
-            'heading_terms' => $this->normalizeUniqueList($headingTerms),
+            'heading_terms' => $headingTerms,
+            'heading_block_ids' => $headingBlockIds,
             'heading_h1_terms' => $this->normalizeUniqueList($headingTermsByLevel[1]),
             'heading_h2_terms' => $this->normalizeUniqueList($headingTermsByLevel[2]),
             'heading_h3_terms' => $this->normalizeUniqueList($headingTermsByLevel[3]),
@@ -161,6 +173,60 @@ class NoteSearchExtractor
         }
 
         return $combined;
+    }
+
+    /**
+     * @param  array<int, string>  $headingBlockIdsByTerm
+     */
+    private function collectHeadingBlockIds(array $node, array &$headingBlockIdsByTerm): void
+    {
+        $type = (string) ($node['type'] ?? '');
+        if ($type === 'heading') {
+            $headingText = $this->normalizeHeadingText($this->nodeTextForHeadingId($node));
+            if ($headingText !== '' && ! isset($headingBlockIdsByTerm[$headingText])) {
+                $headingId = (string) ($node['attrs']['id'] ?? '');
+                $headingBlockIdsByTerm[$headingText] = trim($headingId);
+            }
+        }
+
+        $children = $node['content'] ?? null;
+        if (! is_array($children)) {
+            return;
+        }
+
+        foreach ($children as $child) {
+            if (! is_array($child)) {
+                continue;
+            }
+
+            $this->collectHeadingBlockIds($child, $headingBlockIdsByTerm);
+        }
+    }
+
+    private function nodeTextForHeadingId(array $node): string
+    {
+        $type = (string) ($node['type'] ?? '');
+        if ($type === 'text') {
+            return (string) ($node['text'] ?? '');
+        }
+        if ($type === 'hardBreak') {
+            return ' ';
+        }
+
+        $children = $node['content'] ?? null;
+        if (! is_array($children)) {
+            return '';
+        }
+
+        $parts = [];
+        foreach ($children as $child) {
+            if (! is_array($child)) {
+                continue;
+            }
+            $parts[] = $this->nodeTextForHeadingId($child);
+        }
+
+        return implode(' ', $parts);
     }
 
     /**

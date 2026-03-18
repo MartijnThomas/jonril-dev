@@ -190,6 +190,7 @@ class CommandSearchController extends Controller
                     'icon_bg' => $note->icon_bg,
                     'match_source' => null,
                     'match_text' => null,
+                    'match_block_id' => null,
                 ];
             })
             ->values()
@@ -405,6 +406,7 @@ class CommandSearchController extends Controller
                 'journal_path_en',
                 'headings',
                 'headings_with_level',
+                'heading_block_ids',
                 'content_text',
                 'type',
                 'journal_granularity',
@@ -439,6 +441,7 @@ class CommandSearchController extends Controller
 
                 $matchSource = $this->matchSourceFromHit($hit);
                 $matchText = $this->matchTextFromHit($hit, $matchSource, $query);
+                $matchBlockId = $this->matchBlockIdFromHit($hit, $matchSource);
                 $path = $this->notePathFromHit($hit, $userLocale);
                 $href = is_string($hit['href'] ?? null) && trim($hit['href']) !== ''
                     ? (string) $hit['href']
@@ -457,6 +460,7 @@ class CommandSearchController extends Controller
                     'icon_bg' => is_string($hit['icon_bg'] ?? null) ? (string) $hit['icon_bg'] : null,
                     'match_source' => $matchSource,
                     'match_text' => $matchText,
+                    'match_block_id' => $matchBlockId,
                 ];
             })
             ->filter(fn (?array $value) => is_array($value))
@@ -637,6 +641,33 @@ class CommandSearchController extends Controller
         }
 
         return null;
+    }
+
+    private function matchBlockIdFromHit(array $hit, ?string $matchSource): ?string
+    {
+        if ($matchSource !== 'heading') {
+            return null;
+        }
+
+        $matchIndex = null;
+        $positions = $hit['_matchesPosition']['headings'] ?? null;
+        if (is_array($positions) && is_array($positions[0]['indices'] ?? null)) {
+            $matchIndex = (int) ($positions[0]['indices'][0] ?? 0);
+        }
+
+        $headingBlockIds = $hit['heading_block_ids'] ?? null;
+        if (! is_array($headingBlockIds) || $headingBlockIds === []) {
+            return null;
+        }
+
+        $candidate = $headingBlockIds[$matchIndex] ?? $headingBlockIds[0] ?? null;
+        if (! is_string($candidate)) {
+            return null;
+        }
+
+        $trimmed = trim($candidate);
+
+        return $trimmed !== '' ? $trimmed : null;
     }
 
     private function contentSnippetFromHit(array $hit, string $query): ?string
