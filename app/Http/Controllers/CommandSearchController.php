@@ -10,6 +10,7 @@ use App\Support\Notes\NoteSlugService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Meilisearch\Client;
 
 class CommandSearchController extends Controller
 {
@@ -103,29 +104,59 @@ class CommandSearchController extends Controller
         bool $includeJournal,
         int $limit,
     ): array {
-        $notes = Note::query()
-            ->whereIn('workspace_id', $workspaceIds)
-            ->when(! $includeJournal, fn (Builder $queryBuilder) => $this->applyNoteTypeConstraint($queryBuilder, false))
-            ->when($query !== '', function (Builder $queryBuilder) use ($query): void {
-                $queryBuilder->where(function (Builder $inner) use ($query): void {
-                    $inner->where('title', 'like', "%{$query}%")
-                        ->orWhere('slug', 'like', "%{$query}%");
-                });
-            })
-            ->orderByRaw('case when type = ? then 1 else 0 end', [Note::TYPE_JOURNAL])
-            ->orderByDesc('updated_at')
-            ->limit($limit)
-            ->get([
-                'id',
-                'workspace_id',
-                'title',
-                'slug',
-                'type',
-                'properties',
-                'journal_granularity',
-                'journal_date',
-                'parent_id',
-            ]);
+        if ($query === '') {
+            return [];
+        }
+
+        if ($this->usesMeilisearchDriver()) {
+            $noteIds = $this->matchingNoteIdsViaMeilisearch(
+                query: $query,
+                workspaceIds: $workspaceIds,
+                includeJournal: $includeJournal,
+                limit: $limit,
+            );
+            if ($noteIds === []) {
+                return [];
+            }
+
+            $notesById = Note::query()
+                ->whereIn('id', $noteIds)
+                ->get([
+                    'id',
+                    'workspace_id',
+                    'title',
+                    'slug',
+                    'type',
+                    'properties',
+                    'journal_granularity',
+                    'journal_date',
+                    'parent_id',
+                ])
+                ->keyBy('id');
+
+            $notes = collect($noteIds)
+                ->map(fn (string $noteId) => $notesById->get($noteId))
+                ->filter()
+                ->values();
+        } else {
+            $notes = Note::search($query)
+                ->query(fn (Builder $queryBuilder) => $queryBuilder
+                    ->whereIn('workspace_id', $workspaceIds)
+                    ->when(! $includeJournal, fn (Builder $innerQueryBuilder) => $this->applyNoteTypeConstraint($innerQueryBuilder, false))
+                )
+                ->take($limit)
+                ->get([
+                    'id',
+                    'workspace_id',
+                    'title',
+                    'slug',
+                    'type',
+                    'properties',
+                    'journal_granularity',
+                    'journal_date',
+                    'parent_id',
+                ]);
+        }
 
         $journalIconSettings = $this->journalIconSettingsForUser();
 
@@ -226,6 +257,79 @@ class CommandSearchController extends Controller
             $inner->whereNull('type')
                 ->orWhere('type', '!=', Note::TYPE_JOURNAL);
         });
+    }
+
+    /**
+     * @param  array<int, string>  $workspaceIds
+     * @return array<int, string>
+     */
+    private function matchingNoteIdsViaMeilisearch(
+        string $query,
+        array $workspaceIds,
+        bool $includeJournal,
+        int $limit,
+    ): array {
+        $host = (string) config('scout.meilisearch.host', '');
+        if ($host === '') {
+            return [];
+        }
+
+        $client = new Client($host, config('scout.meilisearch.key'));
+        $indexName = (string) config('scout.prefix', '').(new Note)->searchableAs();
+        $options = [
+            'limit' => max(1, min($limit, 100)),
+            'attributesToRetrieve' => ['id'],
+            'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
+        ];
+
+        /** @var array{hits?: array<int, array{id:mixed}>} $response */
+        $response = $client->index($indexName)->search($query, $options);
+        $hits = $response['hits'] ?? [];
+
+        return collect($hits)
+            ->map(fn (array $hit) => (string) ($hit['id'] ?? ''))
+            ->filter(fn (string $id) => $id !== '')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, string>  $workspaceIds
+     */
+    private function buildNoteFilterExpression(array $workspaceIds, bool $includeJournal): string
+    {
+        $clauses = [
+            $this->inExpression('workspace_id', $workspaceIds),
+        ];
+
+        if (! $includeJournal) {
+            $clauses[] = '(type != '.$this->quoted(Note::TYPE_JOURNAL).' OR type IS NULL)';
+        }
+
+        return implode(' AND ', $clauses);
+    }
+
+    private function inExpression(string $field, array $values): string
+    {
+        if (count($values) === 1) {
+            return "{$field} = ".$this->quoted((string) $values[0]);
+        }
+
+        return "{$field} IN [".implode(', ', array_map(
+            fn ($value) => $this->quoted((string) $value),
+            $values,
+        )).']';
+    }
+
+    private function quoted(string $value): string
+    {
+        return '"'.str_replace(['\\', '"'], ['\\\\', '\\"'], $value).'"';
+    }
+
+    private function usesMeilisearchDriver(): bool
+    {
+        return config('scout.driver') === 'meilisearch'
+            && class_exists(Client::class);
     }
 
     /**

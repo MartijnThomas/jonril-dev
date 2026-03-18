@@ -140,6 +140,17 @@ return [
         'host' => env('MEILISEARCH_HOST', 'http://localhost:7700'),
         'key' => env('MEILISEARCH_KEY'),
         'index-settings' => [
+            'notes' => [
+                'searchableAttributes' => [
+                    'title',
+                    'slug',
+                    'path_titles',
+                ],
+                'filterableAttributes' => [
+                    'workspace_id',
+                    'type',
+                ],
+            ],
             'note_tasks' => [
                 'searchableAttributes' => [
                     'note_title',

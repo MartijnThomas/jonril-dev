@@ -9,10 +9,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Laravel\Scout\Searchable;
 
 class Note extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory, HasUuids, Searchable, SoftDeletes;
 
     public const TYPE_NOTE = 'note';
 
@@ -130,6 +131,30 @@ class Note extends Model
         return $this->hasMany(Event::class);
     }
 
+    public function searchableAs(): string
+    {
+        return 'notes';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toSearchableArray(): array
+    {
+        $pathSegments = $this->pathSegments();
+        array_pop($pathSegments);
+
+        return [
+            'title' => $this->display_title,
+            'slug' => $this->slug,
+            'path_titles' => implode(' / ', $pathSegments),
+            'workspace_id' => $this->workspace_id,
+            'type' => $this->type,
+            'journal_granularity' => $this->journal_granularity,
+            'journal_date' => $this->journal_date?->toDateString(),
+        ];
+    }
+
     /**
      * Get the attributes that should be cast.
      *
@@ -182,6 +207,14 @@ class Note extends Model
 
     private function buildPath(): string
     {
+        return implode(' / ', $this->pathSegments());
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function pathSegments(): array
+    {
         $segments = [];
         $visited = [];
         $cursor = $this;
@@ -212,7 +245,7 @@ class Note extends Model
                 ->first();
         }
 
-        return implode(' / ', array_reverse($segments));
+        return array_reverse($segments);
     }
 
     private function normalizedDisplayTitle(): string

@@ -39,9 +39,10 @@ class NoteObserver
 
         ReindexNoteJob::dispatch($note->id, $userId);
 
-        if ($note->wasChanged('title')) {
+        if ($note->wasChanged('title') || $note->wasChanged('parent_id')) {
             $note->children()->each(function (Note $child) use ($userId): void {
                 ReindexNoteJob::dispatch($child->id, $userId);
+                $child->searchable();
             });
         }
 

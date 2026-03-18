@@ -3,6 +3,10 @@
 use App\Models\Note;
 use App\Models\User;
 
+beforeEach(function (): void {
+    config()->set('scout.driver', 'collection');
+});
+
 test('command search returns note results and excludes journal by default', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
@@ -16,6 +20,17 @@ test('command search returns note results and excludes journal by default', func
             'icon' => 'rocket',
             'icon-color' => 'orange',
         ],
+    ]);
+
+    $parent = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Engineering',
+    ]);
+
+    $nested = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Fix auth flow',
+        'parent_id' => $parent->id,
     ]);
 
     $journal = $user->notes()->create([
@@ -35,6 +50,15 @@ test('command search returns note results and excludes journal by default', func
         ->assertJsonPath('items.0.icon_color', 'orange')
         ->assertJsonPath('items.0.icon_bg', null)
         ->assertJsonPath('items.0.path', 'Project Atlas');
+
+    $parentPathResponse = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=engineering")
+        ->assertOk()
+        ->assertJsonPath('mode', 'notes');
+
+    expect(collect($parentPathResponse->json('items'))->pluck('id')->all())
+        ->toContain($nested->id);
 
     $this
         ->actingAs($user)
