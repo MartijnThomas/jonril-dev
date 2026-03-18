@@ -120,8 +120,9 @@ class CommandSearchController extends Controller
             return [];
         }
 
+        $matchMetaById = collect();
         if ($this->usesMeilisearchDriver()) {
-            $noteIds = $this->matchingNoteIdsViaMeilisearch(
+            $matches = $this->matchingNotesViaMeilisearch(
                 query: $query,
                 workspaceIds: $workspaceIds,
                 includeNotes: $includeNotes,
@@ -129,9 +130,14 @@ class CommandSearchController extends Controller
                 includeHeadings: $includeHeadings,
                 limit: $limit,
             );
+            $noteIds = collect($matches)
+                ->pluck('id')
+                ->values()
+                ->all();
             if ($noteIds === []) {
                 return [];
             }
+            $matchMetaById = collect($matches)->keyBy('id');
 
             $notesById = Note::query()
                 ->whereIn('id', $noteIds)
@@ -175,9 +181,10 @@ class CommandSearchController extends Controller
         $journalIconSettings = $this->journalIconSettingsForUser();
 
         return $notes
-            ->map(function (Note $note) use ($journalIconSettings): array {
+            ->map(function (Note $note) use ($journalIconSettings, $matchMetaById): array {
                 $href = $this->noteSlugService->urlFor($note);
                 [$icon, $iconColor] = $this->resolveNoteIconPayload($note, $journalIconSettings);
+                $matchMeta = $matchMetaById->get((string) $note->id);
 
                 return [
                     'id' => $note->id,
@@ -190,6 +197,8 @@ class CommandSearchController extends Controller
                     'icon' => $icon,
                     'icon_color' => $iconColor,
                     'icon_bg' => $note->icon_bg,
+                    'match_source' => is_array($matchMeta) ? ($matchMeta['source'] ?? null) : null,
+                    'match_text' => is_array($matchMeta) ? ($matchMeta['text'] ?? null) : null,
                 ];
             })
             ->values()
@@ -277,7 +286,7 @@ class CommandSearchController extends Controller
      * @param  array<int, string>  $workspaceIds
      * @return array<int, string>
      */
-    private function matchingNoteIdsViaMeilisearch(
+    private function matchingNotesViaMeilisearch(
         string $query,
         array $workspaceIds,
         bool $includeNotes,
@@ -294,7 +303,8 @@ class CommandSearchController extends Controller
         $indexName = (string) config('scout.prefix', '').(new Note)->searchableAs();
         $options = [
             'limit' => max(1, min($limit, 100)),
-            'attributesToRetrieve' => ['id'],
+            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'headings'],
+            'showMatchesPosition' => true,
             'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
             'attributesToSearchOn' => array_values(array_filter([
                 $includeNotes ? 'title' : null,
@@ -310,10 +320,68 @@ class CommandSearchController extends Controller
             : ($response['hits'] ?? []);
 
         return collect($hits)
-            ->map(fn (array $hit) => (string) ($hit['id'] ?? ''))
-            ->filter(fn (string $id) => $id !== '')
+            ->map(function (array $hit): ?array {
+                $id = (string) ($hit['id'] ?? '');
+                if ($id === '') {
+                    return null;
+                }
+
+                $matchSource = $this->matchSourceFromHit($hit);
+                $matchText = $this->matchTextFromHit($hit, $matchSource);
+
+                return [
+                    'id' => $id,
+                    'source' => $matchSource,
+                    'text' => $matchText,
+                ];
+            })
+            ->filter(fn (?array $value) => is_array($value))
             ->values()
             ->all();
+    }
+
+    private function matchSourceFromHit(array $hit): ?string
+    {
+        $positions = $hit['_matchesPosition'] ?? null;
+        if (! is_array($positions)) {
+            return null;
+        }
+
+        if (isset($positions['title'])) {
+            return 'title';
+        }
+        if (isset($positions['path_titles'])) {
+            return 'path';
+        }
+        if (isset($positions['headings'])) {
+            return 'heading';
+        }
+
+        return null;
+    }
+
+    private function matchTextFromHit(array $hit, ?string $matchSource): ?string
+    {
+        if ($matchSource === 'title') {
+            return is_string($hit['title'] ?? null) ? $hit['title'] : null;
+        }
+
+        if ($matchSource === 'path') {
+            return is_string($hit['path_titles'] ?? null) ? $hit['path_titles'] : null;
+        }
+
+        if ($matchSource === 'heading') {
+            $headings = $hit['headings'] ?? null;
+            if (! is_array($headings) || $headings === []) {
+                return null;
+            }
+
+            $first = $headings[0] ?? null;
+
+            return is_string($first) ? $first : null;
+        }
+
+        return null;
     }
 
     /**

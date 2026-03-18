@@ -30,6 +30,8 @@ type NoteSearchItem = {
     journal_granularity?: string | null;
     icon?: string | null;
     icon_color?: string | null;
+    match_source?: 'title' | 'path' | 'heading' | null;
+    match_text?: string | null;
 };
 
 type NoteActionsContext = {
@@ -454,6 +456,33 @@ export function AppCommandPalette() {
         return <IconComponent className={cn('h-4 w-4', colorClass)} />;
     };
 
+    const renderMatchPreview = (item: NoteSearchItem) => {
+        const sourceLabel = matchSourceLabel(item.match_source ?? null);
+        const matchText = typeof item.match_text === 'string' ? item.match_text : '';
+        const fallbackText = item.path ?? item.href;
+        const previewText = matchText !== '' ? matchText : fallbackText;
+
+        if (previewText.trim() === '') {
+            return null;
+        }
+
+        const fragments = highlightedFragments(previewText, effectiveQuery);
+
+        return (
+            <div className="truncate text-xs text-muted-foreground">
+                {sourceLabel ? `${sourceLabel}: ` : ''}
+                {fragments.map((fragment, index) => (
+                    <span
+                        key={`${fragment.text}-${index}`}
+                        className={fragment.highlighted ? 'bg-yellow-200/70 text-foreground rounded px-0.5' : undefined}
+                    >
+                        {fragment.text}
+                    </span>
+                ))}
+            </div>
+        );
+    };
+
     const parsedCommand = useMemo(() => {
         if (!isCommandMode || commandText === '') {
             return { name: '', args: '' };
@@ -660,6 +689,38 @@ export function AppCommandPalette() {
             'command_palette.delete_preview',
             `Delete ${currentTitle}`,
         ).replace(':title', currentTitle);
+    };
+
+    const highlightedFragments = (value: string, needle: string) => {
+        const trimmedNeedle = needle.trim();
+        if (trimmedNeedle === '') {
+            return [{ text: value, highlighted: false }];
+        }
+
+        const escapedNeedle = trimmedNeedle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${escapedNeedle})`, 'ig');
+        const parts = value.split(regex);
+
+        return parts
+            .filter((part) => part !== '')
+            .map((part) => ({
+                text: part,
+                highlighted: part.toLowerCase() === trimmedNeedle.toLowerCase(),
+            }));
+    };
+
+    const matchSourceLabel = (source: NoteSearchItem['match_source']) => {
+        if (source === 'title') {
+            return 'Title';
+        }
+        if (source === 'path') {
+            return 'Path';
+        }
+        if (source === 'heading') {
+            return 'Heading';
+        }
+
+        return null;
     };
 
     const toggleSearchTarget = (target: 'notes' | 'headings') => {
@@ -941,9 +1002,7 @@ export function AppCommandPalette() {
                                 {renderNoteIcon(item)}
                                 <div className="min-w-0 flex-1">
                                     <div className="truncate">{item.title}</div>
-                                    <div className="truncate text-xs text-muted-foreground">
-                                        {item.path ?? item.slug ?? item.href}
-                                    </div>
+                                    {renderMatchPreview(item)}
                                 </div>
                                 <CommandShortcut>↵</CommandShortcut>
                             </CommandItem>
@@ -972,9 +1031,7 @@ export function AppCommandPalette() {
                                 {renderNoteIcon(item)}
                                 <div className="min-w-0 flex-1">
                                     <div className="truncate">{item.title}</div>
-                                    <div className="truncate text-xs text-muted-foreground">
-                                        {item.path ?? item.href}
-                                    </div>
+                                    {renderMatchPreview(item)}
                                 </div>
                                 <CommandShortcut>↵</CommandShortcut>
                             </CommandItem>
