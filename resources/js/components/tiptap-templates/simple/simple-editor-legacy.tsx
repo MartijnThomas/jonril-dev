@@ -38,6 +38,7 @@ import '@/components/tiptap-templates/simple/simple-editor.scss';
 import '@/components/tiptap-templates/simple/styling.css';
 
 const EMPTY_SUGGESTIONS: string[] = [];
+const DEFERRED_RELATED_DATA = ['relatedTasks', 'backlinks'] as const;
 const PROPERTY_VISIBILITY_META_PREFIX = '__visible:';
 
 const isPropertyVisibilityMetaKey = (key: string) =>
@@ -597,7 +598,7 @@ function SimpleEditorLegacyComponent({
                 {showRelatedPanel ? (
                     <div className="w-full md:mx-auto md:mt-4 md:max-w-3xl md:px-8">
                         <Deferred
-                            data={['relatedTasks', 'backlinks']}
+                            data={DEFERRED_RELATED_DATA}
                             fallback={<NoteRelatedPanelPlaceholder language={language} />}
                         >
                             <NoteRelatedPanel

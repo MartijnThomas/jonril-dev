@@ -42,7 +42,7 @@ export function AppRightSidebar({
                 <SheetContent
                     side="right"
                     overlayClassName="bg-black/20"
-                    className="bg-sidebar text-sidebar-foreground w-[18rem] p-0 [&>button]:hidden"
+                    className="w-[18rem] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
                 >
                     <div className="flex h-full w-full flex-col">
                         <div className="h-full min-w-0 overflow-y-auto">
@@ -62,7 +62,10 @@ export function AppRightSidebar({
     }
 
     return (
-        <div className="group/right-sidebar text-sidebar-foreground" data-open={open}>
+        <div
+            className="group/right-sidebar text-sidebar-foreground"
+            data-open={open}
+        >
             <div
                 className={cn(
                     'relative hidden h-svh w-80 bg-transparent transition-[width] duration-200 ease-linear md:block',
@@ -79,7 +82,7 @@ export function AppRightSidebar({
             >
                 <div
                     className={cn(
-                        'bg-sidebar flex h-full w-full flex-col rounded-xl',
+                        'flex h-full w-full flex-col rounded-xl bg-sidebar',
                         !open && 'pointer-events-none opacity-0',
                     )}
                 >
