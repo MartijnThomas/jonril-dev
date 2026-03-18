@@ -456,33 +456,6 @@ export function AppCommandPalette() {
         return <IconComponent className={cn('h-4 w-4', colorClass)} />;
     };
 
-    const renderMatchPreview = (item: NoteSearchItem) => {
-        const sourceLabel = matchSourceLabel(item.match_source ?? null);
-        const matchText = typeof item.match_text === 'string' ? item.match_text : '';
-        const fallbackText = item.path ?? item.href;
-        const previewText = matchText !== '' ? matchText : fallbackText;
-
-        if (previewText.trim() === '') {
-            return null;
-        }
-
-        const fragments = highlightedFragments(previewText, effectiveQuery);
-
-        return (
-            <div className="truncate text-xs text-muted-foreground">
-                {sourceLabel ? `${sourceLabel}: ` : ''}
-                {fragments.map((fragment, index) => (
-                    <span
-                        key={`${fragment.text}-${index}`}
-                        className={fragment.highlighted ? 'bg-yellow-200/70 text-foreground rounded px-0.5' : undefined}
-                    >
-                        {fragment.text}
-                    </span>
-                ))}
-            </div>
-        );
-    };
-
     const parsedCommand = useMemo(() => {
         if (!isCommandMode || commandText === '') {
             return { name: '', args: '' };
@@ -709,18 +682,49 @@ export function AppCommandPalette() {
             }));
     };
 
-    const matchSourceLabel = (source: NoteSearchItem['match_source']) => {
-        if (source === 'title') {
-            return 'Title';
-        }
-        if (source === 'path') {
-            return 'Path';
-        }
-        if (source === 'heading') {
-            return 'Heading';
+    const renderHighlightedLine = (text: string, className: string) => {
+        const fragments = highlightedFragments(text, effectiveQuery);
+
+        return (
+            <div className={className}>
+                {fragments.map((fragment, index) => (
+                    <span
+                        key={`${fragment.text}-${index}`}
+                        className={fragment.highlighted ? 'bg-yellow-200/70 text-foreground rounded px-0.5' : undefined}
+                    >
+                        {fragment.text}
+                    </span>
+                ))}
+            </div>
+        );
+    };
+
+    const renderResultTitle = (item: NoteSearchItem) => {
+        if (item.match_source === 'title') {
+            return renderHighlightedLine(item.title, 'truncate');
         }
 
-        return null;
+        return <div className="truncate">{item.title}</div>;
+    };
+
+    const renderResultDetails = (item: NoteSearchItem) => {
+        const pathText = item.path ?? item.href;
+        const headingText = typeof item.match_text === 'string' ? item.match_text : '';
+
+        if (item.match_source === 'heading' && headingText.trim() !== '') {
+            return (
+                <>
+                    <div className="truncate text-xs text-muted-foreground">{pathText}</div>
+                    {renderHighlightedLine(`Heading: ${headingText}`, 'truncate text-xs text-muted-foreground')}
+                </>
+            );
+        }
+
+        if (item.match_source === 'path' && pathText.trim() !== '') {
+            return renderHighlightedLine(pathText, 'truncate text-xs text-muted-foreground');
+        }
+
+        return <div className="truncate text-xs text-muted-foreground">{pathText}</div>;
     };
 
     const toggleSearchTarget = (target: 'notes' | 'headings') => {
@@ -1001,8 +1005,8 @@ export function AppCommandPalette() {
                             >
                                 {renderNoteIcon(item)}
                                 <div className="min-w-0 flex-1">
-                                    <div className="truncate">{item.title}</div>
-                                    {renderMatchPreview(item)}
+                                    {renderResultTitle(item)}
+                                    {renderResultDetails(item)}
                                 </div>
                                 <CommandShortcut>↵</CommandShortcut>
                             </CommandItem>
@@ -1030,8 +1034,8 @@ export function AppCommandPalette() {
                             >
                                 {renderNoteIcon(item)}
                                 <div className="min-w-0 flex-1">
-                                    <div className="truncate">{item.title}</div>
-                                    {renderMatchPreview(item)}
+                                    {renderResultTitle(item)}
+                                    {renderResultDetails(item)}
                                 </div>
                                 <CommandShortcut>↵</CommandShortcut>
                             </CommandItem>
