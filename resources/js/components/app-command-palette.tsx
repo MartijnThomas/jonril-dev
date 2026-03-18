@@ -1,9 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
-import { clear, destroy, rename } from '@/actions/App/Http/Controllers/NotesController';
 import {
     CalendarDays,
-    ChevronDown,
-    ChevronUp,
     Command as CommandIcon,
     FileText,
     Hash,
@@ -15,6 +12,7 @@ import {
     Heading6,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { clear, destroy, rename } from '@/actions/App/Http/Controllers/NotesController';
 import { getColorTextClass } from '@/components/color-swatch-picker';
 import { getLucideIconComponent } from '@/components/icon-picker';
 import {
@@ -26,7 +24,6 @@ import {
     CommandList,
     CommandShortcut,
 } from '@/components/ui/command';
-import { Switch } from '@/components/ui/switch';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -97,7 +94,10 @@ export function AppCommandPalette() {
     const { t } = useI18n();
     const [open, setOpen] = useState(false);
     const [includeJournal, setIncludeJournal] = useState(false);
-    const [showOptions, setShowOptions] = useState(false);
+    const [searchTargets, setSearchTargets] = useState({
+        notes: true,
+        headings: false,
+    });
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [noteItems, setNoteItems] = useState<NoteSearchItem[]>([]);
@@ -113,7 +113,6 @@ export function AppCommandPalette() {
     const commandPaletteDisabled = page.currentWorkspace?.is_migrated_source === true;
 
     const openInCommandMode = useCallback(() => {
-        setShowOptions(false);
         setSelectedCommandValue('');
         setQuery(':');
         setOpen(true);
@@ -289,7 +288,7 @@ export function AppCommandPalette() {
     }, [commandPaletteDisabled]);
 
     const isCommandMode = query.trimStart().startsWith(':');
-    const isHeadingMode = !isCommandMode && query.startsWith('# ');
+    const hasHeadingPrefix = !isCommandMode && query.startsWith('# ');
     const commandText = useMemo(
         () => {
             if (!isCommandMode) {
@@ -301,11 +300,12 @@ export function AppCommandPalette() {
         [isCommandMode, query],
     );
     const effectiveQuery = useMemo(
-        () => (isHeadingMode ? query.slice(2).trim() : query.trim()),
-        [isHeadingMode, query],
+        () => (hasHeadingPrefix ? query.slice(2).trim() : query.trim()),
+        [hasHeadingPrefix, query],
     );
-    const shouldShowRecent =
-        !isCommandMode && !isHeadingMode && effectiveQuery === '';
+    const shouldSearchNotes = !isCommandMode && !hasHeadingPrefix && searchTargets.notes;
+    const shouldSearchHeadings = !isCommandMode && (hasHeadingPrefix || searchTargets.headings);
+    const shouldShowRecent = !isCommandMode && !hasHeadingPrefix && effectiveQuery === '';
     const recentStorageKey = useMemo(
         () => `command-palette:recent-notes:${workspaceId}`,
         [workspaceId],
@@ -686,6 +686,29 @@ export function AppCommandPalette() {
         ).replace(':title', currentTitle);
     };
 
+    const toggleSearchTarget = (target: 'notes' | 'headings') => {
+        setSearchTargets((current) => {
+            const next = {
+                ...current,
+                [target]: !current[target],
+            };
+
+            if (!next.notes && !next.headings) {
+                return current;
+            }
+
+            return next;
+        });
+    };
+
+    const scopePillClass = (active: boolean) =>
+        cn(
+            'inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition-colors',
+            active
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-border bg-background text-muted-foreground hover:text-foreground',
+        );
+
     useEffect(() => {
         if (!open || isCommandMode || effectiveQuery === '' || !workspaceSlug) {
             setLoading(false);
@@ -698,43 +721,50 @@ export function AppCommandPalette() {
         const timeoutId = window.setTimeout(async () => {
             setLoading(true);
 
-            const params = new URLSearchParams({
-                mode: isHeadingMode ? 'headings' : 'notes',
-                include_journal: includeJournal ? '1' : '0',
-                limit: '40',
-            });
-            if (effectiveQuery !== '') {
-                params.set('q', effectiveQuery);
-            }
-
             try {
-                const response = await fetch(`/w/${workspaceSlug}/search/command?${params.toString()}`, {
-                    method: 'GET',
-                    credentials: 'same-origin',
-                    signal: controller.signal,
-                    headers: {
-                        Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
+                const fetchItems = async (mode: 'notes' | 'headings') => {
+                    const params = new URLSearchParams({
+                        mode,
+                        include_journal: includeJournal ? '1' : '0',
+                        limit: '40',
+                    });
+                    if (effectiveQuery !== '') {
+                        params.set('q', effectiveQuery);
+                    }
 
-                if (!response.ok) {
-                    throw new Error('Search failed');
-                }
+                    const response = await fetch(`/w/${workspaceSlug}/search/command?${params.toString()}`, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        signal: controller.signal,
+                        headers: {
+                            Accept: 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
 
-                const payload = (await response.json()) as {
-                    mode: 'notes' | 'headings';
-                    items?: unknown[];
+                    if (!response.ok) {
+                        throw new Error('Search failed');
+                    }
+
+                    const payload = (await response.json()) as {
+                        mode: 'notes' | 'headings';
+                        items?: unknown[];
+                    };
+
+                    return Array.isArray(payload.items) ? payload.items : [];
                 };
-                const items = Array.isArray(payload.items) ? payload.items : [];
 
-                if (payload.mode === 'headings') {
-                    setHeadingItems(items as HeadingSearchItem[]);
-                    setNoteItems([]);
-                } else {
-                    setNoteItems(items as NoteSearchItem[]);
-                    setHeadingItems([]);
-                }
+                const [nextNotes, nextHeadings] = await Promise.all([
+                    shouldSearchNotes
+                        ? fetchItems('notes')
+                        : Promise.resolve([] as unknown[]),
+                    shouldSearchHeadings
+                        ? fetchItems('headings')
+                        : Promise.resolve([] as unknown[]),
+                ]);
+
+                setNoteItems(nextNotes as NoteSearchItem[]);
+                setHeadingItems(nextHeadings as HeadingSearchItem[]);
             } catch {
                 if (controller.signal.aborted) {
                     return;
@@ -753,7 +783,15 @@ export function AppCommandPalette() {
             controller.abort();
             window.clearTimeout(timeoutId);
         };
-    }, [open, includeJournal, isHeadingMode, effectiveQuery, isCommandMode, workspaceSlug]);
+    }, [
+        open,
+        includeJournal,
+        effectiveQuery,
+        isCommandMode,
+        shouldSearchHeadings,
+        shouldSearchNotes,
+        workspaceSlug,
+    ]);
 
     const headingLevelIcon = (level: number | null) => {
         switch (level) {
@@ -781,14 +819,13 @@ export function AppCommandPalette() {
                 setOpen(nextOpen);
                 if (!nextOpen) {
                     setQuery('');
-                    setShowOptions(false);
                     setNoteItems([]);
                     setHeadingItems([]);
                     setLoading(false);
                 }
             }}
             title="Search notes"
-            description="Find notes by title, slug, or path."
+            description="Find notes by title, path, or headings."
             className="sm:max-w-xl"
             commandProps={{
                 shouldFilter: false,
@@ -812,38 +849,46 @@ export function AppCommandPalette() {
                                   'command_palette.command_placeholder',
                                   'Run command, e.g. :rename New title',
                               )
-                            : isHeadingMode
+                            : shouldSearchHeadings && !shouldSearchNotes
                             ? 'Search headings...'
-                            : 'Search notes (title, slug, path)...'
+                            : shouldSearchNotes && shouldSearchHeadings
+                            ? 'Search notes and headings...'
+                            : 'Search notes (title, path)...'
                     }
-                    className="pr-32"
+                    className="pr-2"
                 />
-                {!isCommandMode && (
+            </div>
+            {!isCommandMode && (
+                <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
                     <button
                         type="button"
-                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-10 inline-flex -translate-y-1/2 items-center gap-1 text-xs transition-colors"
-                        onClick={() => setShowOptions((value) => !value)}
-                        aria-expanded={showOptions}
-                        aria-label="Toggle search options"
+                        className={scopePillClass(searchTargets.notes)}
+                        onClick={() => toggleSearchTarget('notes')}
+                        aria-pressed={searchTargets.notes}
                     >
-                        Options
-                        {showOptions ? (
-                            <ChevronUp className="h-3.5 w-3.5" />
-                        ) : (
-                            <ChevronDown className="h-3.5 w-3.5" />
-                        )}
+                        Notes
                     </button>
-                )}
-            </div>
-            {!isCommandMode && showOptions && (
-                <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-muted-foreground">
-                    <span>Include journal notes</span>
-                    <Switch
-                        size="sm"
-                        checked={includeJournal}
-                        onCheckedChange={setIncludeJournal}
-                        aria-label="Include journal notes"
-                    />
+                    <button
+                        type="button"
+                        className={scopePillClass(searchTargets.headings)}
+                        onClick={() => toggleSearchTarget('headings')}
+                        aria-pressed={searchTargets.headings}
+                    >
+                        Headings
+                    </button>
+                    <button
+                        type="button"
+                        className={scopePillClass(includeJournal)}
+                        onClick={() => setIncludeJournal((value) => !value)}
+                        aria-pressed={includeJournal}
+                    >
+                        Journals
+                    </button>
+                    {hasHeadingPrefix && (
+                        <span className="text-muted-foreground text-xs">
+                            # prefix: headings only
+                        </span>
+                    )}
                 </div>
             )}
             <CommandList>
@@ -860,8 +905,10 @@ export function AppCommandPalette() {
                               )
                         : loading
                         ? 'Searching...'
-                        : isHeadingMode
+                        : shouldSearchHeadings && !shouldSearchNotes
                           ? 'No headings found.'
+                          : shouldSearchNotes && shouldSearchHeadings
+                            ? 'No results found.'
                           : 'No notes found.'}
                 </CommandEmpty>
                 {isCommandMode && commandDefinitions.some((command) => command.available) && (
@@ -926,7 +973,7 @@ export function AppCommandPalette() {
                             ))}
                     </CommandGroup>
                 )}
-                {!isHeadingMode && !isCommandMode && effectiveQuery !== '' && (
+                {!isCommandMode && effectiveQuery !== '' && shouldSearchNotes && (
                     <CommandGroup heading="Notes">
                         {noteItems.map((item) => (
                             <CommandItem
@@ -957,7 +1004,7 @@ export function AppCommandPalette() {
                         ))}
                     </CommandGroup>
                 )}
-                {isHeadingMode && (
+                {!isCommandMode && effectiveQuery !== '' && shouldSearchHeadings && (
                     <CommandGroup heading="Headings">
                         {headingItems.map((item) => (
                             <CommandItem
