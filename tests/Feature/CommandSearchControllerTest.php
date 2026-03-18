@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Note;
+use App\Models\NoteTask;
 use App\Models\User;
 
 beforeEach(function (): void {
@@ -171,4 +172,67 @@ test('command search is scoped to the current workspace', function () {
     $idsB = collect($responseB->json('items'))->pluck('id');
     expect($idsB)->toContain($noteInB->id)
         ->not->toContain($noteInA->id);
+});
+
+test('command search tasks excludes closed and canceled by default', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $slug = $workspace?->slug;
+
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Work',
+    ]);
+
+    $openTask = NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-open',
+        'note_title' => $note->display_title,
+        'content_text' => 'Jonril task open',
+        'checked' => false,
+        'task_status' => null,
+    ]);
+
+    $completedTask = NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-completed',
+        'note_title' => $note->display_title,
+        'content_text' => 'Jonril task completed',
+        'checked' => true,
+        'task_status' => 'completed',
+    ]);
+
+    $canceledTask = NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-canceled',
+        'note_title' => $note->display_title,
+        'content_text' => 'Jonril task canceled',
+        'checked' => false,
+        'task_status' => 'canceled',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=jonril&include_tasks=1")
+        ->assertOk();
+
+    $taskIds = collect($response->json('tasks'))->pluck('id')->all();
+    expect($taskIds)
+        ->toContain((string) $openTask->id)
+        ->not->toContain((string) $completedTask->id)
+        ->not->toContain((string) $canceledTask->id);
+
+    $responseWithClosed = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=jonril&include_tasks=1&include_closed_tasks=1")
+        ->assertOk();
+
+    $taskIdsWithClosed = collect($responseWithClosed->json('tasks'))->pluck('id')->all();
+    expect($taskIdsWithClosed)
+        ->toContain((string) $openTask->id)
+        ->toContain((string) $completedTask->id)
+        ->toContain((string) $canceledTask->id);
 });

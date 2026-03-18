@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Note;
 use App\Models\NoteHeading;
+use App\Models\NoteTask;
 use App\Models\Workspace;
 use App\Support\Notes\NoteHeadingIndexer;
 use App\Support\Notes\NoteSlugService;
@@ -40,6 +41,8 @@ class CommandSearchController extends Controller
             'include_notes' => ['nullable', 'boolean'],
             'include_journal' => ['nullable', 'boolean'],
             'include_headings' => ['nullable', 'boolean'],
+            'include_tasks' => ['nullable', 'boolean'],
+            'include_closed_tasks' => ['nullable', 'boolean'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -48,6 +51,8 @@ class CommandSearchController extends Controller
         $includeNotes = (bool) ($data['include_notes'] ?? true);
         $includeJournal = (bool) ($data['include_journal'] ?? false);
         $includeHeadings = (bool) ($data['include_headings'] ?? false);
+        $includeTasks = (bool) ($data['include_tasks'] ?? false);
+        $includeClosedTasks = (bool) ($data['include_closed_tasks'] ?? false);
         $limit = (int) ($data['limit'] ?? 40);
 
         if ($mode === 'headings') {
@@ -72,6 +77,14 @@ class CommandSearchController extends Controller
                 includeNotes: $includeNotes,
                 includeJournal: $includeJournal,
                 includeHeadings: $includeHeadings,
+                limit: $limit,
+            ),
+            'tasks' => $this->searchTasks(
+                workspaceIds: $workspaceIds,
+                query: $query,
+                includeTasks: $includeTasks,
+                includeClosedTasks: $includeClosedTasks,
+                includeJournal: $includeJournal,
                 limit: $limit,
             ),
         ]);
@@ -272,6 +285,87 @@ class CommandSearchController extends Controller
             ->all();
     }
 
+    /**
+     * @param  array<int, string>  $workspaceIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function searchTasks(
+        array $workspaceIds,
+        string $query,
+        bool $includeTasks,
+        bool $includeClosedTasks,
+        bool $includeJournal,
+        int $limit,
+    ): array {
+        if (! $includeTasks || $query === '') {
+            return [];
+        }
+
+        $tasks = $this->usesMeilisearchDriver()
+            ? $this->searchTasksViaMeilisearch($query, $workspaceIds, $includeClosedTasks, $includeJournal, $limit)
+            : $this->searchTasksViaDatabase($query, $workspaceIds, $includeClosedTasks, $includeJournal, $limit);
+
+        if ($tasks->isEmpty()) {
+            return [];
+        }
+
+        $noteIds = $tasks->pluck('note_id')
+            ->filter(fn ($value) => is_string($value) && trim($value) !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        /** @var \Illuminate\Support\Collection<string, Note> $notesById */
+        $notesById = Note::query()
+            ->whereIn('id', $noteIds)
+            ->get([
+                'id',
+                'workspace_id',
+                'title',
+                'slug',
+                'type',
+                'properties',
+                'journal_granularity',
+                'journal_date',
+                'parent_id',
+            ])
+            ->keyBy('id');
+
+        $journalIconSettings = $this->journalIconSettingsForUser();
+        $userLocale = $this->userLocaleForSearch();
+
+        return $tasks
+            ->map(function (NoteTask $task) use ($notesById, $journalIconSettings, $userLocale): ?array {
+                $note = $notesById->get((string) $task->note_id);
+                if (! $note) {
+                    return null;
+                }
+
+                $baseHref = $this->noteSlugService->urlFor($note);
+                $href = is_string($task->block_id) && trim($task->block_id) !== ''
+                    ? "{$baseHref}#{$task->block_id}"
+                    : $baseHref;
+                [$icon, $iconColor] = $this->resolveNoteIconPayload($note, $journalIconSettings);
+
+                return [
+                    'id' => (string) $task->id,
+                    'note_id' => (string) $note->id,
+                    'title' => (string) ($task->content_text ?? ''),
+                    'href' => $href,
+                    'path' => $this->notePathForCommandResult($note, $userLocale),
+                    'type' => $note->type,
+                    'journal_granularity' => $note->journal_granularity,
+                    'icon' => $icon,
+                    'icon_color' => $iconColor,
+                    'icon_bg' => $note->icon_bg,
+                    'task_status' => $task->task_status,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     private function applyNoteTypeConstraint(Builder $noteQuery, bool $includeJournal): void
     {
         if ($includeJournal) {
@@ -367,6 +461,123 @@ class CommandSearchController extends Controller
         return null;
     }
 
+    /**
+     * @param  array<int, string>  $workspaceIds
+     * @return \Illuminate\Support\Collection<int, NoteTask>
+     */
+    private function searchTasksViaMeilisearch(
+        string $query,
+        array $workspaceIds,
+        bool $includeClosedTasks,
+        bool $includeJournal,
+        int $limit,
+    ): \Illuminate\Support\Collection {
+        $host = (string) config('scout.meilisearch.host', '');
+        if ($host === '') {
+            return collect();
+        }
+
+        $client = new Client($host, config('scout.meilisearch.key'));
+        $indexName = (string) config('scout.prefix', '').(new NoteTask)->searchableAs();
+        $options = [
+            'limit' => max(1, min($limit, 100)),
+            'attributesToRetrieve' => ['id'],
+            'filter' => $this->taskFilterExpression(
+                workspaceIds: $workspaceIds,
+                includeClosedTasks: $includeClosedTasks,
+            ),
+        ];
+
+        /** @var SearchResult|array{hits?: array<int, array{id:mixed}>} $response */
+        $response = $client->index($indexName)->search($query, $options);
+        $hits = $response instanceof SearchResult
+            ? $response->getHits()
+            : ($response['hits'] ?? []);
+        $taskIds = collect($hits)
+            ->map(fn (array $hit) => (int) ($hit['id'] ?? 0))
+            ->filter(fn (int $taskId) => $taskId > 0)
+            ->values()
+            ->all();
+
+        if ($taskIds === []) {
+            return collect();
+        }
+
+        $tasksById = NoteTask::query()
+            ->whereIn('id', $taskIds)
+            ->whereIn('workspace_id', $workspaceIds)
+            ->when(! $includeClosedTasks, fn (Builder $builder) => $builder
+                ->where('checked', false)
+                ->where(function (Builder $inner): void {
+                    $inner->whereNull('task_status')
+                        ->orWhereRaw('lower(task_status) != ?', ['canceled']);
+                }))
+            ->when(! $includeJournal, fn (Builder $builder) => $builder->whereHas('note', function (Builder $noteQuery): void {
+                $noteQuery->where(function (Builder $inner): void {
+                    $inner->whereNull('type')
+                        ->orWhere('type', '!=', Note::TYPE_JOURNAL);
+                });
+            }))
+            ->with('note:id,type')
+            ->get([
+                'id',
+                'workspace_id',
+                'note_id',
+                'block_id',
+                'content_text',
+                'checked',
+                'task_status',
+            ])
+            ->keyBy('id');
+
+        return collect($taskIds)
+            ->map(fn (int $taskId) => $tasksById->get($taskId))
+            ->filter()
+            ->values();
+    }
+
+    /**
+     * @param  array<int, string>  $workspaceIds
+     * @return \Illuminate\Support\Collection<int, NoteTask>
+     */
+    private function searchTasksViaDatabase(
+        string $query,
+        array $workspaceIds,
+        bool $includeClosedTasks,
+        bool $includeJournal,
+        int $limit,
+    ): \Illuminate\Support\Collection {
+        return NoteTask::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->where(function (Builder $builder) use ($query): void {
+                $builder->where('content_text', 'like', "%{$query}%")
+                    ->orWhere('note_title', 'like', "%{$query}%")
+                    ->orWhere('parent_note_title', 'like', "%{$query}%");
+            })
+            ->when(! $includeClosedTasks, fn (Builder $builder) => $builder
+                ->where('checked', false)
+                ->where(function (Builder $inner): void {
+                    $inner->whereNull('task_status')
+                        ->orWhereRaw('lower(task_status) != ?', ['canceled']);
+                }))
+            ->when(! $includeJournal, fn (Builder $builder) => $builder->whereHas('note', function (Builder $noteQuery): void {
+                $noteQuery->where(function (Builder $inner): void {
+                    $inner->whereNull('type')
+                        ->orWhere('type', '!=', Note::TYPE_JOURNAL);
+                });
+            }))
+            ->limit($limit)
+            ->get([
+                'id',
+                'workspace_id',
+                'note_id',
+                'block_id',
+                'content_text',
+                'checked',
+                'task_status',
+            ]);
+    }
+
     private function matchTextFromHit(array $hit, ?string $matchSource): ?string
     {
         if ($matchSource === 'title') {
@@ -460,6 +671,22 @@ class CommandSearchController extends Controller
 
         if (! $includeJournal) {
             $clauses[] = '(type != '.$this->quoted(Note::TYPE_JOURNAL).' OR type IS NULL)';
+        }
+
+        return implode(' AND ', $clauses);
+    }
+
+    /**
+     * @param  array<int, string>  $workspaceIds
+     */
+    private function taskFilterExpression(array $workspaceIds, bool $includeClosedTasks): string
+    {
+        $clauses = [
+            $this->inExpression('workspace_id', $workspaceIds),
+        ];
+
+        if (! $includeClosedTasks) {
+            $clauses[] = '(search_status != '.$this->quoted('completed').' AND search_status != '.$this->quoted('canceled').')';
         }
 
         return implode(' AND ', $clauses);

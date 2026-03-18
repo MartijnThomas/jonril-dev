@@ -34,6 +34,20 @@ type NoteSearchItem = {
     match_text?: string | null;
 };
 
+type TaskSearchItem = {
+    id: string;
+    note_id: string;
+    title: string;
+    href: string;
+    path: string | null;
+    type: string | null;
+    journal_granularity?: string | null;
+    icon?: string | null;
+    icon_color?: string | null;
+    icon_bg?: string | null;
+    task_status?: string | null;
+};
+
 type NoteActionsContext = {
     id: string;
     title: string;
@@ -76,10 +90,13 @@ export function AppCommandPalette() {
     const [searchTargets, setSearchTargets] = useState({
         notes: true,
         headings: true,
+        tasks: true,
     });
+    const [includeClosedTasks, setIncludeClosedTasks] = useState(false);
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [noteItems, setNoteItems] = useState<NoteSearchItem[]>([]);
+    const [taskItems, setTaskItems] = useState<TaskSearchItem[]>([]);
     const [recentItems, setRecentItems] = useState<RecentNoteItem[]>([]);
     const quickSwitchActiveRef = useRef(false);
     const quickSwitchPressCountRef = useRef(0);
@@ -282,7 +299,8 @@ export function AppCommandPalette() {
     );
     const shouldSearchNotes = !isCommandMode && searchTargets.notes;
     const shouldSearchHeadings = !isCommandMode && searchTargets.headings;
-    const shouldRunScopedSearch = !isCommandMode && (searchTargets.notes || searchTargets.headings);
+    const shouldSearchTasks = !isCommandMode && searchTargets.tasks;
+    const shouldRunScopedSearch = !isCommandMode && (searchTargets.notes || searchTargets.headings || searchTargets.tasks);
     const shouldShowRecent = !isCommandMode && effectiveQuery === '';
     const recentStorageKey = useMemo(
         () => `command-palette:recent-notes:${workspaceId}`,
@@ -727,7 +745,7 @@ export function AppCommandPalette() {
         return <div className="truncate text-xs text-muted-foreground">{pathText}</div>;
     };
 
-    const toggleSearchTarget = (target: 'notes' | 'headings') => {
+    const toggleSearchTarget = (target: 'notes' | 'headings' | 'tasks') => {
         setSearchTargets((current) => {
             const next = {
                 ...current,
@@ -754,6 +772,7 @@ export function AppCommandPalette() {
         if (!open || isCommandMode || effectiveQuery === '' || !workspaceSlug) {
             setLoading(false);
             setNoteItems([]);
+            setTaskItems([]);
             return;
         }
 
@@ -768,6 +787,8 @@ export function AppCommandPalette() {
                         include_notes: shouldSearchNotes ? '1' : '0',
                         include_journal: includeJournal ? '1' : '0',
                         include_headings: shouldSearchHeadings ? '1' : '0',
+                        include_tasks: shouldSearchTasks ? '1' : '0',
+                        include_closed_tasks: includeClosedTasks ? '1' : '0',
                         limit: '40',
                     });
                     if (effectiveQuery !== '') {
@@ -791,22 +812,28 @@ export function AppCommandPalette() {
                     const payload = (await response.json()) as {
                         mode: 'notes';
                         items?: unknown[];
+                        tasks?: unknown[];
                     };
 
-                    return Array.isArray(payload.items) ? payload.items : [];
+                    return {
+                        items: Array.isArray(payload.items) ? payload.items : [],
+                        tasks: Array.isArray(payload.tasks) ? payload.tasks : [],
+                    };
                 };
 
-                const nextNotes = shouldRunScopedSearch
+                const result = shouldRunScopedSearch
                     ? await fetchItems()
-                    : [];
+                    : { items: [] as unknown[], tasks: [] as unknown[] };
 
-                setNoteItems(nextNotes as NoteSearchItem[]);
+                setNoteItems(result.items as NoteSearchItem[]);
+                setTaskItems(result.tasks as TaskSearchItem[]);
             } catch {
                 if (controller.signal.aborted) {
                     return;
                 }
 
                 setNoteItems([]);
+                setTaskItems([]);
             } finally {
                 if (!controller.signal.aborted) {
                     setLoading(false);
@@ -821,10 +848,12 @@ export function AppCommandPalette() {
     }, [
         open,
         includeJournal,
+        includeClosedTasks,
         effectiveQuery,
         isCommandMode,
         shouldSearchHeadings,
         shouldSearchNotes,
+        shouldSearchTasks,
         shouldRunScopedSearch,
         workspaceSlug,
     ]);
@@ -837,6 +866,7 @@ export function AppCommandPalette() {
                 if (!nextOpen) {
                     setQuery('');
                     setNoteItems([]);
+                    setTaskItems([]);
                     setLoading(false);
                 }
             }}
@@ -867,6 +897,8 @@ export function AppCommandPalette() {
                               )
                             : shouldSearchNotes && shouldSearchHeadings
                             ? 'Search notes and headings...'
+                            : shouldSearchTasks
+                            ? 'Search tasks...'
                             : shouldSearchHeadings
                             ? 'Search headings...'
                             : 'Search notes (title, path)...'
@@ -894,12 +926,30 @@ export function AppCommandPalette() {
                     </button>
                     <button
                         type="button"
+                        className={scopePillClass(searchTargets.tasks)}
+                        onClick={() => toggleSearchTarget('tasks')}
+                        aria-pressed={searchTargets.tasks}
+                    >
+                        Tasks
+                    </button>
+                    <button
+                        type="button"
                         className={scopePillClass(includeJournal)}
                         onClick={() => setIncludeJournal((value) => !value)}
                         aria-pressed={includeJournal}
                     >
                         Journals
                     </button>
+                    {searchTargets.tasks && (
+                        <button
+                            type="button"
+                            className={scopePillClass(includeClosedTasks)}
+                            onClick={() => setIncludeClosedTasks((value) => !value)}
+                            aria-pressed={includeClosedTasks}
+                        >
+                            Closed/Canceled
+                        </button>
+                    )}
                 </div>
             )}
             <CommandList>
@@ -918,6 +968,8 @@ export function AppCommandPalette() {
                         ? 'Searching...'
                         : shouldSearchNotes && shouldSearchHeadings
                             ? 'No results found.'
+                          : shouldSearchTasks
+                            ? 'No tasks found.'
                           : shouldSearchHeadings
                             ? 'No headings found.'
                           : 'No notes found.'}
@@ -982,6 +1034,47 @@ export function AppCommandPalette() {
                                     <CommandShortcut>↵</CommandShortcut>
                                 </CommandItem>
                             ))}
+                    </CommandGroup>
+                )}
+                {!isCommandMode && effectiveQuery !== '' && shouldSearchTasks && (
+                    <CommandGroup heading="Tasks">
+                        {taskItems.map((item) => (
+                            <CommandItem
+                                key={`task-${item.id}`}
+                                value={`${item.title} ${item.path ?? ''}`}
+                                onSelect={() => {
+                                    upsertRecentItem({
+                                        id: item.note_id,
+                                        title: item.title,
+                                        href: item.href,
+                                        slug: null,
+                                        path: item.path,
+                                        type: item.type,
+                                        journal_granularity: item.journal_granularity ?? null,
+                                        icon: item.icon ?? null,
+                                        icon_color: item.icon_color ?? null,
+                                    });
+                                    setOpen(false);
+                                    router.get(
+                                        item.href,
+                                        {},
+                                        {
+                                            preserveState: false,
+                                            preserveScroll: false,
+                                        },
+                                    );
+                                }}
+                            >
+                                {renderNoteIcon(item)}
+                                <div className="min-w-0 flex-1">
+                                    {renderHighlightedLine(item.title || 'Task', 'truncate')}
+                                    <div className="truncate text-xs text-muted-foreground">
+                                        {item.path ?? item.href}
+                                    </div>
+                                </div>
+                                <CommandShortcut>↵</CommandShortcut>
+                            </CommandItem>
+                        ))}
                     </CommandGroup>
                 )}
                 {!isCommandMode && effectiveQuery !== '' && shouldSearchNotes && (
