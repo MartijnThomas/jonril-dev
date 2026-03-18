@@ -1049,7 +1049,7 @@ export function AppCommandPalette() {
             }}
             title="Search notes"
             description="Find notes by title, path, or headings."
-            className="sm:max-w-xl"
+            className="top-[12%] translate-y-0 sm:top-[18%] sm:max-w-xl"
             commandProps={{
                 shouldFilter: false,
                 value: selectedCommandValue,
