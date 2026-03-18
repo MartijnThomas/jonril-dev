@@ -1,6 +1,6 @@
 # Deferred Props Plan + Payload Inventory (Notes App)
 
-Updated: 2026-03-18
+Updated: 2026-03-18 (editor-suggestions revert documented)
 
 ---
 
@@ -27,11 +27,9 @@ Goal: reduce initial note-open payload and time-to-interactive without breaking 
 
 #### Phase 2 — High priority candidates
 
-**A. Defer `linkableNotes`** ✓ Implemented 2026-03-18
-Deferred `linkableNotes` to the `editor-suggestions` group alongside `workspaceSuggestions`. The suggest menu simply does not open until the deferred load resolves — existing behavior is identical. No skeleton needed. Payload reduction: several KB to tens of KB depending on note count.
+**A. Defer `linkableNotes`** ↩ Reverted 2026-03-18 — see [editor-suggestions revert](#editor-suggestions-revert) below.
 
-**B. Defer `moveParentOptions`** ✓ Implemented 2026-03-18
-Deferred `moveParentOptions` to the `editor-suggestions` group (same request as `linkableNotes`). The "Move note" dialog is unavailable until the deferred group resolves — matching the wiki-link suggest behavior.
+**B. Defer `moveParentOptions`** ↩ Reverted 2026-03-18 — see [editor-suggestions revert](#editor-suggestions-revert) below.
 
 **C. Cache `notesTree` in middleware** ✓ Implemented 2026-03-18
 The sidebar notes tree now caches the fully-built tree array under `notes_tree_{workspace_id}` with a 1-day TTL. The cache is invalidated in `NoteObserver::clearNoteDropdownCache()` alongside the existing dropdown caches — triggered on note create, title/parent/type change, delete, and restore.
@@ -42,11 +40,11 @@ The sidebar notes tree now caches the fully-built tree array under `notes_tree_{
 #### Phase 3 — Medium priority
 
 **E. Reduce the `$allNotes` query scope** ✓ Implemented 2026-03-18
-`renderNotePage` no longer loads all workspace notes on the initial request. Replaced with two targeted queries:
+`renderNotePage` no longer loads all workspace notes on the initial request for breadcrumbs/meeting children. Replaced with two targeted queries:
 - A recursive CTE (`WITH RECURSIVE note_ancestors`) that walks up from the current note to the root — provides `breadcrumbs` and `noteActions.parent_path` with typically 3–5 rows instead of hundreds.
 - A direct `WHERE parent_id = ? AND type = 'meeting'` query for `meetingChildren`.
 
-The deferred `editor-suggestions` group still loads all notes (in its own background request), memoised between the `linkableNotes` and `moveParentOptions` closures.
+`linkableNotes` and `moveParentOptions` still require the full workspace note list. This is currently loaded synchronously in `renderNotePage` (see [editor-suggestions revert](#editor-suggestions-revert)).
 
 **F. Fix the uncached today-journal query in `workspaceMeetingParentOptions`**
 The cached portion covers the full note list. But a separate `Note::query()->whereDate('journal_date', $today)->first()` runs **outside** the cache on every request. This should be folded into the cache or given its own short-TTL cache key.
@@ -138,21 +136,20 @@ Scope: opening `notes/show` page. Updated to reflect state as of 2026-03-18.
 | `properties` | note column | No |
 | `breadcrumbs` | derived from `$allNotes` | No — needed on first render |
 | `language` | user settings | No |
-| `workspaceSuggestions` | workspace columns | Deferred `editor-suggestions` ✓ |
-| `linkableNotes` | `$allNotes` + heading extraction from `meta` | Deferred `editor-suggestions` ✓ |
-| `moveParentOptions` | `$allNotes` filter | Deferred `editor-suggestions` ✓ |
+| `workspaceSuggestions` | workspace columns | Synchronous (deferred approach reverted — see below) |
+| `linkableNotes` | `$allNotes` + heading extraction from `meta` | Synchronous (deferred approach reverted — see below) |
+| `moveParentOptions` | `$allNotes` filter | Synchronous (deferred approach reverted — see below) |
 | `meetingChildren` | `$allNotes` filter + Event query | **Yes — could be deferred** (shown in right sidebar) |
 | `meetingEvent` | 2× Event queries | **Combine into 1 query — Phase 3G** |
 
-#### Deferred (already implemented ✓)
+#### Deferred (currently active ✓)
 
 | Prop | Group | Notes |
 |---|---|---|
 | `relatedTasks` | `related-panel` | Related tasks panel |
 | `backlinks` | `related-panel` | Backlinks panel |
-| `linkableNotes` | `editor-suggestions` | Wiki-link `[[` suggest menu |
-| `moveParentOptions` | `editor-suggestions` | "Move note" dialog |
-| `workspaceSuggestions` | `editor-suggestions` | `#` / `@` suggest menus |
+
+The `editor-suggestions` group (`linkableNotes`, `moveParentOptions`, `workspaceSuggestions`) was implemented and then reverted. See [editor-suggestions revert](#editor-suggestions-revert).
 
 ---
 
@@ -236,7 +233,6 @@ Approximate SQL queries fired for a `notes/show` page load with warm caches:
 
 ### Automatic after initial page render
 - Deferred group request for `related-panel` props (`relatedTasks`, `backlinks`).
-- Deferred group request for `editor-suggestions` (`linkableNotes`, `moveParentOptions`, `workspaceSuggestions`).
 
 ### User-triggered / interaction-driven
 - `PATCH /tasks/checked` from related panel task toggle.
@@ -276,16 +272,57 @@ Notes:
 
 ---
 
-## 8) Next option (follow-up)
+---
 
-Apply the same caching pattern to `workspaces` and `currentWorkspace` (static enough to cache for a few minutes), while keeping `notesTree` invalidation tied to the NoteObserver.
+## 8) editor-suggestions revert
+
+### What was implemented
+
+Phases 2A and 2B wrapped `linkableNotes`, `moveParentOptions`, and `workspaceSuggestions` in an `Inertia::defer(..., 'editor-suggestions')` group. The idea: defer the expensive full workspace notes query to a background request so the editor opens faster.
+
+### Why it was reverted
+
+The deferred props arrived after the initial render, which caused **cascading infinite loop errors** in the block editor.
+
+**Root cause chain:**
+
+1. `linkableNotes` was included in the `extensions` useMemo dependency array inside `simple-editor-block.tsx`. When the deferred group resolved, `extensions` recomputed → `useEditor([..., extensions])` destroyed and recreated the editor instance.
+
+2. Editor recreation triggered `selectionUpdate` events which exposed pre-existing (but previously dormant) infinite-loop bugs in several components:
+   - `BlockNodeToolbar` — used `useState` + `useEffect([editor])` calling `setState` inside the effect. Also called `editor.can().chain().focus().toggleMark().run()` during render, which dispatched a real focus transaction → `selectionUpdate` → re-render → loop.
+   - `BlockTokenSuggestionMenu` — `useEffect([activeToken, editor])` with `setActiveToken(nextToken)` inside: `getActiveToken()` returned a new object reference on every call, so `activeToken` was always "changed", triggering the effect again.
+   - `BlockWikiLinkSuggestionMenu` — same pattern as above with `activeQuery`.
+
+3. A separate bug: Inertia v2's `<Deferred>` component does `useMemo(() => Array.isArray(data) ? data : [data], [data])` on its `data` prop. Passing an inline array literal `data={['relatedTasks', 'backlinks']}` creates a new reference on every render → `keys` memo recomputes → internal `useEffect([pageProps, keys])` re-runs → `setLoaded()` → re-render → loop.
+
+**All infinite-loop bugs were fixed individually** (see [block-tree-editor.md](./block-tree-editor.md#infinite-loop-fixes-2026-03-18)), but the deferred `editor-suggestions` approach itself was still problematic: loading suggestions after editor mount creates a visible "unavailable window" for the wiki-link picker and move dialog, and recomposing extensions mid-session is inherently fragile.
+
+### Future approach
+
+Rather than deferring via Inertia, load suggestions via **dedicated API endpoints** called on demand:
+
+| Prop | Suggested endpoint | When to call |
+|---|---|---|
+| `linkableNotes` | `GET /workspaces/{id}/notes/linkable` | On first `[[` keypress (lazy-load once, cache in component state) |
+| `moveParentOptions` | `GET /workspaces/{id}/notes/move-options?exclude={noteId}` | When "Move note" dialog opens |
+| `workspaceSuggestions` | `GET /workspaces/{id}/suggestions` | On first `@` or `#` keypress |
+
+Benefits over deferred Inertia props:
+- No editor recreation — suggestions arrive independently of the editor lifecycle.
+- True on-demand loading — only fetched when the user actually triggers the feature.
+- Can be cached in component state for the duration of the session without tying into Inertia page props at all.
+- `moveParentOptions` can be a fresh fetch every time the dialog opens, guaranteeing up-to-date data without the complexity of Inertia partial reloads.
+
+---
+
+## 9) Next steps
 
 Priority order for next implementation steps:
 1. ~~**Phase 2C** — Cache `notesTree`~~ ✓ Done
 2. ~~**Phase 2D** — Cache `workspaceNoteCounts`~~ ✓ Done
-3. ~~**Phase 2A** — Defer `linkableNotes` + `workspaceSuggestions`~~ ✓ Done
-4. ~~**Phase 2B** — Defer `moveParentOptions`~~ ✓ Done
-5. ~~**Phase 3E** — Reduce `$allNotes` query~~ ✓ Done
-6. **Phase 3F** — Fix uncached today-journal query
-7. **Phase 3G** — Combine duplicate Event queries for meeting notes
-8. **Phase 3H** — Move `workspaceMeetingParentOptions` out of shared props
+3. ~~**Phase 2A/2B** — Defer editor-suggestions~~ ↩ Reverted — replace with API endpoints (see above)
+4. ~~**Phase 3E** — Reduce `$allNotes` query~~ ✓ Done
+5. **Phase 3F** — Fix uncached today-journal query
+6. **Phase 3G** — Combine duplicate Event queries for meeting notes
+7. **Phase 3H** — Move `workspaceMeetingParentOptions` out of shared props
+8. **API endpoints for editor suggestions** — `linkableNotes`, `moveParentOptions`, `workspaceSuggestions` (replaces Phase 2A/2B)

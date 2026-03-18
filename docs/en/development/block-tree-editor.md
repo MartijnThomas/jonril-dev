@@ -179,6 +179,58 @@ The related tasks panel is fed by indexed task fragments and supports block-mode
 2. Revisit markdown-visible mark tokens later if needed.
 3. Keep block implementation split by domain files to avoid extension bloat.
 
+## Infinite-loop fixes (2026-03-18)
+
+Several "Maximum update depth exceeded" errors were traced to a combination of pre-existing patterns that became fatal when deferred Inertia props (Phase 2A/2B) caused the editor to be recreated mid-session. All were fixed independently. Summary:
+
+### BlockNodeToolbar — replaced manual state sync with `useEditorState`
+
+**Problem:** `useState` + `useEffect([editor])` called `updateValue()` immediately on mount and on every editor event. Additionally, `editor.can().chain().focus().toggleMark(mark).run()` was called during render to compute button state — this dispatched a real TipTap focus transaction → `selectionUpdate` event → state update during render → loop.
+
+**Fix:** Replaced the entire pattern with TipTap v3's `useEditorState` hook:
+
+```tsx
+import { useEditorState } from '@tiptap/react';
+
+const { currentValue, currentMarks } = useEditorState({
+    editor,
+    selector: (ctx) => ({
+        currentValue: getCurrentBlockValue(ctx.editor),
+        currentMarks: getCurrentMarkState(ctx.editor),
+    }),
+});
+```
+
+Also changed `editor.can().chain().focus().toggleMark(mark)` → `editor.can().toggleMark(mark)` — the `.chain().focus()` part was causing the transaction dispatch.
+
+### BlockTokenSuggestionMenu and BlockWikiLinkSuggestionMenu — removed active token/query from effect deps
+
+**Problem:** `useEffect([activeToken, editor])` called `setActiveToken(nextToken)` inside the effect body. Since `getActiveToken()` returns a new object reference on every call, the comparison `activeToken !== nextToken` was always `true` → effect re-ran → new setState → loop.
+
+**Fix:** Removed the active token/query from the `useEffect` dependency array. Instead:
+- Added an `activeTokenRef` / `activeQueryRef` (`useRef`) to track current state without triggering re-renders.
+- Effect depends only on `[editor]`.
+- Value-equality check (`from`, `to`, `query/char`) before calling `setState` to skip unnecessary re-renders.
+- `ref.current` and `setState` are updated together when a real change is detected.
+
+### `<Deferred>` with inline array literal — hoisted to module-level constant
+
+**Problem:** Inertia v2's `<Deferred>` internally memoises its `data` prop: `useMemo(() => ..., [data])`. An inline array literal `data={['relatedTasks', 'backlinks']}` creates a new reference on every parent render → memo recomputes → internal `useEffect` re-runs → `setLoaded()` → re-render → loop.
+
+**Fix:** Hoisted the array to a module-level constant:
+
+```tsx
+const DEFERRED_RELATED_DATA = ['relatedTasks', 'backlinks'] as const;
+// ...
+<Deferred data={DEFERRED_RELATED_DATA}>
+```
+
+### General rule for future editor components
+
+- **Do not** use `useState` + `useEffect` + `editor.on('update'/'selectionUpdate')` to derive display values from editor state. Use `useEditorState` instead.
+- **Do not** call `editor.can().chain().focus()...` during render. Use `editor.can().toggleMark(mark)` (no chain, no focus) for pure capability checks.
+- **Do not** pass inline array or object literals as props to Inertia `<Deferred>` — always use a stable reference (module-level constant or `useMemo`).
+
 ## Next planned area
 
 ### Wiki-links in block mode

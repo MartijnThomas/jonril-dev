@@ -23,7 +23,7 @@ Benefits over the default `file` driver:
 
 ## What runs synchronously today that shouldn't
 
-### 1. Note indexing in `NoteObserver::saved()` — **highest priority**
+### 1. Note indexing in `NoteObserver::saved()` — ✓ Implemented 2026-03-18
 
 Every time a note is saved (autosave, task toggle, title edit, migration), three indexers run inline:
 
@@ -87,7 +87,7 @@ class ReindexNoteJob implements ShouldQueue
 
 ---
 
-### 2. Child note reindexing on title change
+### 2. Child note reindexing on title change — ✓ Implemented 2026-03-18
 
 When a note title is renamed, all child notes are currently reindexed synchronously:
 
@@ -183,7 +183,7 @@ Dispatch `ReindexNoteJob` on the `indexing` queue so it never blocks user-facing
 ## Implementation order
 
 1. **Switch `CACHE_STORE=redis`** — zero code change, immediate win
-2. **`ReindexNoteJob`** — biggest latency impact; covers tasks/headings/timeblocks in one job
+2. ~~**`ReindexNoteJob`**~~ ✓ Done — dispatched from `NoteObserver::saved()` and `restored()`, routes to `indexing` queue, snapshots `Auth::id()` at dispatch time
 3. **`WarmNoteSharedCacheJob`** — eliminates cold-cache spike after writes
 4. **`SyncCalendarJob`** (if not already queued) — removes remote latency from request path
 5. **Slug sync to queue** — lower priority; only affects deep hierarchies
