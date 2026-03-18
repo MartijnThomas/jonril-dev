@@ -6,6 +6,8 @@ export type SimpleEditorContent = string | Record<string, any> | null;
 export type SimpleEditorProps = {
     id?: string;
     noteUpdateUrl?: string;
+    noteHashUrl?: string;
+    contentHash?: string | null;
     content?: SimpleEditorContent;
     properties?: DocumentPropertiesValue;
     linkableNotes?: {

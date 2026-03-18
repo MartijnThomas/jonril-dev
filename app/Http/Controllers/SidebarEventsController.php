@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SyncCalendarRangeJob;
 use App\Models\Calendar;
 use App\Models\CalendarItem;
+use App\Models\CalendarSyncedRange;
 use App\Models\Event;
 use App\Models\Note;
 use App\Models\Timeblock;
@@ -111,16 +113,21 @@ class SidebarEventsController extends Controller
         $startOfDayUtc = $anchorDate->copy()->timezone($userTimezone)->startOfDay()->timezone('UTC');
         $endOfDayUtc = $anchorDate->copy()->timezone($userTimezone)->endOfDay()->timezone('UTC');
 
+        // Dispatch on-demand syncs for dates outside the normal background-sync window.
+        $syncing = $this->dispatchOnDemandSyncsIfNeeded($workspace, $anchorDate, $userTimezone);
+
         $activeCalendarIds = Calendar::query()
             ->where('workspace_id', $workspace->id)
             ->where('is_active', true)
             ->pluck('id');
 
+        // Active (non-deleted) calendar events.
         $rawEvents = Event::query()
             ->with(['eventable', 'note:id,title,slug,type,journal_granularity,journal_date,workspace_id,parent_id,properties'])
             ->where('workspace_id', $workspace->id)
             ->where('starts_at', '<=', $endOfDayUtc)
             ->where('ends_at', '>=', $startOfDayUtc)
+            ->whereNull('remote_deleted_at')
             ->where(function ($q) use ($activeCalendarIds): void {
                 $q->whereNot('eventable_type', CalendarItem::class)
                     ->orWhereHasMorph('eventable', CalendarItem::class, function ($q2) use ($activeCalendarIds): void {
@@ -137,36 +144,40 @@ class SidebarEventsController extends Controller
 
                 return (string) $event->journal_date?->toDateString() === $anchorDate->toDateString();
             })
-            ->map(function (Event $event) use ($userTimezone): array {
-                $isTimeblock = $event->eventable_type === Timeblock::class;
-                $timeblock = $isTimeblock ? $event->eventable : null;
-                $calendarItem = $event->eventable_type === CalendarItem::class ? $event->eventable : null;
-                $allDay = (bool) $event->all_day;
+            ->map(fn (Event $event) => $this->formatEvent($event, $userTimezone));
 
-                return [
-                    'id' => $event->id,
-                    'block_id' => $event->block_id ?? $event->id,
-                    'type' => $isTimeblock ? 'timeblock' : 'event',
-                    'all_day' => $allDay,
-                    'title' => (string) $event->title,
-                    'note_id' => $event->note_id,
-                    'starts_at' => $allDay
-                        ? $event->starts_at?->toDateString()
-                        : $event->starts_at?->copy()->timezone($userTimezone)->toIso8601String(),
-                    'ends_at' => $allDay
-                        ? $event->ends_at?->copy()->subDay()->toDateString()
-                        : $event->ends_at?->copy()->timezone($userTimezone)->toIso8601String(),
-                    'location' => $isTimeblock ? $timeblock->location : ($calendarItem?->location ?: null),
-                    'task_block_id' => $timeblock instanceof Timeblock ? $timeblock->task_block_id : null,
-                    'task_checked' => $timeblock instanceof Timeblock ? $timeblock->task_checked : null,
-                    'task_status' => $timeblock instanceof Timeblock ? $timeblock->task_status : null,
-                    'note_title' => $event->note?->display_title,
-                    'href' => $event->note ? $this->noteSlugService->urlFor($event->note) : null,
-                    'timezone' => $userTimezone,
-                ];
-            });
+        // Remote-deleted calendar events that still have a meeting note — shown
+        // with a strikethrough so the user knows the event was removed.
+        $deletedEventsWithNotes = Event::query()
+            ->with(['eventable'])
+            ->where('workspace_id', $workspace->id)
+            ->where('starts_at', '<=', $endOfDayUtc)
+            ->where('ends_at', '>=', $startOfDayUtc)
+            ->whereNotNull('remote_deleted_at')
+            ->whereHasMorph('eventable', CalendarItem::class, function ($q2) use ($activeCalendarIds): void {
+                $q2->whereIn('calendar_id', $activeCalendarIds);
+            })
+            ->orderBy('starts_at')
+            ->get()
+            ->filter(function (Event $event): bool {
+                $blockId = $event->block_id ?? $event->id;
 
-        $blockIds = $rawEvents->pluck('block_id')->filter()->unique()->values()->all();
+                return Note::query()
+                    ->where('type', Note::TYPE_MEETING)
+                    ->whereNull('deleted_at')
+                    ->where('meta->event_block_id', $blockId)
+                    ->exists();
+            })
+            ->map(fn (Event $event) => [
+                ...$this->formatEvent($event, $userTimezone),
+                'remote_deleted' => true,
+            ]);
+
+        $combined = $rawEvents->concat($deletedEventsWithNotes)
+            ->sortBy('starts_at')
+            ->values();
+
+        $blockIds = $combined->pluck('block_id')->filter()->unique()->values()->all();
         $meetingNoteMap = [];
 
         if (! empty($blockIds)) {
@@ -185,7 +196,7 @@ class SidebarEventsController extends Controller
                 });
         }
 
-        $events = $rawEvents->map(function (array $e) use ($meetingNoteMap): array {
+        $events = $combined->map(function (array $e) use ($meetingNoteMap): array {
             $match = isset($e['block_id']) ? ($meetingNoteMap[$e['block_id']] ?? null) : null;
 
             return [
@@ -198,6 +209,88 @@ class SidebarEventsController extends Controller
         return response()->json([
             'date' => $anchorDate->toDateString(),
             'events' => $events,
+            'syncing' => $syncing,
         ]);
+    }
+
+    /**
+     * For dates outside the normal −7/+30 day background-sync window, check
+     * whether each active calendar has a fresh record for the requested month.
+     * If not, dispatch a SyncCalendarRangeJob and return true so the frontend
+     * knows to poll for updated events.
+     *
+     * Months already synced within the last 6 hours are considered fresh and
+     * will not trigger a redundant job.
+     */
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatEvent(Event $event, string $userTimezone): array
+    {
+        $isTimeblock = $event->eventable_type === Timeblock::class;
+        $timeblock = $isTimeblock ? $event->eventable : null;
+        $calendarItem = $event->eventable_type === CalendarItem::class ? $event->eventable : null;
+        $allDay = (bool) $event->all_day;
+
+        return [
+            'id' => $event->id,
+            'block_id' => $event->block_id ?? $event->id,
+            'type' => $isTimeblock ? 'timeblock' : 'event',
+            'all_day' => $allDay,
+            'title' => (string) $event->title,
+            'note_id' => $event->note_id,
+            'starts_at' => $allDay
+                ? $event->starts_at?->toDateString()
+                : $event->starts_at?->copy()->timezone($userTimezone)->toIso8601String(),
+            'ends_at' => $allDay
+                ? $event->ends_at?->copy()->subDay()->toDateString()
+                : $event->ends_at?->copy()->timezone($userTimezone)->toIso8601String(),
+            'location' => $isTimeblock ? $timeblock->location : ($calendarItem?->location ?: null),
+            'task_block_id' => $timeblock instanceof Timeblock ? $timeblock->task_block_id : null,
+            'task_checked' => $timeblock instanceof Timeblock ? $timeblock->task_checked : null,
+            'task_status' => $timeblock instanceof Timeblock ? $timeblock->task_status : null,
+            'note_title' => $event->note?->display_title,
+            'href' => $event->note ? $this->noteSlugService->urlFor($event->note) : null,
+            'timezone' => $userTimezone,
+            'remote_deleted' => false,
+        ];
+    }
+
+    private function dispatchOnDemandSyncsIfNeeded(
+        Workspace $workspace,
+        \Carbon\CarbonInterface $anchorDate,
+        string $userTimezone,
+    ): bool {
+        $normalWindowStart = now($userTimezone)->subDays(7)->startOfDay();
+        $normalWindowEnd = now($userTimezone)->addDays(30)->endOfDay();
+
+        // Within the normal window: the hourly cron handles it.
+        if ($anchorDate->betweenIncluded($normalWindowStart, $normalWindowEnd)) {
+            return false;
+        }
+
+        $period = $anchorDate->format('Y-m');
+        $staleThreshold = now()->subHours(6);
+        $syncing = false;
+
+        $activeCalendars = Calendar::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('is_active', true)
+            ->get(['id']);
+
+        foreach ($activeCalendars as $calendar) {
+            $isFresh = CalendarSyncedRange::query()
+                ->where('calendar_id', $calendar->id)
+                ->where('period', $period)
+                ->where('synced_at', '>=', $staleThreshold)
+                ->exists();
+
+            if (! $isFresh) {
+                SyncCalendarRangeJob::dispatch($calendar, $period);
+                $syncing = true;
+            }
+        }
+
+        return $syncing;
     }
 }

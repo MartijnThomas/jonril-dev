@@ -46,9 +46,10 @@ export default function DocsShow({ page, pages }: Props) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Docs - ${page.title}`} />
 
-            <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6">
+            <div className="flex-1 overflow-y-auto">
+                <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6">
                 <div className="grid grid-cols-1 gap-8 md:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)_14rem]">
-                    <aside className="md:sticky md:top-24 md:self-start">
+                    <aside className="md:sticky md:top-4 md:self-start">
                         <div className="space-y-5">
                             {Object.entries(pagesBySection).map(([section, items]) => (
                                 <div key={section}>
@@ -86,7 +87,7 @@ export default function DocsShow({ page, pages }: Props) {
                     />
 
                     {page.tocHtml ? (
-                        <aside className="hidden xl:sticky xl:top-24 xl:block xl:self-start">
+                        <aside className="hidden xl:sticky xl:top-4 xl:block xl:self-start">
                             <div className="rounded-md border border-sidebar-border/60 bg-background/70 p-3">
                                 <h2 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                     On This Page
@@ -98,6 +99,7 @@ export default function DocsShow({ page, pages }: Props) {
                             </div>
                         </aside>
                     ) : null}
+                </div>
                 </div>
             </div>
         </AppLayout>

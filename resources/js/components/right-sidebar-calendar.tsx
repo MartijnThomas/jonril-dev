@@ -217,6 +217,8 @@ export function RightSidebarCalendar() {
     const [monthPickerOpen, setMonthPickerOpen] = useState(false);
     const [pickerYear, setPickerYear] = useState(viewMonth.getFullYear());
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const syncPollRef = useRef<number | null>(null);
     const [events, setEvents] = useState<SidebarEvent[]>([]);
     const [eventsDate, setEventsDate] = useState<string | null>(null);
 
@@ -243,9 +245,24 @@ export function RightSidebarCalendar() {
                 headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             })
                 .then((r) => r.json())
-                .then((data: { date: string; events: SidebarEvent[] }) => {
+                .then((data: { date: string; events: SidebarEvent[]; syncing?: boolean }) => {
                     setEvents(data.events ?? []);
                     setEventsDate(data.date ?? null);
+
+                    if (data.syncing) {
+                        setIsSyncing(true);
+                        // Poll once after 3 s to pick up the freshly-synced events.
+                        if (syncPollRef.current !== null) {
+                            window.clearTimeout(syncPollRef.current);
+                        }
+                        syncPollRef.current = window.setTimeout(() => {
+                            syncPollRef.current = null;
+                            setIsSyncing(false);
+                            fetchEvents(dateParam);
+                        }, 3000);
+                    } else {
+                        setIsSyncing(false);
+                    }
                 })
                 .catch(() => {
                     // Keep existing events on error.
@@ -352,6 +369,14 @@ export function RightSidebarCalendar() {
     useEffect(() => {
         return () => {
             clearPrefetchTimeout();
+        };
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (syncPollRef.current !== null) {
+                window.clearTimeout(syncPollRef.current);
+            }
         };
     }, []);
 
@@ -624,7 +649,7 @@ export function RightSidebarCalendar() {
                 timeFormat={pageProps.auth?.user?.settings?.time_format ?? null}
                 timezone={pageProps.auth?.user?.settings?.timezone ?? null}
                 onRefresh={workspaceSlug !== '' ? refreshEvents : undefined}
-                isRefreshing={isRefreshing}
+                isRefreshing={isRefreshing || isSyncing}
             />
         </section>
     );

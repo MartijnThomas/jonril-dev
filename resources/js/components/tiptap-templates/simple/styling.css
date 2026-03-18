@@ -1144,11 +1144,11 @@
 }
 
 .mention {
-    @apply bg-purple-400/10 text-purple-700 dark:bg-violet-500/20 dark:text-violet-400 dark:no-underline;
+    @apply bg-purple-400/10 px-1 text-purple-700 dark:bg-violet-500/20 dark:text-violet-400 dark:no-underline;
 }
 
 .hashtag {
-    @apply bg-blue-400/10 text-blue-700 dark:bg-sky-500/20 dark:text-sky-400 dark:no-underline;
+    @apply bg-blue-400/10 px-1 text-blue-700 dark:bg-sky-500/20 dark:text-sky-400 dark:no-underline;
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor .md-highlight,

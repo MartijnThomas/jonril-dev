@@ -11,24 +11,26 @@ import {
     getParagraphMarkerBounds,
     getCurrentBlockNode,
     getCurrentBlockNodeFromState,
-    headingTextPrefix,
     convertCurrentHeadingToParagraph,
     dedentCurrentParagraph,
     decreaseCurrentHeadingLevel,
     indentCurrentParagraph,
     isAtEndOfCurrentBlock,
     isAtStartOfCurrentBlock,
-    normalizeHeadingPrefixesFromAttrs,
     normalizeHeadingAttrs,
     normalizeParagraphAttrs,
     parseBlockTaskDateTokens,
     parseBlockTaskPriority,
     removeParagraphStyleOrDedentCurrentParagraph,
     setParagraphCheckedAtPos,
-    syncHeadingBlocksFromText,
     toggleParagraphTaskAtPos,
     syncTaskParagraphStatusesFromText,
 } from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
+import {
+    findDateGhostSuffix,
+    findDateHelperBeforeCursor,
+    resolveDateKeyword,
+} from '@/components/tiptap-templates/simple/block-tree/block-tree-date-helpers';
 import { findCompleteRawWikiLinks } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 import type { CreateBlockTreeEditorExtensionsOptions } from '@/components/tiptap-templates/simple/block-tree-editor-extension-options';
 
@@ -114,6 +116,38 @@ export const BlockParagraph = Paragraph.extend({
                 rendered: false,
             },
         };
+    },
+    parseHTML() {
+        return [
+            {
+                tag: 'p[data-block-tree-node="paragraph"]',
+                getAttrs: (element) => {
+                    if (typeof element === 'string') {
+                        return {};
+                    }
+
+                    const el = element as HTMLElement;
+
+                    return {
+                        blockStyle: el.getAttribute('data-block-style') ?? 'paragraph',
+                        indent: parseInt(el.getAttribute('data-indent') ?? '0', 10) || 0,
+                        order: parseInt(el.getAttribute('data-order') ?? '1', 10) || 1,
+                        checked: el.getAttribute('data-checked') === 'true',
+                        taskStatus: el.getAttribute('data-task-status') ?? null,
+                        assignee: el.getAttribute('data-assignee') ?? null,
+                        dueDate: el.getAttribute('data-due-date') ?? null,
+                        deadlineDate: el.getAttribute('data-deadline-date') ?? null,
+                        startedAt: el.getAttribute('data-started-at') ?? null,
+                        completedAt: el.getAttribute('data-completed-at') ?? null,
+                        canceledAt: el.getAttribute('data-canceled-at') ?? null,
+                        backlogPromotedAt: el.getAttribute('data-backlog-promoted-at') ?? null,
+                        // Deliberately omit: id, migratedAt, migratedToNoteId, migratedFromNoteId,
+                        // migratedFromBlockId — these are note-specific and must not be copied.
+                    };
+                },
+            },
+            { tag: 'p' },
+        ];
     },
     renderHTML({ node, HTMLAttributes }) {
         const indent = Number(node.attrs.indent ?? 0);
@@ -297,10 +331,7 @@ function createBlockEditingExtension(
             return [
                 new Plugin({
                     appendTransaction: (_transactions, _oldState, newState) => {
-                        return (
-                            syncTaskParagraphStatusesFromText(newState) ??
-                            syncHeadingBlocksFromText(this.editor, newState)
-                        );
+                        return syncTaskParagraphStatusesFromText(newState);
                     },
                     props: {
                         decorations: (state) => {
@@ -363,26 +394,7 @@ function createBlockEditingExtension(
                                     return true;
                                 }
 
-                                if (node.type.name === 'heading') {
-                                    const prefixLength =
-                                        headingTextPrefix(
-                                            Math.min(6, Math.max(1, Number(node.attrs.level ?? 1))),
-                                        ).length;
-                                    const className =
-                                        currentHeadingPos === pos
-                                            ? 'bt-heading-text-token'
-                                            : 'bt-heading-text-token bt-heading-text-token--hidden';
-
-                                    decorations.push(
-                                        Decoration.inline(pos + 1, pos + 1 + prefixLength, {
-                                            class: className,
-                                        }),
-                                    );
-
-                                    return true;
-                                }
-
-                                if (node.type.name !== 'paragraph') {
+                                if (node.type.name === 'heading' || node.type.name !== 'paragraph') {
                                     return true;
                                 }
 
@@ -497,6 +509,29 @@ function createBlockEditingExtension(
                                 return true;
                             });
 
+                            // Ghost suggestion for date keywords in task blocks
+                            const { from: selFrom, to: selTo } = state.selection;
+                            if (selFrom === selTo && isEditorFocused) {
+                                const $cur = state.selection.$from;
+                                if ($cur.parent.type.name === 'paragraph') {
+                                    const curAttrs = normalizeParagraphAttrs($cur.parent.attrs);
+                                    if (curAttrs.blockStyle === 'task') {
+                                        const textBefore = $cur.parent.textContent.slice(0, $cur.parentOffset);
+                                        const ghost = findDateGhostSuffix(textBefore);
+                                        if (ghost) {
+                                            decorations.push(
+                                                Decoration.widget(selFrom, () => {
+                                                    const span = document.createElement('span');
+                                                    span.className = 'inline-command-ghost';
+                                                    span.textContent = ghost;
+                                                    return span;
+                                                }, { side: 1 }),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+
                             return DecorationSet.create(state.doc, decorations);
                         },
                         handleClickOn: (view, _pos, node, nodePos, event) => {
@@ -554,6 +589,29 @@ function createBlockEditingExtension(
                                 return false;
                             }
 
+                            // Date keyword expansion for task paragraphs (>keyword → >yyyy-mm-dd)
+                            if (current.type.name === 'paragraph') {
+                                const taskAttrs = normalizeParagraphAttrs(current.attrs);
+                                if (taskAttrs.blockStyle === 'task') {
+                                    const $from = this.editor.state.selection.$from;
+                                    const textBefore = current.textContent.slice(0, $from.parentOffset);
+                                    const dateMatch = findDateHelperBeforeCursor(textBefore);
+                                    if (dateMatch) {
+                                        const resolved = resolveDateKeyword(dateMatch.keyword);
+                                        if (resolved) {
+                                            const blockStart = $from.before();
+                                            const keywordFrom = blockStart + 1 + dateMatch.matchStart;
+                                            const keywordTo = blockStart + 1 + dateMatch.matchStart + dateMatch.matchLength;
+                                            const replacement = `${dateMatch.prefix}${resolved} `;
+                                            this.editor.view.dispatch(
+                                                this.editor.state.tr.insertText(replacement, keywordFrom, keywordTo),
+                                            );
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+
                             if (current.type.name === 'paragraph') {
                                 const paragraphPos = this.editor.state.selection.$from.before();
                                 const parentOffset = this.editor.state.selection.$from.parentOffset;
@@ -573,8 +631,9 @@ function createBlockEditingExtension(
                                         normalizeHeadingAttrs({ level: nextLevel }),
                                     );
 
-                                    transaction = transaction.insertText(
-                                        ' ',
+                                    // Delete the # characters — heading text should be clean
+                                    transaction = transaction.delete(
+                                        paragraphPos + 1,
                                         paragraphPos + 1 + nextLevel,
                                     );
 
@@ -594,8 +653,9 @@ function createBlockEditingExtension(
                                         normalizeHeadingAttrs({ level: nextLevel }),
                                     );
 
-                                    transaction = transaction.insertText(
-                                        ' ',
+                                    // Delete the # characters — heading text should be clean
+                                    transaction = transaction.delete(
+                                        paragraphPos + 1,
                                         paragraphPos + 1 + nextLevel,
                                     );
 
@@ -949,6 +1009,21 @@ function createBlockEditingExtension(
                     const { $from } = this.editor.state.selection;
                     const parentText = $from.parent.textContent ?? '';
                     const beforeCursor = parentText.slice(0, $from.parentOffset);
+
+                    // Complete date ghost suggestion if present in a task block
+                    if ($from.parent.type.name === 'paragraph') {
+                        const tabAttrs = normalizeParagraphAttrs($from.parent.attrs);
+                        if (tabAttrs.blockStyle === 'task') {
+                            const ghost = findDateGhostSuffix(beforeCursor);
+                            if (ghost) {
+                                this.editor.view.dispatch(
+                                    this.editor.state.tr.insertText(ghost, $from.pos),
+                                );
+                                return true;
+                            }
+                        }
+                    }
+
                     if (/\/[^\s]*$/u.test(beforeCursor)) {
                         return false;
                     }
@@ -970,25 +1045,12 @@ function createBlockEditingExtension(
                     });
                 },
                 Backspace: () => {
-                    const { $from } = this.editor.state.selection;
-                    const isInHeading = $from.parent.type.name === 'heading';
-
-                    if (isInHeading) {
-                        const level = Number($from.parent.attrs.level ?? 1);
-                        const prefix = headingTextPrefix(level);
-                        const text = $from.parent.textContent;
-
-                        // Only the prefix remains — convert to paragraph regardless of cursor position
-                        if (text === prefix || text === prefix.trimEnd()) {
-                            return this.editor.commands.command(({ editor, state, dispatch }) => {
-                                return convertCurrentHeadingToParagraph(editor, state, dispatch);
-                            });
-                        }
-                    }
-
                     if (!isAtStartOfCurrentBlock(this.editor)) {
                         return false;
                     }
+
+                    const { $from } = this.editor.state.selection;
+                    const isInHeading = $from.parent.type.name === 'heading';
 
                     if (isInHeading) {
                         return this.editor.commands.command(({ editor, state, dispatch }) => {
@@ -1028,12 +1090,6 @@ function createBlockEditingExtension(
 
                 return true;
             });
-
-            const normalizedHeadingTransaction = normalizeHeadingPrefixesFromAttrs(editor.state);
-            if (normalizedHeadingTransaction) {
-                transaction = normalizedHeadingTransaction;
-                changed = true;
-            }
 
             if (changed) {
                 editor.view.dispatch(transaction);

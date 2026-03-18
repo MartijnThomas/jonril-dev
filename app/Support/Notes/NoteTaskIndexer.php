@@ -439,7 +439,21 @@ class NoteTaskIndexer
                 ]];
             }
 
-            return $this->splitTaskDateTokens($text);
+            $dateFragments = $this->splitTaskDateTokens($text);
+
+            $result = [];
+            foreach ($dateFragments as $fragment) {
+                if (($fragment['type'] ?? null) === 'text') {
+                    $result = array_merge(
+                        $result,
+                        $this->splitInlineTokensFromText((string) ($fragment['text'] ?? ''), $mentions, $hashtags),
+                    );
+                } else {
+                    $result[] = $fragment;
+                }
+            }
+
+            return $result;
         }
 
         if ($type === 'hardBreak') {
@@ -492,6 +506,59 @@ class NoteTaskIndexer
                 $fragments,
                 $this->inlineFragments($child, $mentions, $hashtags),
             );
+        }
+
+        return $fragments;
+    }
+
+    /**
+     * Split plain text into mention, hashtag, and text fragments.
+     * Handles block-editor tasks where @mentions and #hashtags are stored as plain text.
+     *
+     * @param  array<int, string>  $mentions
+     * @param  array<int, string>  $hashtags
+     * @return array<int, array<string, mixed>>
+     */
+    private function splitInlineTokensFromText(string $text, array &$mentions, array &$hashtags): array
+    {
+        $pattern = '/(^|[^\p{L}\p{N}_\-])([@#][\p{L}\p{N}_\-]+)/u';
+
+        if (! preg_match($pattern, $text)) {
+            return $text !== '' ? [['type' => 'text', 'text' => $text]] : [];
+        }
+
+        $fragments = [];
+        $cursor = 0;
+
+        preg_match_all($pattern, $text, $allMatches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+
+        foreach ($allMatches as $match) {
+            $fullMatchOffset = (int) $match[0][1];
+            $boundaryStr = (string) $match[1][0];
+            $token = (string) $match[2][0];
+            $tokenOffset = (int) $match[2][1];
+
+            $before = substr($text, $cursor, $fullMatchOffset + strlen($boundaryStr) - $cursor);
+            if ($before !== '') {
+                $fragments[] = ['type' => 'text', 'text' => $before];
+            }
+
+            $label = substr($token, 1);
+
+            if (str_starts_with($token, '@')) {
+                $mentions[] = $label;
+                $fragments[] = ['type' => 'mention', 'label' => $label];
+            } else {
+                $hashtags[] = $label;
+                $fragments[] = ['type' => 'hashtag', 'label' => $label];
+            }
+
+            $cursor = $tokenOffset + strlen($token);
+        }
+
+        $remaining = substr($text, $cursor);
+        if ($remaining !== '') {
+            $fragments[] = ['type' => 'text', 'text' => $remaining];
         }
 
         return $fragments;

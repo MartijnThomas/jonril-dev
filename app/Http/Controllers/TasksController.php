@@ -479,6 +479,10 @@ class TasksController extends Controller
             abort(409, 'Task updates are disabled for migrated source workspaces.');
         }
 
+        if ($task->task_status === 'migrated') {
+            abort(409, 'Migrated tasks cannot be toggled in their origin note.');
+        }
+
         $content = is_array($note->content) ? $note->content : null;
         if (! $content) {
             abort(422, 'Note content is invalid.');
@@ -555,6 +559,16 @@ class TasksController extends Controller
         $note->loadMissing('workspace');
         if ($note->workspace?->isMigratedSource()) {
             abort(409, 'Task updates are disabled for migrated source workspaces.');
+        }
+
+        if (is_string($data['block_id'] ?? null) && trim((string) $data['block_id']) !== '') {
+            $referencedTask = NoteTask::query()
+                ->where('note_id', $data['note_id'])
+                ->where('block_id', trim((string) $data['block_id']))
+                ->first(['task_status']);
+            if ($referencedTask?->task_status === 'migrated') {
+                abort(409, 'Migrated tasks cannot be toggled in their origin note.');
+            }
         }
 
         $content = is_array($note->content) ? $note->content : null;

@@ -15,7 +15,6 @@ use App\Support\Notes\NoteRelatedPanelBuilder;
 use App\Support\Notes\NoteRevisionRecorder;
 use App\Support\Notes\NoteSlugService;
 use App\Support\Notes\NoteTitleExtractor;
-use App\Support\Notes\NoteWordCountExtractor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -33,7 +32,6 @@ class NotesController extends Controller
         private readonly NoteRevisionRecorder $noteRevisionRecorder,
         private readonly NoteSlugService $noteSlugService,
         private readonly JournalNoteService $journalNoteService,
-        private readonly NoteWordCountExtractor $noteWordCountExtractor,
         private readonly NoteRelatedPanelBuilder $noteRelatedPanelBuilder,
         private readonly LegacyToBlockNoteConverter $legacyToBlockNoteConverter,
     ) {}
@@ -58,7 +56,6 @@ class NotesController extends Controller
         $workspace = $this->currentWorkspace();
         $title = trim((string) ($data['title'] ?? ''));
         $initialContent = null;
-        $initialWordCount = 0;
 
         if ($workspace->editor_mode === Workspace::EDITOR_MODE_BLOCK) {
             $headingText = $title !== '' ? $title : '';
@@ -74,7 +71,6 @@ class NotesController extends Controller
                     ],
                 ],
             ];
-            $initialWordCount = $this->noteWordCountExtractor->count($initialContent);
         }
 
         $noteType = in_array($data['type'] ?? null, [Note::TYPE_NOTE, Note::TYPE_MEETING], true)
@@ -87,7 +83,6 @@ class NotesController extends Controller
             'parent_id' => $data['parent_id'] ?? null,
             'title' => $title !== '' ? $title : null,
             'content' => $initialContent,
-            'word_count' => $initialWordCount,
         ]);
 
         $this->noteSlugService->syncSingleNote($note);
@@ -170,7 +165,6 @@ class NotesController extends Controller
                 'title' => $title,
                 'content' => $content,
                 'properties' => [],
-                'word_count' => $this->noteWordCountExtractor->count($content),
             ]);
 
             $this->noteSlugService->syncSingleNote($created);
@@ -223,6 +217,30 @@ class NotesController extends Controller
         $resolved = $this->resolveNoteOrFailInWorkspace($workspace, $note);
 
         return $this->renderNotePage($resolved, request());
+    }
+
+    public function contentHash(string $note): \Illuminate\Http\JsonResponse
+    {
+        $resolved = $this->resolveNoteOrFail($note);
+
+        return response()->json(['hash' => $this->resolveContentHash($resolved)]);
+    }
+
+    public function contentHashScoped(Workspace $workspace, string $note): \Illuminate\Http\JsonResponse
+    {
+        $this->assertWorkspaceMembership($workspace);
+        $resolved = $this->resolveNoteOrFailInWorkspace($workspace, $note);
+
+        return response()->json(['hash' => $this->resolveContentHash($resolved)]);
+    }
+
+    private function resolveContentHash(Note $note): string
+    {
+        if (is_array($note->meta) && isset($note->meta['content_hash'])) {
+            return (string) $note->meta['content_hash'];
+        }
+
+        return hash('sha256', json_encode($note->content));
     }
 
     public function showJournal(Request $request, string $granularity, string $period)
@@ -370,12 +388,14 @@ class NotesController extends Controller
 
         $properties = $this->sanitizeProperties($data['properties'] ?? null);
 
+        $contentHash = hash('sha256', json_encode($data['content']));
+
         $resolved->content = $data['content'];
         $resolved->properties = $properties;
+        $resolved->meta = array_merge(is_array($resolved->meta) ? $resolved->meta : [], ['content_hash' => $contentHash]);
         if ($resolved->type !== Note::TYPE_JOURNAL) {
             $resolved->title = $this->noteTitleExtractor->extract($data['content']);
         }
-        $resolved->word_count = $this->noteWordCountExtractor->count($data['content']);
         $resolved->save();
 
         if (in_array($resolved->type, [Note::TYPE_NOTE, Note::TYPE_MEETING], true)) {
@@ -696,49 +716,27 @@ class NotesController extends Controller
             $editorContent = $this->legacyToBlockNoteConverter->convertNote($note)['document'];
         }
 
-        $allNotes = Note::query()
-            ->where('workspace_id', $this->currentWorkspace()->id)
-            ->orderBy('created_at')
-            ->get([
-                'id',
-                'workspace_id',
-                'slug',
-                'title',
-                'properties',
-                'meta',
-                'parent_id',
-                'type',
-                'journal_granularity',
-                'journal_date',
-            ]);
+        $workspaceId = $this->currentWorkspace()->id;
+
+        // Recursive CTE: walks up from the current note to the root.
+        // Only the ancestor chain is needed for breadcrumbs and parent_path —
+        // no need to scan every note in the workspace.
+        $ancestorNotes = Note::hydrate(DB::select(
+            'WITH RECURSIVE note_ancestors AS (
+                SELECT id, title, parent_id, workspace_id, slug, type, journal_granularity, journal_date, deleted_at
+                FROM notes WHERE id = ? AND deleted_at IS NULL
+                UNION ALL
+                SELECT n.id, n.title, n.parent_id, n.workspace_id, n.slug, n.type, n.journal_granularity, n.journal_date, n.deleted_at
+                FROM notes n
+                INNER JOIN note_ancestors a ON n.id = a.parent_id
+                WHERE n.workspace_id = ? AND n.deleted_at IS NULL
+            ) SELECT * FROM note_ancestors',
+            [$note->id, $workspaceId]
+        ));
 
         $pathById = [];
-        $noteById = $allNotes->keyBy('id');
-
-        $resolvePath = function (string $noteId) use (&$resolvePath, &$pathById, $noteById): string {
-            if (isset($pathById[$noteId])) {
-                return $pathById[$noteId];
-            }
-
-            /** @var Note|null $current */
-            $current = $noteById->get($noteId);
-            if (! $current) {
-                return '';
-            }
-
-            $title = $current->title ?? 'Untitled';
-            if (! $current->parent_id) {
-                $pathById[$noteId] = $title;
-
-                return $title;
-            }
-
-            $parentPath = $resolvePath($current->parent_id);
-            $path = $parentPath !== '' ? "{$parentPath} / {$title}" : $title;
-            $pathById[$noteId] = $path;
-
-            return $path;
-        };
+        $noteById = $ancestorNotes->keyBy('id');
+        $resolvePath = fn (string $id) => $this->resolveNotePath($id, $noteById, $pathById);
 
         $buildTrail = function (string $noteId) use ($noteById): array {
             $trail = [];
@@ -762,47 +760,15 @@ class NotesController extends Controller
             return array_reverse($trail);
         };
 
-        $linkableNotes = $allNotes
-            ->map(fn (Note $linkableNote) => [
-                'id' => $linkableNote->id,
-                'title' => $linkableNote->title ?? 'Untitled',
-                'path' => $linkableNote->parent_id
-                    ? $resolvePath($linkableNote->parent_id)
-                    : null,
-                'href' => $this->noteSlugService->urlFor($linkableNote),
-                'headings' => $this->extractLinkableHeadings($linkableNote),
-            ])
-            ->values();
-
-        $childrenByParent = $allNotes
-            ->filter(fn (Note $candidate) => $candidate->parent_id !== null)
-            ->groupBy('parent_id');
-        $excludedMoveTargetIds = [$note->id => true];
-        $queue = [$note->id];
-
-        while ($queue !== []) {
-            $parentId = array_shift($queue);
-            $children = $childrenByParent->get($parentId, collect());
-            foreach ($children as $child) {
-                if (isset($excludedMoveTargetIds[$child->id])) {
-                    continue;
-                }
-
-                $excludedMoveTargetIds[$child->id] = true;
-                $queue[] = $child->id;
-            }
-        }
-
-        $moveParentOptions = $allNotes
-            ->filter(fn (Note $candidate) => ! isset($excludedMoveTargetIds[$candidate->id]))
-            ->filter(fn (Note $candidate) => $candidate->type === Note::TYPE_NOTE)
-            ->map(fn (Note $candidate) => [
-                'id' => $candidate->id,
-                'title' => $candidate->display_title,
-                'path' => $candidate->parent_id ? $resolvePath($candidate->parent_id) : null,
-            ])
-            ->sortBy(fn (array $candidate) => strtolower((string) $candidate['path'].' '.$candidate['title']))
-            ->values();
+        // Memoised workspace-wide notes for the deferred editor-suggestions group.
+        // Only executed when the deferred request comes in, not on first render.
+        $workspaceNotesCache = null;
+        $getWorkspaceNotes = function () use (&$workspaceNotesCache, $workspaceId): \Illuminate\Support\Collection {
+            return $workspaceNotesCache ??= Note::query()
+                ->where('workspace_id', $workspaceId)
+                ->orderBy('created_at')
+                ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity']);
+        };
 
         $noteTrail = $buildTrail($note->id);
         if ($noteTrail === []) {
@@ -824,20 +790,52 @@ class NotesController extends Controller
         // When viewing a meeting note: show sibling meetings (same parent).
         // Otherwise: show meeting note children of the current note.
         if ($note->type === Note::TYPE_MEETING && $note->parent_id) {
-            $meetingNotesCollection = $allNotes
-                ->filter(fn (Note $sibling) => $sibling->parent_id === $note->parent_id && $sibling->type === Note::TYPE_MEETING);
+            $meetingNotesCollection = Note::query()
+                ->where('parent_id', $note->parent_id)
+                ->where('type', Note::TYPE_MEETING)
+                ->get(['id', 'title', 'meta', 'parent_id', 'slug', 'type', 'journal_granularity']);
         } else {
-            $meetingNotesCollection = $allNotes
-                ->filter(fn (Note $child) => $child->parent_id === $note->id && $child->type === Note::TYPE_MEETING);
+            $meetingNotesCollection = Note::query()
+                ->where('parent_id', $note->id)
+                ->where('type', Note::TYPE_MEETING)
+                ->get(['id', 'title', 'meta', 'parent_id', 'slug', 'type', 'journal_granularity']);
+        }
+
+        // Batch-resolve whether each meeting note's linked event has been remote-deleted.
+        $meetingEventBlockIds = $meetingNotesCollection
+            ->map(fn (Note $n) => is_array($n->meta) ? ($n->meta['event_block_id'] ?? null) : null)
+            ->filter()
+            ->values()
+            ->all();
+
+        $deletedEventBlockIds = [];
+        if (! empty($meetingEventBlockIds)) {
+            $deletedEventBlockIds = Event::query()
+                ->whereNotNull('remote_deleted_at')
+                ->where(function ($q) use ($meetingEventBlockIds): void {
+                    $q->whereIn('id', $meetingEventBlockIds)
+                        ->orWhereIn('block_id', $meetingEventBlockIds);
+                })
+                ->get(['id', 'block_id', 'remote_deleted_at'])
+                ->flatMap(fn (Event $e) => array_filter([$e->id, $e->block_id]))
+                ->flip()
+                ->all();
         }
 
         $meetingChildren = $meetingNotesCollection
-            ->map(fn (Note $meetingNote) => [
-                'id' => $meetingNote->id,
-                'title' => $meetingNote->display_title,
-                'href' => $this->noteSlugService->urlFor($meetingNote),
-                'starts_at' => is_array($meetingNote->meta) ? ($meetingNote->meta['starts_at'] ?? null) : null,
-            ])
+            ->map(function (Note $meetingNote) use ($deletedEventBlockIds): array {
+                $eventBlockId = is_array($meetingNote->meta) ? ($meetingNote->meta['event_block_id'] ?? null) : null;
+                $eventDeleted = $eventBlockId !== null && isset($deletedEventBlockIds[$eventBlockId]);
+
+                return [
+                    'id' => $meetingNote->id,
+                    'title' => $meetingNote->display_title,
+                    'href' => $this->noteSlugService->urlFor($meetingNote),
+                    'starts_at' => is_array($meetingNote->meta) ? ($meetingNote->meta['starts_at'] ?? null) : null,
+                    'event_deleted' => $eventDeleted,
+                    'task_counts' => $meetingNote->task_counts,
+                ];
+            })
             ->sortByDesc('starts_at')
             ->values();
 
@@ -847,23 +845,47 @@ class NotesController extends Controller
             $endsAt = $note->meta['ends_at'] ?? null;
             $timezone = $note->meta['timezone'] ?? null;
             $location = $note->meta['location'] ?? null;
+            $eventBlockId = $note->meta['event_block_id'] ?? null;
+
+            if ($eventBlockId !== null) {
+                $liveEvent = Event::query()
+                    ->where(fn ($q) => $q->where('id', $eventBlockId)->orWhere('block_id', $eventBlockId))
+                    ->first();
+
+                if ($liveEvent) {
+                    $timeblock = $liveEvent->eventable instanceof \App\Models\Timeblock ? $liveEvent->eventable : null;
+                    $calendarItem = $liveEvent->eventable instanceof \App\Models\CalendarItem ? $liveEvent->eventable : null;
+                    $location = $timeblock?->location ?? $calendarItem?->location;
+                }
+            }
+
             if ($startsAt || $endsAt || $location) {
+                $isEventDeleted = $eventBlockId !== null && Event::query()
+                    ->whereNotNull('remote_deleted_at')
+                    ->where(fn ($q) => $q->where('id', $eventBlockId)->orWhere('block_id', $eventBlockId))
+                    ->exists();
+
                 $meetingEvent = [
                     'starts_at' => $startsAt,
                     'ends_at' => $endsAt,
                     'timezone' => $timezone,
                     'location' => $location,
+                    'event_deleted' => $isEventDeleted,
                 ];
             }
         }
 
         return Inertia::render('notes/show', [
             'content' => $editorContent,
+            'contentHash' => $this->resolveContentHash($note),
             'noteId' => $note->id,
             'noteUrl' => $this->noteSlugService->urlFor($note),
             'noteUpdateUrl' => ($useBlockPreview || $workspaceReadOnly)
                 ? ''
                 : $this->noteSlugService->updateUrlFor($note),
+            'noteHashUrl' => ($useBlockPreview || $workspaceReadOnly)
+                ? ''
+                : $this->noteSlugService->hashUrlFor($note),
             'noteType' => $note->type,
             'journalGranularity' => $note->journal_granularity,
             'journalDate' => $note->journal_date?->toDateString(),
@@ -894,8 +916,60 @@ class NotesController extends Controller
                 'historyUrl' => route('notes.revisions', ['noteId' => $note->id]),
             ],
             'properties' => $note->properties ?? [],
-            'linkableNotes' => $linkableNotes,
-            'moveParentOptions' => $moveParentOptions,
+            'linkableNotes' => Inertia::defer(function () use ($getWorkspaceNotes) {
+                $allNotes = $getWorkspaceNotes();
+                $pathById = [];
+                $noteById = $allNotes->keyBy('id');
+                $resolvePath = fn (string $id) => $this->resolveNotePath($id, $noteById, $pathById);
+
+                return $allNotes
+                    ->map(fn (Note $linkableNote) => [
+                        'id' => $linkableNote->id,
+                        'title' => $linkableNote->title ?? 'Untitled',
+                        'path' => $linkableNote->parent_id
+                            ? $resolvePath($linkableNote->parent_id)
+                            : null,
+                        'href' => $this->noteSlugService->urlFor($linkableNote),
+                        'headings' => $this->extractLinkableHeadings($linkableNote),
+                    ])
+                    ->values();
+            }, 'editor-suggestions'),
+            'moveParentOptions' => Inertia::defer(function () use ($getWorkspaceNotes, $note) {
+                $allNotes = $getWorkspaceNotes();
+                $pathById = [];
+                $noteById = $allNotes->keyBy('id');
+                $resolvePath = fn (string $id) => $this->resolveNotePath($id, $noteById, $pathById);
+
+                $childrenByParent = $allNotes
+                    ->filter(fn (Note $candidate) => $candidate->parent_id !== null)
+                    ->groupBy('parent_id');
+                $excludedMoveTargetIds = [$note->id => true];
+                $queue = [$note->id];
+
+                while ($queue !== []) {
+                    $parentId = array_shift($queue);
+                    $children = $childrenByParent->get($parentId, collect());
+                    foreach ($children as $child) {
+                        if (isset($excludedMoveTargetIds[$child->id])) {
+                            continue;
+                        }
+
+                        $excludedMoveTargetIds[$child->id] = true;
+                        $queue[] = $child->id;
+                    }
+                }
+
+                return $allNotes
+                    ->filter(fn (Note $candidate) => ! isset($excludedMoveTargetIds[$candidate->id]))
+                    ->filter(fn (Note $candidate) => $candidate->type === Note::TYPE_NOTE)
+                    ->map(fn (Note $candidate) => [
+                        'id' => $candidate->id,
+                        'title' => $candidate->display_title,
+                        'path' => $candidate->parent_id ? $resolvePath($candidate->parent_id) : null,
+                    ])
+                    ->sortBy(fn (array $candidate) => strtolower((string) $candidate['path'].' '.$candidate['title']))
+                    ->values();
+            }, 'editor-suggestions'),
             'meetingChildren' => $meetingChildren,
             'meetingEvent' => $meetingEvent,
             'breadcrumbs' => $breadcrumbs,
@@ -906,10 +980,12 @@ class NotesController extends Controller
             'backlinks' => Inertia::defer(function () use ($note) {
                 return $this->noteRelatedPanelBuilder->backlinks($note);
             }, 'related-panel'),
-            'workspaceSuggestions' => [
-                'mentions' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->mention_suggestions),
-                'hashtags' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->hashtag_suggestions),
-            ],
+            'workspaceSuggestions' => Inertia::defer(function () {
+                return [
+                    'mentions' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->mention_suggestions),
+                    'hashtags' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->hashtag_suggestions),
+                ];
+            }, 'editor-suggestions'),
         ]);
     }
 
@@ -971,6 +1047,36 @@ class NotesController extends Controller
             ->filter()
             ->values()
             ->all();
+    }
+
+    /**
+     * Resolves the full slash-separated path for a note (e.g. "Work / Projects").
+     * Uses $cache to avoid recomputing paths for the same note within a single request.
+     *
+     * @param  \Illuminate\Support\Collection<string, Note>  $noteById
+     * @param  array<string, string>  $cache
+     */
+    private function resolveNotePath(string $noteId, $noteById, array &$cache): string
+    {
+        if (isset($cache[$noteId])) {
+            return $cache[$noteId];
+        }
+
+        /** @var Note|null $current */
+        $current = $noteById->get($noteId);
+        if (! $current) {
+            return '';
+        }
+
+        $title = $current->title ?? 'Untitled';
+        if (! $current->parent_id) {
+            return $cache[$noteId] = $title;
+        }
+
+        $parentPath = $this->resolveNotePath($current->parent_id, $noteById, $cache);
+        $path = $parentPath !== '' ? "{$parentPath} / {$title}" : $title;
+
+        return $cache[$noteId] = $path;
     }
 
     /**
@@ -1256,7 +1362,7 @@ class NotesController extends Controller
                 'journal_date',
                 'title',
                 'properties',
-                'word_count',
+                'meta',
                 'created_at',
                 'updated_at',
             ]);

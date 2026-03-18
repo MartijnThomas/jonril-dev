@@ -1,20 +1,65 @@
-import { router, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { addDays, addMonths, addWeeks, addYears, format } from 'date-fns';
 import {
-    ChevronDown,
+    AlertCircle,
+    CheckCircle,
     ChevronLeft,
     ChevronRight,
-    ChevronUp,
-    PanelRightClose,
-    PanelRightOpen,
+    LoaderCircle,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { NoteHeaderActions } from '@/components/note-header-actions';
 import { Button } from '@/components/ui/button';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
+import type { BreadcrumbItem as BreadcrumbItemType, EditorSaveStatus } from '@/types';
+
+function SaveStatusIcon({ status }: { status: EditorSaveStatus | null }) {
+    const [showSaved, setShowSaved] = useState(false);
+    const prevStatusRef = useRef<EditorSaveStatus | null>(null);
+
+    useEffect(() => {
+        if (prevStatusRef.current === 'saving' && status === 'ready') {
+            setShowSaved(true);
+            const t = setTimeout(() => setShowSaved(false), 2000);
+            return () => clearTimeout(t);
+        }
+        prevStatusRef.current = status;
+    }, [status]);
+
+    if (status === 'saving') {
+        return <LoaderCircle className="size-4.5 animate-spin text-muted-foreground" aria-label="Saving" />;
+    }
+    if (status === 'error') {
+        return <AlertCircle className="size-4.5 text-destructive" aria-label="Save failed" />;
+    }
+    if (status === 'dirty') {
+        return <span className="flex size-4.5 items-center justify-center" aria-label="Unsaved changes"><span className="size-2 rounded-full bg-amber-400" /></span>;
+    }
+    if (showSaved) {
+        return <CheckCircle className="size-4.5 text-emerald-500" aria-label="Saved" />;
+    }
+    return null;
+}
+
+function MobileNotePath({ breadcrumbs }: { breadcrumbs: BreadcrumbItemType[] }) {
+    const parents = breadcrumbs.slice(0, -1);
+    if (parents.length === 0) return null;
+    return (
+        <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <span className="flex items-center gap-1 whitespace-nowrap text-[0.68rem] text-muted-foreground">
+                {parents.map((item, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                        {i > 0 && <span className="opacity-40">/</span>}
+                        <Link href={item.href} className="hover:text-foreground transition-colors">
+                            {item.title}
+                        </Link>
+                    </span>
+                ))}
+            </span>
+        </div>
+    );
+}
 
 type JournalPageProps = {
     noteType?: string;
@@ -163,18 +208,12 @@ function isValidJournalPeriod(granularity: string, period: string): boolean {
 
 export function AppSidebarHeader({
     breadcrumbs = [],
-    rightSidebarEnabled = false,
-    rightSidebarOpen = false,
-    onRightSidebarToggle,
+    saveStatus = null,
 }: {
     breadcrumbs?: BreadcrumbItemType[];
-    rightSidebarEnabled?: boolean;
-    rightSidebarOpen?: boolean;
-    onRightSidebarToggle?: () => void;
+    saveStatus?: EditorSaveStatus | null;
 }) {
     const isMobile = useIsMobile();
-    const [mobileBreadcrumbsOpen, setMobileBreadcrumbsOpen] = useState(false);
-    const mobileHeaderRef = useRef<HTMLDivElement | null>(null);
     const pageProps = usePage().props as JournalPageProps;
     const isJournal =
         pageProps.noteType === 'journal' &&
@@ -217,66 +256,25 @@ export function AppSidebarHeader({
         router.get(path, {}, { preserveState: false, preserveScroll: true });
     };
 
-    useEffect(() => {
-        if (!isMobile || !mobileBreadcrumbsOpen) {
-            return;
-        }
-
-        const handlePointerDown = (event: PointerEvent) => {
-            const target = event.target as Node | null;
-            if (!target) {
-                return;
-            }
-
-            if (mobileHeaderRef.current?.contains(target)) {
-                return;
-            }
-
-            setMobileBreadcrumbsOpen(false);
-        };
-
-        document.addEventListener('pointerdown', handlePointerDown);
-
-        return () => {
-            document.removeEventListener('pointerdown', handlePointerDown);
-        };
-    }, [isMobile, mobileBreadcrumbsOpen]);
-
     const mobileTitle = breadcrumbs.at(-1)?.title ?? '';
-    const showMobileBreadcrumbToggle = isMobile && breadcrumbs.length > 1;
+    const showMobilePath = isMobile && breadcrumbs.length > 1;
     const headerIconClassName = 'size-[18px]';
 
     return (
-        <div ref={mobileHeaderRef} className="z-20 shrink-0">
-            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 backdrop-blur-lg transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 supports-[backdrop-filter]:bg-background/90 md:px-4">
+        <div className="z-20 shrink-0">
+            <header className="flex shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 py-3 backdrop-blur-lg transition-[width,height] ease-linear supports-backdrop-filter:bg-background/90 md:h-16 md:py-0 md:px-4">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <SidebarTrigger className="-ml-1 [&>svg]:!size-[18px]" />
-                    {showMobileBreadcrumbToggle ? (
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setMobileBreadcrumbsOpen((current) => !current)
-                            }
-                            className="flex min-w-0 items-center gap-1 text-left text-sm font-medium text-foreground"
-                            aria-expanded={mobileBreadcrumbsOpen}
-                            aria-label="Toggle breadcrumbs"
-                        >
-                            <span className="truncate">{mobileTitle}</span>
-                            {mobileBreadcrumbsOpen ? (
-                                <ChevronUp
-                                    className={`${headerIconClassName} shrink-0 text-muted-foreground`}
-                                />
-                            ) : (
-                                <ChevronDown
-                                    className={`${headerIconClassName} shrink-0 text-muted-foreground`}
-                                />
-                            )}
-                        </button>
+                    {isMobile ? (
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                            <span className="truncate text-sm font-medium text-foreground leading-tight">{mobileTitle}</span>
+                            {showMobilePath && <MobileNotePath breadcrumbs={breadcrumbs} />}
+                        </div>
                     ) : (
                         <Breadcrumbs breadcrumbs={breadcrumbs} />
                     )}
                 </div>
                 <div className="flex items-center gap-2">
+                    <SaveStatusIcon status={saveStatus} />
                     {isJournal && (
                         <div className="flex items-center gap-1">
                             <Button
@@ -326,34 +324,8 @@ export function AppSidebarHeader({
                             triggerIconClassName={headerIconClassName}
                         />
                     ) : null}
-                    {rightSidebarEnabled && (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 -mr-1"
-                            onClick={onRightSidebarToggle}
-                            aria-label="Toggle right sidebar"
-                        >
-                            {rightSidebarOpen ? (
-                                <PanelRightClose className={headerIconClassName} />
-                            ) : (
-                                <PanelRightOpen className={headerIconClassName} />
-                            )}
-                        </Button>
-                    )}
                 </div>
             </header>
-            {showMobileBreadcrumbToggle && mobileBreadcrumbsOpen ? (
-                <div className="absolute inset-x-0 top-full z-30 border-b border-sidebar-border/60 bg-background/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/90">
-                    <div className="overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        <Breadcrumbs
-                            breadcrumbs={breadcrumbs}
-                            listClassName="flex-nowrap whitespace-nowrap"
-                        />
-                    </div>
-                </div>
-            ) : null}
         </div>
     );
 }

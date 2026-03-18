@@ -18,7 +18,7 @@ import {
     ListChecks,
     ListOrdered,
     Link2,
-    FileStack,
+    CalendarDays,
     Minus,
     NotebookText,
     SendToBack,
@@ -568,7 +568,7 @@ export function BlockNodeToolbar({
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sidebar-border/60 bg-sidebar-accent text-[0.68rem] font-medium tabular-nums">
                         {meetingNotesCount}
                     </span>
-                    <FileStack className="size-4" />
+                    <CalendarDays className="size-4" />
                 </button>
             ) : null}
         </div>

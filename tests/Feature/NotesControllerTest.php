@@ -150,20 +150,22 @@ test('show includes linkable note headings metadata for wiki-link heading sugges
         ->actingAs($user)
         ->get(scoped_note_url($workspace, $viewer->slug))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('linkableNotes', function ($linkableNotes) use ($target): bool {
-                $match = collect($linkableNotes)->first(
-                    fn (array $item) => ($item['id'] ?? null) === $target->id,
-                );
-                if (! is_array($match)) {
-                    return false;
-                }
+            ->loadDeferredProps('editor-suggestions', fn (Assert $deferred) => $deferred
+                ->where('linkableNotes', function ($linkableNotes) use ($target): bool {
+                    $match = collect($linkableNotes)->first(
+                        fn (array $item) => ($item['id'] ?? null) === $target->id,
+                    );
+                    if (! is_array($match)) {
+                        return false;
+                    }
 
-                return ($match['headings'] ?? null) === [[
-                    'id' => 'h-1',
-                    'title' => 'First heading',
-                    'level' => 1,
-                ]];
-            }),
+                    return ($match['headings'] ?? null) === [[
+                        'id' => 'h-1',
+                        'title' => 'First heading',
+                        'level' => 1,
+                    ]];
+                }),
+            ),
         );
 });
 
@@ -979,14 +981,13 @@ test('notes tree endpoint uses model accessor values for icon metadata and taxon
         ->assertJsonPath('nodes.0.path', 'Acme');
 });
 
-test('notes tree endpoint returns dash-ready null word count until first save', function () {
+test('notes tree endpoint returns zero word count for note without content', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
 
     $note = $workspace->notes()->create([
         'type' => Note::TYPE_NOTE,
         'title' => 'Acme',
-        'word_count' => null,
     ]);
 
     $this
@@ -994,7 +995,7 @@ test('notes tree endpoint returns dash-ready null word count until first save', 
         ->get('/notes/tree')
         ->assertOk()
         ->assertJsonPath('nodes.0.id', $note->id)
-        ->assertJsonPath('nodes.0.word_count', null);
+        ->assertJsonPath('nodes.0.word_count', 0);
 });
 
 test('note save updates persisted word count used by notes overview', function () {
@@ -1105,8 +1106,10 @@ test('journal virtual period node shows metrics when backing note exists', funct
         'journal_date' => '2026-03-01',
         'title' => 'Maart 2026',
         'slug' => 'journal/monthly/2026-03',
-        'word_count' => 123,
     ]);
+
+    $monthly->meta = array_merge($monthly->meta ?? [], ['word_count' => 123]);
+    $monthly->saveQuietly();
 
     NoteTask::query()->create([
         'workspace_id' => $workspace->id,
@@ -1476,16 +1479,15 @@ test('update stores heading metadata only with clean heading titles', function (
 
     $note->refresh();
 
-    expect($note->meta)->toBe([
-        'navigation' => [
-            [
-                'type' => 'heading',
-                'html_id' => 'h-main',
-                'level' => 1,
-                'text' => 'Roadmap',
-            ],
+    expect($note->meta['navigation'])->toBe([
+        [
+            'type' => 'heading',
+            'html_id' => 'h-main',
+            'level' => 1,
+            'text' => 'Roadmap',
         ],
     ]);
+    expect($note->meta)->toHaveKey('content_hash');
 });
 
 test('json save returns updated slug url after h1 title change', function () {

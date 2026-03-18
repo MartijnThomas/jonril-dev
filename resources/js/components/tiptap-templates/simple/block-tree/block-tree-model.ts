@@ -800,12 +800,10 @@ export function increaseCurrentHeadingLevel(
         return true;
     }
 
-    let transaction = state.tr.setNodeMarkup(current.pos, undefined, {
+    const transaction = state.tr.setNodeMarkup(current.pos, undefined, {
         ...attrs,
         level: currentLevel + 1,
     });
-
-    transaction = updateHeadingTextPrefixInTransaction(transaction, current.pos, currentLevel + 1);
 
     dispatch(transaction);
 
@@ -830,15 +828,11 @@ export function decreaseCurrentHeadingLevel(
             return true;
         }
 
-        let transaction = state.tr.setNodeMarkup(
+        dispatch(state.tr.setNodeMarkup(
             current.pos,
             editor.schema.nodes.paragraph,
             normalizeParagraphAttrs({}),
-        );
-
-        transaction = updateHeadingTextPrefixInTransaction(transaction, current.pos, null);
-
-        dispatch(transaction);
+        ));
 
         return true;
     }
@@ -847,14 +841,10 @@ export function decreaseCurrentHeadingLevel(
         return true;
     }
 
-    let transaction = state.tr.setNodeMarkup(current.pos, undefined, {
+    dispatch(state.tr.setNodeMarkup(current.pos, undefined, {
         ...attrs,
         level: currentLevel - 1,
-    });
-
-    transaction = updateHeadingTextPrefixInTransaction(transaction, current.pos, currentLevel - 1);
-
-    dispatch(transaction);
+    }));
 
     return true;
 }
@@ -876,15 +866,11 @@ export function setCurrentHeadingLevel(
         return true;
     }
 
-    let transaction = state.tr.setNodeMarkup(
+    dispatch(state.tr.setNodeMarkup(
         current.pos,
         editor.schema.nodes.heading,
         normalizeHeadingAttrs({ level: normalizedLevel }),
-    );
-
-    transaction = updateHeadingTextPrefixInTransaction(transaction, current.pos, normalizedLevel);
-
-    dispatch(transaction);
+    ));
 
     return true;
 }
@@ -903,15 +889,11 @@ export function convertCurrentHeadingToParagraph(
         return true;
     }
 
-    let transaction = state.tr.setNodeMarkup(
+    dispatch(state.tr.setNodeMarkup(
         current.pos,
         editor.schema.nodes.paragraph,
         normalizeParagraphAttrs({}),
-    );
-
-    transaction = updateHeadingTextPrefixInTransaction(transaction, current.pos, null);
-
-    dispatch(transaction);
+    ));
 
     return true;
 }

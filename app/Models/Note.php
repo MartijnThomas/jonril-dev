@@ -142,8 +142,21 @@ class Note extends Model
             'properties' => 'array',
             'meta' => 'array',
             'journal_date' => 'date',
-            'word_count' => 'integer',
         ];
+    }
+
+    public function wordCount(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => isset($this->meta['word_count']) ? (int) $this->meta['word_count'] : null,
+        );
+    }
+
+    public function taskCounts(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => is_array($this->meta['task_counts'] ?? null) ? $this->meta['task_counts'] : null,
+        );
     }
 
     private function propertyTitleOverride(): ?string

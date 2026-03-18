@@ -78,8 +78,8 @@ function RootNoteItem({
     const defaultOpen = useMemo(
         () =>
             hasChildren &&
-            item.children.some((child) => hasActiveInBranch(child, isCurrentUrl)),
-        [hasChildren, isCurrentUrl, item.children],
+            (isActive || item.children.some((child) => hasActiveInBranch(child, isCurrentUrl))),
+        [hasChildren, isActive, isCurrentUrl, item.children],
     );
     const [open, setOpen] = useState(defaultOpen);
     const NoteIcon = item.icon
@@ -100,19 +100,20 @@ function RootNoteItem({
     if (!hasChildren) {
         return (
             <SidebarMenuItem>
-                <div className="group/item relative flex items-center gap-1">
+                <div className="group/item relative flex items-center gap-0">
                     <button
                         type="button"
                         tabIndex={-1}
                         aria-hidden="true"
-                        className="pointer-events-none flex h-7 w-6 shrink-0 items-center justify-center rounded-md opacity-0"
+                        className="pointer-events-none flex h-5 w-4 shrink-0 items-center justify-center opacity-0"
                     >
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-3 w-3" />
                     </button>
                     <SidebarMenuButton
                         asChild
+                        size="sm"
                         isActive={isActive}
-                        className="pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+                        className="pl-0.5 pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                     >
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
@@ -148,25 +149,26 @@ function RootNoteItem({
     return (
         <SidebarMenuItem>
             <Collapsible open={open} onOpenChange={setOpen}>
-                <div className="group/item relative flex items-center gap-1">
+                <div className="group/item relative flex items-center gap-0">
                     <CollapsibleTrigger asChild>
                         <button
                             type="button"
-                            className="text-sidebar-foreground/70 hover:text-sidebar-foreground flex h-7 w-6 items-center justify-center rounded-md"
+                            className="text-sidebar-foreground/70 hover:text-sidebar-foreground flex h-5 w-4 shrink-0 items-center justify-center"
                             aria-label={`Toggle ${item.title}`}
                         >
                             {open ? (
-                                <ChevronDown className="h-4 w-4" />
+                                <ChevronDown className="h-3 w-3" />
                             ) : (
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronRight className="h-3 w-3" />
                             )}
                         </button>
                     </CollapsibleTrigger>
 
                     <SidebarMenuButton
                         asChild
+                        size="sm"
                         isActive={isActive}
-                        className="pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+                        className="pl-0.5 pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                     >
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
@@ -250,8 +252,8 @@ function SubTreeNode({
     const defaultOpen = useMemo(
         () =>
             hasChildren &&
-            item.children.some((child) => hasActiveInBranch(child, isCurrentUrl)),
-        [hasChildren, isCurrentUrl, item.children],
+            (isActive || item.children.some((child) => hasActiveInBranch(child, isCurrentUrl))),
+        [hasChildren, isActive, isCurrentUrl, item.children],
     );
     const [open, setOpen] = useState(defaultOpen);
     const NoteIcon = item.icon
@@ -272,19 +274,20 @@ function SubTreeNode({
     if (!hasChildren) {
         return (
             <SidebarMenuSubItem>
-                <div className="group/item relative flex items-center gap-1">
+                <div className="group/item relative flex items-center gap-0">
                     <button
                         type="button"
                         tabIndex={-1}
                         aria-hidden="true"
-                        className="pointer-events-none flex h-7 w-6 shrink-0 items-center justify-center rounded-md opacity-0"
+                        className="pointer-events-none flex h-5 w-4 shrink-0 items-center justify-center opacity-0"
                     >
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-3 w-3" />
                     </button>
                     <SidebarMenuSubButton
                         asChild
+                        size="sm"
                         isActive={isActive}
-                        className="pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+                        className="pl-0.5 pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                     >
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>
@@ -320,25 +323,26 @@ function SubTreeNode({
     return (
         <SidebarMenuSubItem>
             <Collapsible open={open} onOpenChange={setOpen}>
-                <div className="group/item relative flex items-center gap-1">
+                <div className="group/item relative flex items-center gap-0">
                     <CollapsibleTrigger asChild>
                         <button
                             type="button"
-                            className="text-sidebar-foreground/70 hover:text-sidebar-foreground flex h-7 w-6 items-center justify-center rounded-md"
+                            className="text-sidebar-foreground/70 hover:text-sidebar-foreground flex h-5 w-4 shrink-0 items-center justify-center"
                             aria-label={`Toggle ${item.title}`}
                         >
                             {open ? (
-                                <ChevronDown className="h-4 w-4" />
+                                <ChevronDown className="h-3 w-3" />
                             ) : (
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronRight className="h-3 w-3" />
                             )}
                         </button>
                     </CollapsibleTrigger>
 
                     <SidebarMenuSubButton
                         asChild
+                        size="sm"
                         isActive={isActive}
-                        className="pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+                        className="pl-0.5 pr-8 group-data-[collapsible=icon]:pr-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                     >
                         <Link href={item.href} prefetch>
                             <span className={cn('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm', iconBgClass)}>

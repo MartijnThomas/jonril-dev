@@ -6,7 +6,6 @@ use App\Models\Note;
 use App\Models\Workspace;
 use App\Support\Notes\LegacyToBlockNoteConverter;
 use App\Support\Notes\NoteTitleExtractor;
-use App\Support\Notes\NoteWordCountExtractor;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -25,7 +24,6 @@ class ConvertWorkspaceToBlock extends Command
     public function handle(
         LegacyToBlockNoteConverter $converter,
         NoteTitleExtractor $noteTitleExtractor,
-        NoteWordCountExtractor $noteWordCountExtractor,
     ): int {
         $workspaceOption = trim((string) $this->option('workspace'));
         $dryRun = (bool) $this->option('dry-run');
@@ -125,11 +123,10 @@ class ConvertWorkspaceToBlock extends Command
                     $stats['headings_added']++;
                 }
 
-                DB::transaction(function () use ($note, $conversion, $noteTitleExtractor, $noteWordCountExtractor): void {
+                DB::transaction(function () use ($note, $conversion, $noteTitleExtractor): void {
                     $document = $conversion['document'];
                     $note->content = $document;
                     $note->title = $noteTitleExtractor->extract($document) ?? $note->title;
-                    $note->word_count = $noteWordCountExtractor->count($document);
                     $note->save();
                 });
             }
@@ -250,7 +247,6 @@ class ConvertWorkspaceToBlock extends Command
                     'content' => $sourceNote->content,
                     'properties' => $sourceNote->properties,
                     'meta' => $sourceNote->meta,
-                    'word_count' => $sourceNote->word_count,
                 ]);
 
                 $noteIdMap[(string) $sourceNote->id] = (string) $copiedNote->id;

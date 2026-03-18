@@ -44,6 +44,8 @@ if (app()->environment('local')) {
     })->name('dev.auth.token-login');
 }
 
+Route::get('/ping', fn () => response()->noContent())->middleware('auth')->name('ping');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('journal', function (Request $request) {
         $workspace = $request->user()?->currentWorkspace();
@@ -88,6 +90,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('notes.store');
 
     Route::post('w/{workspace:slug}/calendar/refresh', [CalendarController::class, 'refreshAll'])
+        ->middleware('throttle:5,1')
         ->name('calendar.refresh-all');
 
     Route::get('w/{workspace:slug}/events', [SidebarEventsController::class, 'index'])
@@ -132,6 +135,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->whereUuid('noteId')
         ->name('notes.destroy');
 
+    Route::get('w/{workspace:slug}/notes/{note}/hash', [NotesController::class, 'contentHashScoped'])
+        ->name('notes.hash');
     Route::get('w/{workspace:slug}/notes/{note}', [NotesController::class, 'showScoped'])
         ->where('note', '.*')
         ->name('notes.show');
@@ -146,6 +151,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('journal/{period}', [NotesController::class, 'showJournalByPeriod'])
         ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)')
         ->name('journal.show.legacy.by-period');
+    Route::get('notes/{note}/hash', [NotesController::class, 'contentHash'])
+        ->name('notes.hash.legacy');
     Route::get('notes/{note}', [NotesController::class, 'show'])
         ->where('note', '.*')
         ->name('notes.show.legacy');

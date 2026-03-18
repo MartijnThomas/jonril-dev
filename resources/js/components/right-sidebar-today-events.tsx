@@ -46,6 +46,7 @@ type SidebarTodayEvent = {
     href: string | null;
     meeting_note_id: string | null;
     meeting_note_href: string | null;
+    remote_deleted?: boolean;
 };
 
 type RightSidebarTodayEventsProps = {
@@ -414,9 +415,17 @@ export function RightSidebarTodayEvents({
                                             <FileText className="size-3" />
                                         </Link>
                                     ) : null}
-                                    <p className="min-w-0 flex-1 truncate text-[0.82rem] text-foreground/80">
+                                    <p className={cn(
+                                        'min-w-0 flex-1 truncate text-[0.82rem] text-foreground/80',
+                                        event.remote_deleted && 'line-through opacity-60',
+                                    )}>
                                         {event.title}
                                     </p>
+                                    {event.remote_deleted && (
+                                        <span className="shrink-0 rounded px-1 py-px text-[0.62rem] font-medium uppercase tracking-wide bg-destructive/10 text-destructive">
+                                            Deleted
+                                        </span>
+                                    )}
                                     <span className="shrink-0 text-[0.72rem] text-muted-foreground">
                                         {dateLabel}
                                     </span>
@@ -528,7 +537,8 @@ export function RightSidebarTodayEvents({
                             if (
                                 !linkedBlockId ||
                                 !event.note_id ||
-                                isTaskTogglePending
+                                isTaskTogglePending ||
+                                event.task_status === 'migrated'
                             ) {
                                 return;
                             }
@@ -620,6 +630,7 @@ export function RightSidebarTodayEvents({
                                             neutralCardClass,
                                             !isTimeblock && 'border border-sidebar-border/60',
                                             shouldDim && 'opacity-60',
+                                            event.remote_deleted && 'opacity-50',
                                             isTimeblock && isActiveNow && cn('border-2', timeblockBorder),
                                         )}
                                     >
@@ -719,7 +730,7 @@ export function RightSidebarTodayEvents({
                                                 <button
                                                     type="button"
                                                     onClick={toggleLinkedTask}
-                                                    disabled={isTaskTogglePending}
+                                                    disabled={isTaskTogglePending || event.task_status === 'migrated'}
                                                     aria-label={language === 'en' ? 'Toggle linked task' : 'Gekoppelde taak wisselen'}
                                                     className={cn(
                                                         'mt-[0.2rem] inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 transition-opacity',
@@ -764,9 +775,14 @@ export function RightSidebarTodayEvents({
                                                             <FileText className="size-3" />
                                                         </Link>
                                                     ) : null}
-                                                    <p className={cn('truncate text-[0.86rem] font-medium leading-snug text-foreground', isLinkedTaskCompleted && 'line-through')}>
+                                                    <p className={cn('truncate text-[0.86rem] font-medium leading-snug text-foreground', isLinkedTaskCompleted && 'line-through', event.remote_deleted && 'line-through text-muted-foreground')}>
                                                         {event.title}
                                                     </p>
+                                                    {event.remote_deleted && (
+                                                        <span className="shrink-0 rounded px-1 py-px text-[0.62rem] font-medium uppercase tracking-wide bg-destructive/10 text-destructive">
+                                                            Deleted
+                                                        </span>
+                                                    )}
                                                 </div>
 
                                                 {/* location */}

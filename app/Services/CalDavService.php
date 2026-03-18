@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\Calendar;
 use App\Models\CalendarItem;
+use App\Models\CalendarSyncedRange;
 use App\Models\Event;
+use App\Models\Note;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Sabre\DAV\Client;
@@ -59,6 +61,7 @@ class CalDavService
 
     /**
      * Sync events for the given calendar covering -7 days to +30 days.
+     * Also marks the overlapping YYYY-MM periods as synced.
      */
     public function sync(Calendar $calendar): void
     {
@@ -69,13 +72,59 @@ class CalDavService
 
         $items = $this->fetchRemoteItems($client, $calendar->url, $rangeStart, $rangeEnd);
 
+        // Null means the remote request failed — skip to avoid false deletions.
+        if ($items === null) {
+            return;
+        }
+
         foreach ($items as $item) {
             $this->upsertCalendarItem($calendar, $item);
+        }
+
+        $this->pruneStaleItems($calendar, $items, $rangeStart, $rangeEnd);
+
+        // Mark every YYYY-MM period covered by this window as synced.
+        $cursor = $rangeStart->copy()->startOfMonth();
+        while ($cursor->lte($rangeEnd)) {
+            CalendarSyncedRange::query()->updateOrCreate(
+                ['calendar_id' => $calendar->id, 'period' => $cursor->format('Y-m')],
+                ['synced_at' => now()],
+            );
+            $cursor = $cursor->addMonth();
         }
 
         $calendar->update([
             'last_synced_at' => now(),
         ]);
+    }
+
+    /**
+     * Sync events for the given calendar for a specific YYYY-MM period (on-demand).
+     */
+    public function syncPeriod(Calendar $calendar, string $period): void
+    {
+        $client = $this->makeClient($calendar->url, $calendar->username, $calendar->password);
+
+        $month = Carbon::createFromFormat('Y-m', $period);
+        $rangeStart = $month->copy()->startOfMonth()->startOfDay();
+        $rangeEnd = $month->copy()->endOfMonth()->endOfDay();
+
+        $items = $this->fetchRemoteItems($client, $calendar->url, $rangeStart, $rangeEnd);
+
+        if ($items === null) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            $this->upsertCalendarItem($calendar, $item);
+        }
+
+        $this->pruneStaleItems($calendar, $items, $rangeStart, $rangeEnd);
+
+        CalendarSyncedRange::query()->updateOrCreate(
+            ['calendar_id' => $calendar->id, 'period' => $period],
+            ['synced_at' => now()],
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -188,13 +237,98 @@ class CalDavService
     }
 
     // -------------------------------------------------------------------------
+    // Pruning
+    // -------------------------------------------------------------------------
+
+    /**
+     * Compare what the remote returned against what we have stored for this calendar
+     * in the given date range. For any CalendarItem whose event start falls in the
+     * range but was not returned by the remote:
+     *
+     *   - If a meeting note is linked → mark the Event as remote-deleted (keeps the
+     *     note visible with a "deleted event" indicator in the sidebar).
+     *   - If no meeting note is linked → hard-delete the CalendarItem and Event to
+     *     keep the database clean.
+     *
+     * If the event later reappears on the remote, upsertCalendarItem() clears
+     * remote_deleted_at automatically.
+     *
+     * @param  array<int, array{uid: string, href: string, etag: string, ical: string, vevent: mixed}>  $returnedItems
+     */
+    private function pruneStaleItems(
+        Calendar $calendar,
+        array $returnedItems,
+        \Carbon\CarbonInterface $rangeStart,
+        \Carbon\CarbonInterface $rangeEnd,
+    ): void {
+        $returnedUids = collect($returnedItems)->pluck('uid')->flip()->all();
+
+        // Find CalendarItems for this calendar whose event started inside the synced
+        // range but whose UID was NOT returned by the remote.
+        $staleItems = CalendarItem::query()
+            ->where('calendar_id', $calendar->id)
+            ->whereNotIn('uid', array_keys($returnedUids))
+            ->whereHas('event', function ($q) use ($rangeStart, $rangeEnd): void {
+                $q->where('starts_at', '>=', $rangeStart)
+                    ->where('starts_at', '<=', $rangeEnd);
+            })
+            ->with('event')
+            ->get();
+
+        if ($staleItems->isEmpty()) {
+            return;
+        }
+
+        // Collect all event IDs/block IDs so we can batch-check for meeting notes.
+        $eventIds = $staleItems->map(fn (CalendarItem $i) => $i->event?->id)->filter()->values()->all();
+        $blockIds = $staleItems->map(fn (CalendarItem $i) => $i->event?->block_id)->filter()->values()->all();
+        $allLookupIds = array_values(array_unique(array_merge($eventIds, $blockIds)));
+
+        // One query: which of these events have a meeting note linked via meta?
+        $notedEventIds = Note::query()
+            ->where('type', Note::TYPE_MEETING)
+            ->whereNull('deleted_at')
+            ->whereIn('meta->event_block_id', $allLookupIds)
+            ->get(['meta'])
+            ->map(fn (Note $n) => is_array($n->meta) ? ($n->meta['event_block_id'] ?? null) : null)
+            ->filter()
+            ->flip()
+            ->all();
+
+        foreach ($staleItems as $item) {
+            $event = $item->event;
+
+            if (! $event) {
+                $item->delete();
+
+                continue;
+            }
+
+            $hasNote = isset($notedEventIds[$event->id]) || isset($notedEventIds[$event->block_id]);
+
+            if ($hasNote) {
+                // Preserve the event so the meeting note can still display it,
+                // but flag it as deleted from the remote calendar.
+                $event->update(['remote_deleted_at' => now()]);
+            } else {
+                // No note — clean up both records entirely.
+                $event->delete();
+                $item->delete();
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Sync internals
     // -------------------------------------------------------------------------
 
     /**
-     * @return array<int, array{uid: string, href: string, etag: string, ical: string, vevent: mixed}>
+     * Returns null when the remote request fails (network error, unexpected status),
+     * so callers can skip pruning and avoid false deletions.
+     *
+     * @return array<int, array{uid: string, href: string, etag: string, ical: string, vevent: mixed}>|null
      */
-    private function fetchRemoteItems(Client $client, string $calendarUrl, \Carbon\CarbonInterface $rangeStart, \Carbon\CarbonInterface $rangeEnd): array
+    private function fetchRemoteItems(Client $client, string $calendarUrl, \Carbon\CarbonInterface $rangeStart, \Carbon\CarbonInterface $rangeEnd): ?array
     {
         $start = $rangeStart->utc()->format('Ymd\THis\Z');
         $end = $rangeEnd->utc()->format('Ymd\THis\Z');
@@ -222,11 +356,11 @@ class CalDavService
                 'Content-Type' => 'application/xml; charset=utf-8',
             ]);
         } catch (\Throwable) {
-            return [];
+            return null;
         }
 
         if (($response['statusCode'] ?? 0) !== 207) {
-            return [];
+            return null;
         }
 
         return $this->parseMultiStatusResponse($response['body'] ?? '');
@@ -341,6 +475,8 @@ class CalDavService
                 'ends_at' => $endsAt,
                 'all_day' => $allDay,
                 'timezone' => config('app.timezone'),
+                // Clear any prior remote-deletion flag — the event is back.
+                'remote_deleted_at' => null,
             ],
         );
     }

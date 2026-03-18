@@ -8,7 +8,6 @@ use App\Models\Workspace;
 use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\NoteSlugService;
 use App\Support\Notes\NoteTitleExtractor;
-use App\Support\Notes\NoteWordCountExtractor;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -19,7 +18,6 @@ class LegacyNotesImporter
         private readonly JournalNoteService $journalNoteService,
         private readonly NoteSlugService $noteSlugService,
         private readonly NoteTitleExtractor $noteTitleExtractor,
-        private readonly NoteWordCountExtractor $noteWordCountExtractor,
         private readonly LegacyMarkdownToTiptapConverter $converter,
     ) {}
 
@@ -246,7 +244,6 @@ class LegacyNotesImporter
                     'title' => $syntheticTitle,
                     'parent_id' => $parentParent?->id,
                     'content' => $syntheticContent,
-                    'word_count' => $this->noteWordCountExtractor->count($syntheticContent),
                     'properties' => $this->buildLegacyProperties(
                         [],
                         $parentPath,
@@ -289,7 +286,6 @@ class LegacyNotesImporter
                     'title' => $title,
                     'parent_id' => $parent?->id,
                     'content' => $noteContent,
-                    'word_count' => $this->noteWordCountExtractor->count($noteContent),
                     'properties' => $this->buildLegacyProperties(
                         [],
                         $legacyPathKey,
@@ -309,7 +305,6 @@ class LegacyNotesImporter
                     $frontmatter,
                     false,
                 );
-                $existing->word_count = $this->noteWordCountExtractor->count($existing->content);
                 $existing->save();
             }
 
@@ -424,7 +419,6 @@ class LegacyNotesImporter
                     $note->title = $this->noteTitleExtractor->extract($conversion['document']) ?: $note->title;
                     $this->noteSlugService->syncSingleNote($note);
                 }
-                $note->word_count = $this->noteWordCountExtractor->count($conversion['document']);
                 $note->save();
             }
 

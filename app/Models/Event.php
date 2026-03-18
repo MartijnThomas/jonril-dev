@@ -24,6 +24,7 @@ class Event extends Model
         'timezone',
         'journal_date',
         'meta',
+        'remote_deleted_at',
     ];
 
     /**
@@ -37,6 +38,7 @@ class Event extends Model
             'all_day' => 'boolean',
             'journal_date' => 'date',
             'meta' => 'array',
+            'remote_deleted_at' => 'datetime',
         ];
     }
 

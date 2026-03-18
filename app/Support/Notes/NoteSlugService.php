@@ -57,6 +57,13 @@ class NoteSlugService
         return "/w/{$workspaceSlug}/notes/{$note->id}";
     }
 
+    public function hashUrlFor(Note $note): string
+    {
+        $workspaceSlug = $this->workspaceSlugFor($note);
+
+        return "/w/{$workspaceSlug}/notes/{$note->id}/hash";
+    }
+
     public function journalUrlFor(Workspace|string $workspace, string $granularity, string $period): string
     {
         $workspaceSlug = $workspace instanceof Workspace

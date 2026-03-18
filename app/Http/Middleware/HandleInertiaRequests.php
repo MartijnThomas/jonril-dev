@@ -195,72 +195,78 @@ class HandleInertiaRequests extends Middleware
             return [];
         }
 
-        /** @var Collection<int, Note> $notes */
-        $notes = Note::query()
-            ->where('workspace_id', $workspace->id)
-            ->where(function ($query) {
-                $query->whereNull('type')
-                    ->orWhere('type', Note::TYPE_NOTE);
-            })
-            ->orderBy('created_at')
-            ->get(['id', 'workspace_id', 'slug', 'title', 'properties', 'parent_id', 'type']);
+        return Cache::remember(
+            "notes_tree_{$workspace->id}",
+            now()->addDay(),
+            function () use ($workspace): array {
+                /** @var Collection<int, Note> $notes */
+                $notes = Note::query()
+                    ->where('workspace_id', $workspace->id)
+                    ->where(function ($query) {
+                        $query->whereNull('type')
+                            ->orWhere('type', Note::TYPE_NOTE);
+                    })
+                    ->orderBy('created_at')
+                    ->get(['id', 'workspace_id', 'slug', 'title', 'properties', 'parent_id', 'type']);
 
-        $nodes = [];
-        foreach ($notes as $note) {
-            $nodes[$note->id] = [
-                'id' => $note->id,
-                'title' => $note->display_title,
-                'href' => $this->noteSlugService->urlFor($note),
-                'icon' => $note->icon,
-                'icon_color' => $note->icon_color,
-                'icon_bg' => $note->icon_bg,
-                'parent_id' => $note->parent_id,
-                'children' => [],
-            ];
-        }
-
-        $tree = [];
-
-        foreach ($nodes as $id => $node) {
-            $parentId = $node['parent_id'];
-            if ($parentId && isset($nodes[$parentId])) {
-                $nodes[$parentId]['children'][] = &$nodes[$id];
-            } else {
-                $tree[] = &$nodes[$id];
-            }
-        }
-
-        $sortTree = function (array &$items) use (&$sortTree): void {
-            usort($items, function (array $a, array $b): int {
-                $aHasChildren = count($a['children']) > 0;
-                $bHasChildren = count($b['children']) > 0;
-
-                if ($aHasChildren !== $bHasChildren) {
-                    return $aHasChildren ? -1 : 1;
+                $nodes = [];
+                foreach ($notes as $note) {
+                    $nodes[$note->id] = [
+                        'id' => $note->id,
+                        'title' => $note->display_title,
+                        'href' => $this->noteSlugService->urlFor($note),
+                        'icon' => $note->icon,
+                        'icon_color' => $note->icon_color,
+                        'icon_bg' => $note->icon_bg,
+                        'parent_id' => $note->parent_id,
+                        'children' => [],
+                    ];
                 }
 
-                return strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
-            });
+                $tree = [];
 
-            foreach ($items as &$item) {
-                if (! empty($item['children'])) {
-                    $sortTree($item['children']);
+                foreach ($nodes as $id => $node) {
+                    $parentId = $node['parent_id'];
+                    if ($parentId && isset($nodes[$parentId])) {
+                        $nodes[$parentId]['children'][] = &$nodes[$id];
+                    } else {
+                        $tree[] = &$nodes[$id];
+                    }
                 }
-            }
-        };
 
-        $sortTree($tree);
+                $sortTree = function (array &$items) use (&$sortTree): void {
+                    usort($items, function (array $a, array $b): int {
+                        $aHasChildren = count($a['children']) > 0;
+                        $bHasChildren = count($b['children']) > 0;
 
-        $stripParent = function (array &$items) use (&$stripParent): void {
-            foreach ($items as &$item) {
-                unset($item['parent_id']);
-                $stripParent($item['children']);
-            }
-        };
+                        if ($aHasChildren !== $bHasChildren) {
+                            return $aHasChildren ? -1 : 1;
+                        }
 
-        $stripParent($tree);
+                        return strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
+                    });
 
-        return $tree;
+                    foreach ($items as &$item) {
+                        if (! empty($item['children'])) {
+                            $sortTree($item['children']);
+                        }
+                    }
+                };
+
+                $sortTree($tree);
+
+                $stripParent = function (array &$items) use (&$stripParent): void {
+                    foreach ($items as &$item) {
+                        unset($item['parent_id']);
+                        $stripParent($item['children']);
+                    }
+                };
+
+                $stripParent($tree);
+
+                return $tree;
+            },
+        );
     }
 
     /**
@@ -312,22 +318,28 @@ class HandleInertiaRequests extends Middleware
      */
     private function workspaceNoteCounts(Workspace $workspace): array
     {
-        $totals = Note::query()
-            ->where('workspace_id', $workspace->id)
-            ->selectRaw(
-                'count(*) as total, sum(case when type = ? then 1 else 0 end) as journal',
-                [Note::TYPE_JOURNAL],
-            )
-            ->first();
+        return Cache::remember(
+            "notes_count_{$workspace->id}",
+            now()->addDay(),
+            function () use ($workspace): array {
+                $totals = Note::query()
+                    ->where('workspace_id', $workspace->id)
+                    ->selectRaw(
+                        'count(*) as total, sum(case when type = ? then 1 else 0 end) as journal',
+                        [Note::TYPE_JOURNAL],
+                    )
+                    ->first();
 
-        $total = (int) ($totals?->total ?? 0);
-        $journal = (int) ($totals?->journal ?? 0);
+                $total = (int) ($totals?->total ?? 0);
+                $journal = (int) ($totals?->journal ?? 0);
 
-        return [
-            'total' => $total,
-            'normal' => max(0, $total - $journal),
-            'journal' => $journal,
-        ];
+                return [
+                    'total' => $total,
+                    'normal' => max(0, $total - $journal),
+                    'journal' => $journal,
+                ];
+            },
+        );
     }
 
     private function resolvedWorkspace(Request $request): ?Workspace

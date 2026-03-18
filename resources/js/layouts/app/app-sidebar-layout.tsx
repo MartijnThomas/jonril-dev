@@ -1,6 +1,9 @@
 import { usePage } from '@inertiajs/react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { AppCommandPalette } from '@/components/app-command-palette';
+import { AppFab } from '@/components/app-fab';
 import { AppContent } from '@/components/app-content';
 import { AppRightSidebar } from '@/components/app-right-sidebar';
 import { AppShell } from '@/components/app-shell';
@@ -16,6 +19,37 @@ const LEFT_SIDEBAR_COLLAPSED_WIDTH = 48;
 const RIGHT_SIDEBAR_OPEN_WIDTH = 320;
 const CONTENT_HORIZONTAL_BUFFER = 32;
 const VIEWPORT_SHRINK_THRESHOLD = 24;
+
+const edgeTabClass =
+    'absolute top-1/2 z-20 flex -translate-y-1/2 items-center justify-center rounded-sm border border-sidebar-border/60 bg-sidebar/60 text-muted-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-10 w-3.5';
+
+function LeftSidebarEdgeToggle() {
+    const { state, toggleSidebar } = useSidebar();
+    const isCollapsed = state === 'collapsed';
+    return (
+        <button
+            type="button"
+            onClick={toggleSidebar}
+            className={`${edgeTabClass} left-0 rounded-l-none border-l-0`}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+            {isCollapsed ? <ChevronRight className="size-3" /> : <ChevronLeft className="size-3" />}
+        </button>
+    );
+}
+
+function RightSidebarEdgeToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onToggle}
+            className={`${edgeTabClass} right-0 rounded-r-none border-r-0`}
+            aria-label={open ? 'Close right sidebar' : 'Open right sidebar'}
+        >
+            {open ? <ChevronRight className="size-3" /> : <ChevronLeft className="size-3" />}
+        </button>
+    );
+}
 
 function ResponsiveSidebarManager({
     rightSidebarOpen,
@@ -104,11 +138,16 @@ export default function AppSidebarLayout({
     bottomPane,
 }: AppLayoutProps) {
     const { rightSidebarOpen: defaultRightSidebarOpen } = usePage().props;
+    const isMobile = useIsMobile();
     const shouldRenderStatusBar =
         statusBarContent !== undefined ||
         saveStatus !== null ||
         saveLastSavedAt !== null;
     const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(() => {
+        if (isMobile) {
+            return false;
+        }
+
         if (typeof document !== 'undefined') {
             const value = document.cookie
                 .split('; ')
@@ -133,16 +172,17 @@ export default function AppSidebarLayout({
                 setRightSidebarOpen={setIsRightSidebarOpen}
             />
             <AppSidebar />
-            <AppContent variant="sidebar" className="h-svh overflow-hidden">
+            <AppContent variant="sidebar" className="overflow-hidden">
+                <LeftSidebarEdgeToggle />
+                <RightSidebarEdgeToggle
+                    open={isRightSidebarOpen}
+                    onToggle={() => setIsRightSidebarOpen((open) => !open)}
+                />
                 <div className="flex min-h-0 min-w-0 flex-1 w-full overflow-hidden">
                     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                         <AppSidebarHeader
                             breadcrumbs={breadcrumbs}
-                            rightSidebarEnabled
-                            rightSidebarOpen={isRightSidebarOpen}
-                            onRightSidebarToggle={() =>
-                                setIsRightSidebarOpen((open) => !open)
-                            }
+                            saveStatus={saveStatus}
                         />
                         <div className="flex min-h-0 flex-1 overflow-hidden">
                             {children}
@@ -165,6 +205,7 @@ export default function AppSidebarLayout({
             >
                 {rightSidebar}
             </AppRightSidebar>
+            <AppFab />
             <AppCommandPalette />
         </AppShell>
     );

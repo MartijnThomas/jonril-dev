@@ -283,6 +283,7 @@ export function useEditorSave({
                         }
 
                         markSaveSuccess();
+                        window.dispatchEvent(new CustomEvent('sarth:note-saved'));
 
                         if (includeTimeblocks) {
                             window.dispatchEvent(new CustomEvent('sarth:timeblocks-updated'));

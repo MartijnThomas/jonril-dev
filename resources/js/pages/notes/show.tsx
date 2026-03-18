@@ -1,5 +1,5 @@
-import { Head } from '@inertiajs/react';
-import { useCallback, useState } from 'react';
+import { Head, router } from '@inertiajs/react';
+import { useCallback, useEffect, useState } from 'react';
 import { StatusBarTaskCounter } from '@/components/status-bar-task-counter';
 import { SimpleEditor } from '@/components/tiptap-templates/simple/simple-editor';
 import AppLayout from '@/layouts/app-layout';
@@ -7,8 +7,10 @@ import type { BreadcrumbItem, EditorSaveStatus } from '@/types';
 
 type Props = {
     content: string;
+    contentHash: string | null;
     noteId: string;
     noteUpdateUrl: string;
+    noteHashUrl: string;
     properties: any;
     linkableNotes: {
         id: string;
@@ -89,8 +91,10 @@ type Props = {
 
 export default function Dashboard({
     content,
+    contentHash,
     noteId,
     noteUpdateUrl,
+    noteHashUrl,
     properties,
     linkableNotes,
     breadcrumbs,
@@ -134,6 +138,12 @@ export default function Dashboard({
         position: 0,
         kind: 'paragraph',
     });
+    useEffect(() => {
+        const handler = () => router.reload({ only: ['meetingChildren'] });
+        window.addEventListener('sarth:note-saved', handler);
+        return () => window.removeEventListener('sarth:note-saved', handler);
+    }, []);
+
     const pageTitle = breadcrumbs.at(-1)?.title ?? 'Note';
     const handleContentStatsChange = useCallback((next: typeof contentStats) => {
         setContentStats((current) => {
@@ -195,6 +205,8 @@ export default function Dashboard({
             <SimpleEditor
                 id={noteId}
                 noteUpdateUrl={noteUpdateUrl}
+                noteHashUrl={noteHashUrl}
+                contentHash={contentHash}
                 content={content}
                 properties={properties}
                 linkableNotes={linkableNotes}

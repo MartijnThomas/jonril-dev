@@ -11,6 +11,7 @@ import {
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Switch } from '@/components/ui/switch';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 type RelatedTaskItem = {
@@ -118,13 +119,14 @@ export function NoteRelatedPanel({
         task.checked !== true &&
         task.task_status !== 'canceled' &&
         task.task_status !== 'migrated';
+    const isMobile = useIsMobile();
     const hasOpenRelatedTasks = relatedTasks.some((task) => isOpenTask(task));
     const [panelOpen, setPanelOpen] = useRemember(
-        hasOpenRelatedTasks,
+        !isMobile && hasOpenRelatedTasks,
         `note-related-panel:${noteId}:panel-open`,
     );
     const [tasksOpen, setTasksOpen] = useRemember(
-        hasOpenRelatedTasks,
+        !isMobile && hasOpenRelatedTasks,
         `note-related-panel:${noteId}:tasks-open`,
     );
     const [backlinksOpen, setBacklinksOpen] = useRemember(
@@ -364,7 +366,15 @@ export function NoteRelatedPanel({
                 panelOpen ? 'bg-muted/30' : 'bg-transparent',
             )}
         >
-            <Collapsible open={panelOpen} onOpenChange={setPanelOpen}>
+            <Collapsible
+                open={panelOpen}
+                onOpenChange={(open) => {
+                    setPanelOpen(open);
+                    if (open && isMobile && relatedTasks.length > 0) {
+                        setTasksOpen(true);
+                    }
+                }}
+            >
                 <div className="flex items-center justify-between gap-2">
                     <CollapsibleTrigger asChild>
                         <button type="button" className="flex flex-1 items-center text-left">

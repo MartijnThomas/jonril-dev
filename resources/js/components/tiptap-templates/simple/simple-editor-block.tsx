@@ -5,7 +5,6 @@ import type { Editor } from '@tiptap/core';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
-import { MapPin } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -26,6 +25,7 @@ import type {
     SimpleEditorProps,
 } from '@/components/tiptap-templates/simple/simple-editor-types';
 import { useEditorSave } from '@/components/tiptap-templates/simple/use-editor-save';
+import { useEditorVersion } from '@/contexts/editor-version-context';
 
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss';
 import '@/components/tiptap-node/code-block-node/code-block-node.scss';
@@ -75,17 +75,17 @@ function MeetingEventMeta({ event, language }: { event: MeetingEventData; langua
     return (
         <div className="mt-3 mb-1 flex flex-col gap-1.5 text-sm">
             {timeLabel ? (
-                <div className="flex items-start gap-3 text-muted-foreground">
-                    <span className="w-16 shrink-0 whitespace-nowrap pt-px text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
+                <div className="flex items-baseline gap-3 text-muted-foreground">
+                    <span className="w-16 shrink-0 whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
                         {language === 'nl' ? 'Wanneer' : 'When'}
                     </span>
                     <span className="text-[0.82rem]">{timeLabel}</span>
                 </div>
             ) : null}
             {event.location ? (
-                <div className="flex items-center gap-3 text-muted-foreground">
-                    <span className="flex w-16 shrink-0 justify-start">
-                        <MapPin className="size-3 opacity-60" />
+                <div className="flex items-baseline gap-3 text-muted-foreground">
+                    <span className="w-16 shrink-0 whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
+                        {language === 'nl' ? 'Waar' : 'Where'}
                     </span>
                     <span className="text-[0.82rem]">{event.location}</span>
                 </div>
@@ -223,6 +223,8 @@ function hasEquivalentEditorDocument(
 function SimpleEditorComponent({
     id = '',
     noteUpdateUrl = '',
+    noteHashUrl,
+    contentHash,
     content = '',
     properties = {},
     linkableNotes = [],
@@ -242,6 +244,14 @@ function SimpleEditorComponent({
     journalDate = null,
     defaultTimeblockDurationMinutes = 60,
 }: SimpleEditorProps) {
+    const { setVersion } = useEditorVersion();
+    useEffect(() => {
+        if (noteHashUrl && contentHash) {
+            setVersion({ hashUrl: noteHashUrl, contentHash });
+        }
+        return () => setVersion(null);
+    }, [noteHashUrl, contentHash, setVersion]);
+
     const isJournal = noteType === 'journal';
     const hasMeetingNotes = meetingChildren.length > 0 && !isJournal;
     // Default open on ≥768 px, closed on small screens. Lazy initializer runs once on mount.
@@ -631,7 +641,7 @@ function SimpleEditorComponent({
     }, [editor, onContentStatsChange]);
 
     return (
-        <div className="flex h-full w-full min-h-0">
+        <div className="flex h-full w-full min-h-0 overflow-hidden">
             <div className="flex-1 min-w-0 overflow-y-auto">
                 <EditorContext.Provider value={{ editor }}>
                     {!readOnly ? blockUi : null}

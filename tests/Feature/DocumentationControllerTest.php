@@ -82,16 +82,18 @@ test('shared ui translations are loaded through cache in non-local environments'
         'settings' => ['language' => 'en'],
     ]);
 
+    // Other middleware methods also call Cache::remember (e.g. note dropdowns), so we
+    // intercept all calls and return fake data only for the translation key.
     Cache::shouldReceive('remember')
-        ->once()
-        ->withArgs(function (mixed $key, mixed $ttl, mixed $callback): bool {
-            return is_string($key)
-                && str_starts_with($key, 'i18n:ui:en:')
-                && is_callable($callback);
-        })
-        ->andReturn([
-            'cache_test_key' => 'cached-value',
-        ]);
+        ->withAnyArgs()
+        ->zeroOrMoreTimes()
+        ->andReturnUsing(function (string $key, mixed $ttl, \Closure $callback): mixed {
+            if (str_starts_with($key, 'i18n:ui:en:')) {
+                return ['cache_test_key' => 'cached-value'];
+            }
+
+            return $callback();
+        });
 
     $this
         ->actingAs($user)
@@ -109,7 +111,18 @@ test('shared ui translations bypass cache in local environment', function () {
     ]);
 
     $this->app->detectEnvironment(fn () => 'local');
-    Cache::spy();
+
+    $translationCacheUsed = false;
+    Cache::shouldReceive('remember')
+        ->withAnyArgs()
+        ->zeroOrMoreTimes()
+        ->andReturnUsing(function (string $key, mixed $ttl, \Closure $callback) use (&$translationCacheUsed): mixed {
+            if (str_starts_with($key, 'i18n:ui:')) {
+                $translationCacheUsed = true;
+            }
+
+            return $callback();
+        });
 
     $this
         ->actingAs($user)
@@ -120,5 +133,5 @@ test('shared ui translations bypass cache in local environment', function () {
             ->where('translations.ui.tasks_index.page_title', 'Tasks'),
         );
 
-    Cache::shouldNotHaveReceived('remember');
+    expect($translationCacheUsed)->toBeFalse();
 });

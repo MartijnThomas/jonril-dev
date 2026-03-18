@@ -1360,3 +1360,76 @@ test('migrating a block task marks source as migrated and appends cloned block t
     expect($targetIndexed)->not->toBeNull();
     expect($targetIndexed?->task_status)->toBeNull();
 });
+
+test('migrated task cannot be toggled via updateChecked', function () {
+    $user = User::factory()->create();
+
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Origin note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'migrated-block-1',
+                        'checked' => false,
+                        'taskStatus' => 'migrated',
+                        'migratedToNoteId' => '00000000-0000-0000-0000-000000000001',
+                    ],
+                    'content' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Migrated task']]]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $task = NoteTask::query()->where('note_id', $note->id)->firstOrFail();
+
+    $this
+        ->actingAs($user)
+        ->patch("/tasks/{$task->id}/checked", ['checked' => true])
+        ->assertStatus(409);
+
+    $note->refresh();
+    expect(data_get($note->content, 'content.0.content.0.attrs.checked'))->toBeFalse();
+});
+
+test('migrated task cannot be toggled via updateCheckedByReference', function () {
+    $user = User::factory()->create();
+
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Origin note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'migrated-ref-block-1',
+                        'checked' => false,
+                        'taskStatus' => 'migrated',
+                        'migratedToNoteId' => '00000000-0000-0000-0000-000000000001',
+                    ],
+                    'content' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Migrated task ref']]]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch('/tasks/checked', [
+            'note_id' => $note->id,
+            'block_id' => 'migrated-ref-block-1',
+            'position' => 1,
+            'checked' => true,
+        ])
+        ->assertStatus(409);
+
+    $note->refresh();
+    expect(data_get($note->content, 'content.0.content.0.attrs.checked'))->toBeFalse();
+});
