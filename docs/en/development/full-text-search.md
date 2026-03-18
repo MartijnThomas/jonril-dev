@@ -139,7 +139,14 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
 ## Note indexing plan (implementation-ready)
 
 ### Goal
-- Add full-text search for notes themselves (title + body + metadata) using Scout/Meilisearch, without regressing note page performance or editor save flow.
+- Add note search for the **Command Palette as primary entry point**, using Scout/Meilisearch, without regressing editor save flow.
+- Scope for initial note search:
+  - note title
+  - note body/content text
+  - mentions
+  - hashtags
+  - note properties (tags/metadata)
+  - indexed tasks linked to the note
 
 ### Phase A: Define note search document shape
 - Add `Searchable` to `App\Models\Note`.
@@ -154,18 +161,19 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
   - `mentions`
   - `hashtags`
   - `parent_id`
+  - `task_terms` (flattened searchable task terms for this note, derived from `note_tasks`)
 - Add `searchableAs()` for a dedicated index (for example `notes`).
 
 ### Phase B: Implement deterministic content extraction
-- Create a dedicated extractor service (for example `NoteSearchTextExtractor`) that:
-  - walks the current note JSON structure
-  - extracts visible text from headings/paragraphs/list items/task items
-  - ignores non-searchable noise (IDs, attrs-only nodes, formatting marks)
+- Create dedicated extractors (for example `NoteSearchTextExtractor` + `NoteSearchMetaExtractor`) that:
+  - extract visible body text from note JSON (headings/paragraphs/list/task text)
+  - extract properties/tags/hashtags/mentions from note metadata
+  - derive `task_terms` from indexed `note_tasks` rows (or from the same task indexing pipeline)
 - Keep extraction deterministic and side-effect free so reindexing is stable.
 
 ### Phase C: Configure Meilisearch index settings
 - Add `notes` settings in `config/scout.php`:
-  - `searchableAttributes`: `title`, `content_text`, `tags`, `hashtags`, `mentions`
+  - `searchableAttributes`: `title`, `content_text`, `tags`, `hashtags`, `mentions`, `task_terms`
   - `filterableAttributes`: `workspace_id`, `type`, `journal_granularity`, `journal_date`, `parent_id`
   - `sortableAttributes`: `updated_at`, `journal_date`, `title`
 - Run `php artisan scout:sync-index-settings`.
@@ -176,16 +184,18 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
 - For bulk consistency, keep `ReindexNoteJob` as authoritative when note structure changes significantly.
 
 ### Phase E: Add note search endpoint + controller strategy
-- Add a dedicated notes search controller (parallel to `TaskSearchController`).
+- Add a dedicated notes search controller intended for Command Palette consumption.
 - Suggested runtime approach:
-  - with `q`: Meilisearch for candidate IDs + filters, MySQL for final payload mapping/pagination
-  - without `q`: existing MySQL listing path
+  - with `q`: Meilisearch for candidate IDs + filters, MySQL for final payload mapping
+  - no broad list/search endpoint without `q` needed for palette
 - Reuse current workspace authorization and route scoping rules.
 
 ### Phase F: UI integration
-- Add a note search input in the relevant page(s) with debounced query behavior.
-- Keep current filters in URL so search is shareable and back/forward-safe.
-- Preserve keyboard navigation and existing empty/loading states.
+- Wire Command Palette results sections to notes index output:
+  - note matches (title/metadata)
+  - task-derived note matches
+- Keep keyboard-first interactions fast (debounced remote search + stable selection index).
+- Preserve existing command items behavior while merging search results.
 
 ### Phase G: rollout and verification
 - One-time backfill:
@@ -197,9 +207,9 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
 - Validate on production-like data before enabling to all users.
 
 ### Optional after rollout
-- Add ranking tuning (title > content) using Meilisearch ranking/searchable settings.
+- Add ranking tuning (title > task_terms > content_text > tags/mentions/hashtags) using Meilisearch settings.
 - Add typo tolerance tuning if precision/recall needs adjustment.
-- Consider a combined command palette source (notes + headings + tasks) once note index quality is stable.
+- If precision drops, tune content weighting and typo tolerance rather than removing body search.
 
 ---
 
