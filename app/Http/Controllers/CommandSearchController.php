@@ -495,6 +495,7 @@ class CommandSearchController extends Controller
         $options = [
             'limit' => max(1, min($limit, 100)),
             'attributesToRetrieve' => ['id'],
+            'attributesToSearchOn' => ['content_text'],
             'filter' => $this->taskFilterExpression(
                 workspaceIds: $workspaceIds,
                 taskStatuses: $taskStatuses,
@@ -560,9 +561,7 @@ class CommandSearchController extends Controller
         return NoteTask::query()
             ->whereIn('workspace_id', $workspaceIds)
             ->where(function (Builder $builder) use ($query): void {
-                $builder->where('content_text', 'like', "%{$query}%")
-                    ->orWhere('note_title', 'like', "%{$query}%")
-                    ->orWhere('parent_note_title', 'like', "%{$query}%");
+                $builder->where('content_text', 'like', "%{$query}%");
             })
             ->where(function (Builder $builder) use ($taskStatuses): void {
                 $this->applyTaskStatusConstraint($builder, $taskStatuses);

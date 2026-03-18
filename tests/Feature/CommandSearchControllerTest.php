@@ -236,3 +236,45 @@ test('command search tasks excludes closed and canceled by default', function ()
         ->toContain((string) $completedTask->id)
         ->toContain((string) $canceledTask->id);
 });
+
+test('command search tasks only include tasks matching task content', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $slug = $workspace?->slug;
+
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Jonril planning',
+    ]);
+
+    $nonMatchingTask = NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-non-matching',
+        'note_title' => $note->display_title,
+        'content_text' => 'Prepare quarterly roadmap',
+        'checked' => false,
+        'task_status' => null,
+    ]);
+
+    $matchingTask = NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-matching',
+        'note_title' => $note->display_title,
+        'content_text' => 'Jonril action item',
+        'checked' => false,
+        'task_status' => null,
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=jonril&include_tasks=1")
+        ->assertOk();
+
+    $taskIds = collect($response->json('tasks'))->pluck('id')->all();
+
+    expect($taskIds)
+        ->toContain((string) $matchingTask->id)
+        ->not->toContain((string) $nonMatchingTask->id);
+});
