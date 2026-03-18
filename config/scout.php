@@ -149,6 +149,15 @@ return [
                     'headings',
                     'content_text',
                 ],
+                'typoTolerance' => [
+                    'enabled' => true,
+                    'minWordSizeForTypos' => [
+                        'oneTypo' => 3,
+                        'twoTypos' => 7,
+                    ],
+                    'disableOnAttributes' => [],
+                    'disableOnWords' => [],
+                ],
                 'filterableAttributes' => [
                     'workspace_id',
                     'type',
@@ -169,6 +178,15 @@ return [
                     'hashtags',
                     'mentions',
                     'content_text',
+                ],
+                'typoTolerance' => [
+                    'enabled' => true,
+                    'minWordSizeForTypos' => [
+                        'oneTypo' => 3,
+                        'twoTypos' => 7,
+                    ],
+                    'disableOnAttributes' => [],
+                    'disableOnWords' => [],
                 ],
                 'filterableAttributes' => [
                     'workspace_id',
