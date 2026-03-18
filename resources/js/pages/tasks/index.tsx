@@ -359,8 +359,8 @@ export default function TasksIndex({
                 state.date_preset && ['today', 'this_week', 'this_month', 'today_plus_7'].includes(state.date_preset)
                     ? state.date_preset
                     : '',
-            date_from: state.date_from?.trim() ?? '',
-            date_to: state.date_to?.trim() ?? '',
+            date_from: state.date_preset ? '' : (state.date_from?.trim() ?? ''),
+            date_to: state.date_preset ? '' : (state.date_to?.trim() ?? ''),
             status: (normalizedStatuses.length > 0 ? normalizedStatuses : ['open']).sort(),
             group_by:
                 state.group_by && ['none', 'note', 'date'].includes(state.group_by)
@@ -418,12 +418,15 @@ export default function TasksIndex({
     };
 
     const applyPreset = (preset: Props['filterPresets'][number]) => {
+        const resolvedPresetDates = preset.filters.date_preset
+            ? resolveDatePresetRange(preset.filters.date_preset)
+            : null;
         const normalized: Filters = {
             workspace_ids: [...(preset.filters.workspace_ids ?? [])],
             note_scope_ids: [...(preset.filters.note_scope_ids ?? [])],
             date_preset: preset.filters.date_preset ?? '',
-            date_from: preset.filters.date_from ?? '',
-            date_to: preset.filters.date_to ?? '',
+            date_from: resolvedPresetDates?.from ?? preset.filters.date_from ?? '',
+            date_to: resolvedPresetDates?.to ?? preset.filters.date_to ?? '',
             status:
                 preset.filters.status && preset.filters.status.length > 0
                     ? [...preset.filters.status]
@@ -456,12 +459,15 @@ export default function TasksIndex({
         }
 
         setPresetProcessing(true);
+        const filtersToSave = localFilters.date_preset
+            ? { ...localFilters, date_from: '', date_to: '' }
+            : localFilters;
         router.post(
             '/tasks/filter-presets',
             {
                 name,
                 favorite: presetFavorite,
-                filters: localFilters,
+                filters: filtersToSave,
             },
             {
                 preserveState: true,
