@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { InlineEditable } from '@/components/ui/inline-editable';
+import { Switch } from '@/components/ui/switch';
 import AppLayout from '@/layouts/app-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 import { useI18n } from '@/lib/i18n';
@@ -13,6 +14,7 @@ type FilterPreset = {
     id: string;
     name: string;
     favorite: boolean;
+    default: boolean;
     filters: Record<string, unknown>;
     updated_at: string | null;
 };
@@ -23,12 +25,12 @@ type Props = {
 
 export default function TaskFiltersSettings({ filterPresets }: Props) {
     const { t } = useI18n();
-    const [edits, setEdits] = useState<Record<string, { name: string; favorite: boolean }>>(
+    const [edits, setEdits] = useState<Record<string, { name: string; favorite: boolean; default: boolean }>>(
         () =>
             Object.fromEntries(
                 filterPresets.map((preset) => [
                     preset.id,
-                    { name: preset.name, favorite: preset.favorite },
+                    { name: preset.name, favorite: preset.favorite, default: preset.default },
                 ]),
             ),
     );
@@ -133,7 +135,7 @@ export default function TaskFiltersSettings({ filterPresets }: Props) {
 
     const updatePreset = (
         presetId: string,
-        overrides?: Partial<{ name: string; favorite: boolean }>,
+        overrides?: Partial<{ name: string; favorite: boolean; default: boolean }>,
     ) => {
         const current = edits[presetId];
         if (!current || processingId) {
@@ -146,14 +148,21 @@ export default function TaskFiltersSettings({ filterPresets }: Props) {
         }
 
         const favorite = overrides?.favorite ?? current.favorite;
+        const isDefault = overrides?.default ?? current.default;
 
-        setEdits((prev) => ({
-            ...prev,
-            [presetId]: {
-                name,
-                favorite,
-            },
-        }));
+        // When setting as default, clear it from all other presets in local state.
+        setEdits((prev) => {
+            const next = { ...prev };
+            if (isDefault) {
+                Object.keys(next).forEach((id) => {
+                    if (id !== presetId) {
+                        next[id] = { ...next[id]!, default: false };
+                    }
+                });
+            }
+            next[presetId] = { name, favorite, default: isDefault };
+            return next;
+        });
 
         setProcessingId(presetId);
         router.patch(
@@ -161,6 +170,7 @@ export default function TaskFiltersSettings({ filterPresets }: Props) {
             {
                 name,
                 favorite,
+                default: isDefault,
             },
             {
                 preserveState: true,
@@ -294,6 +304,26 @@ export default function TaskFiltersSettings({ filterPresets }: Props) {
                                         <p className="mt-2 text-xs text-muted-foreground">
                                             {formatPresetFilters(preset)}
                                         </p>
+
+                                        <div className="mt-3 flex items-center gap-2">
+                                            <Switch
+                                                id={`default-${preset.id}`}
+                                                checked={current.default}
+                                                disabled={isProcessing}
+                                                onCheckedChange={(checked) =>
+                                                    updatePreset(preset.id, { default: checked })
+                                                }
+                                            />
+                                            <label
+                                                htmlFor={`default-${preset.id}`}
+                                                className="cursor-pointer text-xs text-muted-foreground"
+                                            >
+                                                {t(
+                                                    'task_filter_presets.set_as_default',
+                                                    'Default filter',
+                                                )}
+                                            </label>
+                                        </div>
                                     </div>
                                 );
                             })

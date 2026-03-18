@@ -15,6 +15,7 @@ import {
     Check,
     ChevronDown,
     ChevronRight,
+    Home,
     Filter,
     Settings2,
     Star,
@@ -155,6 +156,7 @@ type Props = {
         id: string;
         name: string;
         favorite: boolean;
+        default: boolean;
         filters: Filters;
         updated_at: string | null;
     }>;
@@ -442,6 +444,18 @@ export default function TasksIndex({
         setPresetName('');
         setPresetFavorite(false);
         setSavePresetOpen(true);
+    };
+
+    const setDefaultPreset = (preset: Props['filterPresets'][number]) => {
+        router.patch(
+            `/settings/task-filters/${preset.id}`,
+            {
+                name: preset.name,
+                favorite: true,
+                default: !preset.default,
+            },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
     };
 
     const clearAppliedPreset = () => {
@@ -1635,6 +1649,23 @@ export default function TasksIndex({
                                             'Save filter',
                                         )}
                                     </DropdownMenuItem>
+                                    {activeFilterPreset ? (
+                                        <DropdownMenuItem
+                                            onClick={() => setDefaultPreset(activeFilterPreset)}
+                                            className="gap-2"
+                                        >
+                                            <Home className="h-3.5 w-3.5" />
+                                            {activeFilterPreset.default
+                                                ? t(
+                                                    'tasks_index.unset_default_filter',
+                                                    'Remove as default',
+                                                )
+                                                : t(
+                                                    'tasks_index.set_default_filter',
+                                                    'Set as default',
+                                                )}
+                                        </DropdownMenuItem>
+                                    ) : null}
                                     <DropdownMenuItem asChild className="gap-2">
                                         <Link href="/settings/task-filters">
                                             <Settings2 className="h-3.5 w-3.5" />

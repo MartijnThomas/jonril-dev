@@ -1493,3 +1493,60 @@ test('migrated task cannot be toggled via updateCheckedByReference', function ()
     $note->refresh();
     expect(data_get($note->content, 'content.0.content.0.attrs.checked'))->toBeFalse();
 });
+
+test('tasks index redirects to default preset filters when visited without query params', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $settings = $user->settings ?? [];
+    data_set($settings, 'tasks.filter_presets', [
+        [
+            'id' => 'preset-non-default',
+            'name' => 'Other',
+            'favorite' => false,
+            'default' => false,
+            'filters' => ['status' => ['completed'], 'group_by' => 'note'],
+            'updated_at' => now()->toIso8601String(),
+        ],
+        [
+            'id' => 'preset-default',
+            'name' => 'My default',
+            'favorite' => true,
+            'default' => true,
+            'filters' => ['status' => ['open', 'starred'], 'group_by' => 'date'],
+            'updated_at' => now()->toIso8601String(),
+        ],
+    ]);
+    $user->forceFill(['settings' => $settings])->save();
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks')
+        ->assertRedirect();
+
+    $response = $this->actingAs($user)->get('/tasks');
+    $location = $response->headers->get('Location');
+    expect($location)->toContain('status%5B0%5D=open')
+        ->toContain('status%5B1%5D=starred')
+        ->toContain('group_by=date');
+});
+
+test('tasks index does not redirect when query params are already present', function () {
+    $user = User::factory()->create();
+
+    $settings = $user->settings ?? [];
+    data_set($settings, 'tasks.filter_presets', [[
+        'id' => 'preset-default',
+        'name' => 'My default',
+        'favorite' => true,
+        'default' => true,
+        'filters' => ['status' => ['completed']],
+        'updated_at' => now()->toIso8601String(),
+    ]]);
+    $user->forceFill(['settings' => $settings])->save();
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks?status[]=open')
+        ->assertOk();
+});

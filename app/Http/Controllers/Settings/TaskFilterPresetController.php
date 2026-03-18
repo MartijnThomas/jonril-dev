@@ -30,6 +30,7 @@ class TaskFilterPresetController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:80'],
             'favorite' => ['nullable', 'boolean'],
+            'default' => ['nullable', 'boolean'],
         ]);
 
         $settings = is_array($user->settings) ? $user->settings : [];
@@ -46,12 +47,25 @@ class TaskFilterPresetController extends Controller
 
         $favorite = (bool) ($validated['favorite'] ?? false);
         $name = trim((string) $validated['name']);
+        $setDefault = array_key_exists('default', $validated) ? (bool) $validated['default'] : null;
+
+        // When marking as default, clear the flag from all other presets first.
+        if ($setDefault === true) {
+            $presets = $presets->map(function (array $preset) use ($presetId): array {
+                if ((string) ($preset['id'] ?? '') !== $presetId) {
+                    return [...$preset, 'default' => false];
+                }
+
+                return $preset;
+            });
+        }
 
         $presets->put((int) $targetIndex, [
             ...$presets[(int) $targetIndex],
             'id' => $presetId,
             'name' => $name,
             'favorite' => $favorite,
+            ...($setDefault !== null ? ['default' => $setDefault] : []),
             'updated_at' => now()->toIso8601String(),
         ]);
 
@@ -82,7 +96,7 @@ class TaskFilterPresetController extends Controller
     }
 
     /**
-     * @return array<int, array{id:string,name:string,favorite:bool,filters:array<string,mixed>,updated_at:?string}>
+     * @return array<int, array{id:string,name:string,favorite:bool,default:bool,filters:array<string,mixed>,updated_at:?string}>
      */
     private function taskFilterPresetsForUser($user): array
     {
@@ -95,6 +109,7 @@ class TaskFilterPresetController extends Controller
                     'id' => is_string($preset['id'] ?? null) ? (string) $preset['id'] : '',
                     'name' => is_string($preset['name'] ?? null) ? trim((string) $preset['name']) : '',
                     'favorite' => (bool) ($preset['favorite'] ?? false),
+                    'default' => (bool) ($preset['default'] ?? false),
                     'filters' => is_array($preset['filters'] ?? null) ? $preset['filters'] : [],
                     'updated_at' => is_string($preset['updated_at'] ?? null) ? (string) $preset['updated_at'] : null,
                 ];

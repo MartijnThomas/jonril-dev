@@ -52,6 +52,45 @@ class TasksController extends Controller
             ->pluck('name', 'id')
             ->all();
 
+        // Redirect to default preset when the page is visited with no filters.
+        $filterKeys = ['status', 'date_preset', 'date_from', 'date_to', 'workspace_ids', 'workspace_id',
+            'note_scope_ids', 'note_scope_id', 'group_by', 'hashtag', 'show_completed'];
+        if (! $request->hasAny($filterKeys)) {
+            $defaultPreset = collect($this->taskFilterPresetsForUser($user))
+                ->first(fn (array $p) => (bool) ($p['default'] ?? false));
+
+            if ($defaultPreset) {
+                $normalized = $this->normalizeTaskPresetFilters((array) ($defaultPreset['filters'] ?? []));
+                $query = [];
+                if (! empty($normalized['workspace_ids'])) {
+                    $query['workspace_ids'] = $normalized['workspace_ids'];
+                }
+                if (! empty($normalized['note_scope_ids'])) {
+                    $query['note_scope_ids'] = $normalized['note_scope_ids'];
+                }
+                if ($normalized['date_preset'] !== '') {
+                    $query['date_preset'] = $normalized['date_preset'];
+                } elseif ($normalized['date_from'] !== '' || $normalized['date_to'] !== '') {
+                    if ($normalized['date_from'] !== '') {
+                        $query['date_from'] = $normalized['date_from'];
+                    }
+                    if ($normalized['date_to'] !== '') {
+                        $query['date_to'] = $normalized['date_to'];
+                    }
+                }
+                if (! empty($normalized['status'])) {
+                    $query['status'] = $normalized['status'];
+                }
+                if ($normalized['group_by'] !== '' && $normalized['group_by'] !== 'none') {
+                    $query['group_by'] = $normalized['group_by'];
+                }
+
+                if (! empty($query)) {
+                    return redirect()->route('tasks.index', $query);
+                }
+            }
+        }
+
         $filters = $request->validate([
             'workspace_id' => ['nullable', Rule::in($workspaceIds)],
             'workspace_ids' => ['nullable', 'array'],
@@ -1178,6 +1217,7 @@ class TasksController extends Controller
                     'id' => is_string($preset['id'] ?? null) ? (string) $preset['id'] : '',
                     'name' => is_string($preset['name'] ?? null) ? trim((string) $preset['name']) : '',
                     'favorite' => (bool) ($preset['favorite'] ?? false),
+                    'default' => (bool) ($preset['default'] ?? false),
                     'filters' => $this->normalizeTaskPresetFilters((array) ($preset['filters'] ?? [])),
                     'updated_at' => is_string($preset['updated_at'] ?? null) ? (string) $preset['updated_at'] : null,
                 ];
