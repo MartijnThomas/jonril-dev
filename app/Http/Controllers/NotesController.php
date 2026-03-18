@@ -795,12 +795,14 @@ class NotesController extends Controller
             $meetingNotesCollection = Note::query()
                 ->where('parent_id', $note->parent_id)
                 ->where('type', Note::TYPE_MEETING)
-                ->get(['id', 'title', 'meta', 'parent_id', 'slug', 'type', 'journal_granularity']);
+                ->with('workspace:id,slug')
+                ->get(['id', 'title', 'meta', 'parent_id', 'slug', 'type', 'journal_granularity', 'workspace_id']);
         } else {
             $meetingNotesCollection = Note::query()
                 ->where('parent_id', $note->id)
                 ->where('type', Note::TYPE_MEETING)
-                ->get(['id', 'title', 'meta', 'parent_id', 'slug', 'type', 'journal_granularity']);
+                ->with('workspace:id,slug')
+                ->get(['id', 'title', 'meta', 'parent_id', 'slug', 'type', 'journal_granularity', 'workspace_id']);
         }
 
         // Batch-resolve whether each meeting note's linked event has been remote-deleted.
