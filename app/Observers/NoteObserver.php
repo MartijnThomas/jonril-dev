@@ -2,13 +2,12 @@
 
 namespace App\Observers;
 
+use App\Jobs\ReindexNoteJob;
 use App\Models\Note;
 use App\Models\NoteHeading;
 use App\Models\NoteTask;
-use App\Support\Notes\NoteHeadingIndexer;
 use App\Support\Notes\NoteMetaExtractor;
 use App\Support\Notes\NoteTaskCountExtractor;
-use App\Support\Notes\NoteTaskIndexer;
 use App\Support\Notes\NoteWordCountExtractor;
 use App\Support\Notes\TimeblockIndexer;
 use Illuminate\Support\Facades\Auth;
@@ -17,12 +16,10 @@ use Illuminate\Support\Facades\Cache;
 class NoteObserver
 {
     public function __construct(
-        private readonly NoteTaskIndexer $noteTaskIndexer,
-        private readonly NoteHeadingIndexer $noteHeadingIndexer,
-        private readonly TimeblockIndexer $timeblockIndexer,
         private readonly NoteMetaExtractor $noteMetaExtractor,
         private readonly NoteTaskCountExtractor $noteTaskCountExtractor,
         private readonly NoteWordCountExtractor $noteWordCountExtractor,
+        private readonly TimeblockIndexer $timeblockIndexer,
     ) {}
 
     public function saving(Note $note): void
@@ -37,16 +34,13 @@ class NoteObserver
 
     public function saved(Note $note): void
     {
-        $defaultDurationMinutes = Auth::user()?->defaultTimeblockDurationMinutes() ?? 60;
-        $userTimezone = Auth::user()?->timezonePreference();
+        $userId = Auth::id();
 
-        $this->noteTaskIndexer->reindexNote($note);
-        $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes, $userTimezone);
-        $this->noteHeadingIndexer->reindexNote($note);
+        ReindexNoteJob::dispatch($note->id, $userId);
 
         if ($note->wasChanged('title')) {
-            $note->children()->each(function (Note $child): void {
-                $this->noteTaskIndexer->reindexNote($child);
+            $note->children()->each(function (Note $child) use ($userId): void {
+                ReindexNoteJob::dispatch($child->id, $userId);
             });
         }
 
@@ -83,6 +77,8 @@ class NoteObserver
 
     public function restored(Note $note): void
     {
+        $userId = Auth::id();
+
         $note->children()
             ->withTrashed()
             ->whereNotNull('deleted_at')
@@ -91,12 +87,7 @@ class NoteObserver
                 $child->restore();
             });
 
-        $defaultDurationMinutes = Auth::user()?->defaultTimeblockDurationMinutes() ?? 60;
-        $userTimezone = Auth::user()?->timezonePreference();
-
-        $this->noteTaskIndexer->reindexNote($note);
-        $this->timeblockIndexer->reindexNote($note, $defaultDurationMinutes, $userTimezone);
-        $this->noteHeadingIndexer->reindexNote($note);
+        ReindexNoteJob::dispatch($note->id, $userId);
         $this->clearNoteSharedCache($note->workspace_id);
     }
 
