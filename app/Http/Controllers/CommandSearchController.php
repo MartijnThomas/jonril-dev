@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Meilisearch\Client;
+use Meilisearch\Search\SearchResult;
 
 class CommandSearchController extends Controller
 {
@@ -282,9 +283,11 @@ class CommandSearchController extends Controller
             'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
         ];
 
-        /** @var array{hits?: array<int, array{id:mixed}>} $response */
+        /** @var SearchResult|array{hits?: array<int, array{id:mixed}>} $response */
         $response = $client->index($indexName)->search($query, $options);
-        $hits = $response['hits'] ?? [];
+        $hits = $response instanceof SearchResult
+            ? $response->getHits()
+            : ($response['hits'] ?? []);
 
         return collect($hits)
             ->map(fn (array $hit) => (string) ($hit['id'] ?? ''))

@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\Rule;
 use Meilisearch\Client;
+use Meilisearch\Search\SearchResult;
 
 class TaskSearchController extends Controller
 {
@@ -164,9 +165,11 @@ class TaskSearchController extends Controller
                 $options['filter'] = $filterExpression;
             }
 
-            /** @var array{hits?: array<int, array{id:mixed}>, estimatedTotalHits?: int} $response */
+            /** @var SearchResult|array{hits?: array<int, array{id:mixed}>, estimatedTotalHits?: int} $response */
             $response = $client->index($indexName)->search($searchQuery, $options);
-            $hits = $response['hits'] ?? [];
+            $hits = $response instanceof SearchResult
+                ? $response->getHits()
+                : ($response['hits'] ?? []);
             if ($hits === []) {
                 break;
             }
@@ -183,7 +186,9 @@ class TaskSearchController extends Controller
             }
 
             $offset += count($hits);
-            $estimatedTotalHits = (int) ($response['estimatedTotalHits'] ?? 0);
+            $estimatedTotalHits = $response instanceof SearchResult
+                ? (int) ($response->getEstimatedTotalHits() ?? 0)
+                : (int) ($response['estimatedTotalHits'] ?? 0);
             if ($offset >= $estimatedTotalHits || count($hits) < $chunk) {
                 break;
             }
