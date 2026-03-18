@@ -20,6 +20,8 @@ Route::inertia('/', 'welcome', [
     'canRegister' => Features::enabled(Features::registration()),
 ])->name('home');
 
+Route::get('/healthz', fn () => response()->json(['status' => 'ok']))->name('healthz');
+
 if (app()->environment('local')) {
     Route::get('dev/auth/token-login', function (Request $request) {
         $data = $request->validate([
