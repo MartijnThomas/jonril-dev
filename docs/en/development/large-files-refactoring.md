@@ -13,7 +13,7 @@ This document lists the largest files in the codebase and offers concrete advice
 
 | File | Lines | Primary problem |
 |---|---|---|
-| `resources/js/pages/tasks/index.tsx` | 2 259 | Single component doing filter state, presets, UI, and rendering |
+| `resources/js/pages/tasks/index.tsx` | 1 980 ↓ | Single component doing filter state, presets, UI, and rendering |
 | `app/Http/Controllers/NotesController.php` | 1 918 | God controller — creation, display, mutation, linking, rendering helpers |
 | `app/Http/Controllers/TasksController.php` | 1 544 | Query building, preset management, check updates, migration all in one |
 | `resources/js/components/tiptap-properties/document-properties.tsx` | 1 514 | Mixed state logic, popovers, and rendering in one component |
@@ -33,7 +33,7 @@ Everything lives in one massive component: type definitions, filter state normal
 ### Suggested breakdown
 
 **Extract hooks:**
-- `useTaskFilters(initialFilters)` — filter normalisation, `filterSignature` memo, preset apply/clear logic (~350 lines → new hook file)
+- ~~`useTaskFilters(initialFilters)`~~ ✓ Done 2026-03-18 — extracted to `resources/js/hooks/use-task-filters.ts` (432 lines). Manages filter state, normalisation, date preset logic, status/grouping options, preset CRUD, workspace/note scope toggles. `Filters` and `FilterPreset` types exported from the hook.
 - `useTaskFilterPresets(workspaceId)` — save, delete, apply presets; keep localStorage state (~150 lines)
 - `useTaskDatePresets()` — date range resolution for each preset string (~80 lines)
 
@@ -46,7 +46,7 @@ Everything lives in one massive component: type definitions, filter state normal
 - `<TaskNoteTree>` — the nested note tree render inside filter panel (~180 lines)
 
 **Move types:**
-- All `type`/`interface` declarations at the top of the file → `types/tasks.ts`
+- All remaining `type`/`interface` declarations at the top of the file → `types/tasks.ts`
 
 **Result:** Main page component shrinks to ~400–500 lines of wiring. Each extracted file is independently readable.
 
@@ -230,7 +230,7 @@ The middleware itself becomes ~80 lines: instantiate the builders, call them, an
 
 Break down files in this order — highest ROI first:
 
-1. **`tasks/index.tsx`** — largest file, actively developed, hooks extraction unblocks adding search (Phase 1)
+1. ~~**`tasks/index.tsx`** — `useTaskFilters` hook extracted~~ ✓ Done 2026-03-18 (2 305 → 1 980 lines). Remaining: component extractions and `useTaskFilterPresets`.
 2. **`NotesController.php`** — most likely to keep growing as features are added
 3. **`document-properties.tsx`** — `TokenPropertyInput` is already a coherent component, easy win
 4. **`TasksController.php`** — extract `TaskQueryBuilder` before adding full-text search filter

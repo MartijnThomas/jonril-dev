@@ -1,6 +1,6 @@
 # Deferred Props Plan + Payload Inventory (Notes App)
 
-Updated: 2026-03-18 (editor-suggestions revert documented)
+Updated: 2026-03-18 (editor-suggestions revert documented; Phase 2C/2D/3E query table updated)
 
 ---
 
@@ -102,8 +102,8 @@ Scope: opening `notes/show` page. Updated to reflect state as of 2026-03-18.
 | `name` | none | — | Constant |
 | `auth.user` | 1 row lookup | no | Fine |
 | `workspaces` | workspace + pivot join | no | Lazy (fn) |
-| `currentWorkspace` | workspace + membership + COUNT aggregate | no | Lazy (fn); COUNT not cached — **fix in Phase 2D** |
-| `notesTree` | full notes scan + PHP sort | no | Lazy (fn); **cache in Phase 2C** |
+| `currentWorkspace` | workspace + membership + COUNT aggregate | 1 day ✓ | Lazy (fn); COUNT cached (Phase 2D ✓) |
+| `notesTree` | full notes scan + PHP sort | 1 day ✓ | Lazy (fn); cached (Phase 2C ✓) |
 | `sidebarOpen` | cookie | — | Fine |
 | `rightSidebarOpen` | cookie | — | Fine |
 | `workspaceLinkableNotes` | full notes scan + path resolution | 1 day ✓ | Lazy (fn) |
@@ -197,8 +197,8 @@ Approximate SQL queries fired for a `notes/show` page load with warm caches:
 | Auth user lookup | Laravel auth | no |
 | Workspace + membership | `resolvedWorkspace` | no |
 | Workspace membership check | `currentWorkspaceSummary` | no |
-| Note count aggregate | `workspaceNoteCounts` | **no** |
-| All notes (tree) | `buildNotesTree` | **no** |
+| Note count aggregate | `workspaceNoteCounts` | **1 day ✓** |
+| All notes (tree) | `buildNotesTree` | **1 day ✓** |
 | Today journal | `workspaceMeetingParentOptions` | **no** |
 | Fetch the note itself | route model binding | no |
 | All notes (page) | `renderNotePage.$allNotes` | no |
@@ -207,7 +207,7 @@ Approximate SQL queries fired for a `notes/show` page load with warm caches:
 | Deferred: related tasks | `NoteRelatedPanelBuilder` | separate request |
 | Deferred: backlinks | `NoteRelatedPanelBuilder` | separate request |
 
-**Highlighted uncached queries that run every request even with warm caches:** note count aggregate, sidebar notes tree, today journal lookup. These are the primary targets for Phase 2C, 2D, and 3F.
+**Highlighted uncached queries that run every request even with warm caches:** today journal lookup (only remaining — Phase 3F). Note count aggregate and sidebar notes tree are now cached (Phase 2C/2D ✓).
 
 ---
 

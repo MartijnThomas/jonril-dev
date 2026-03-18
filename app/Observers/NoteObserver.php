@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Jobs\ReindexNoteJob;
+use App\Jobs\WarmNoteSharedCacheJob;
 use App\Models\Note;
 use App\Models\NoteHeading;
 use App\Models\NoteTask;
@@ -97,5 +98,7 @@ class NoteObserver
         Cache::forget("notes_dropdown_parents_{$workspaceId}");
         Cache::forget("notes_tree_{$workspaceId}");
         Cache::forget("notes_count_{$workspaceId}");
+
+        WarmNoteSharedCacheJob::dispatch($workspaceId);
     }
 }

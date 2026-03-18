@@ -184,6 +184,18 @@ Dispatch `ReindexNoteJob` on the `indexing` queue so it never blocks user-facing
 
 1. **Switch `CACHE_STORE=redis`** — zero code change, immediate win
 2. ~~**`ReindexNoteJob`**~~ ✓ Done — dispatched from `NoteObserver::saved()` and `restored()`, routes to `indexing` queue, snapshots `Auth::id()` at dispatch time
-3. **`WarmNoteSharedCacheJob`** — eliminates cold-cache spike after writes
+3. ~~**`WarmNoteSharedCacheJob`**~~ ✓ Done — dispatched from `NoteObserver::clearNoteSharedCache()` after invalidating all four keys; warms `notes_tree`, `notes_count`, `notes_dropdown_linkable`, `notes_dropdown_parents`
 4. **`SyncCalendarJob`** (if not already queued) — removes remote latency from request path
 5. **Slug sync to queue** — lower priority; only affects deep hierarchies
+
+---
+
+## Cross-track recommendation (2026-03-18)
+
+Across all four tracks (queue, deferred props, full-text search, large files), the recommended priority order is:
+
+1. ~~**`CACHE_STORE=redis`**~~ ✓ Done (prod)
+2. ~~**`WarmNoteSharedCacheJob`**~~ ✓ Done
+3. ~~**Extract `useTaskFilters` hook from `tasks/index.tsx`**~~ ✓ Done 2026-03-18
+4. **Full-text search Phase 1 (tasks, MySQL FULLTEXT)** — first user-visible search feature, zero infrastructure; hook extraction is complete
+5. **Deferred props Phase 3F/3G/3H** — remaining shared-props perf cleanup (today-journal cache, combine Event queries, move `workspaceMeetingParentOptions` to page scope)
