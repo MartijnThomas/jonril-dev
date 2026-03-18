@@ -135,6 +135,7 @@ return [
         'filter_preset_saved' => 'Filter opgeslagen.',
         'delete_filter_preset' => 'Filter verwijderen',
         'search_placeholder' => 'Zoek taken, notities, ouders...',
+        'search_auto_hint' => 'Automatisch zoeken vanaf 3 tekens.',
         'all_workspaces' => 'Alle werkruimtes',
         'selected_workspaces' => ':count werkruimtes',
         'clear_workspace_filters' => 'Werkruimtes wissen',

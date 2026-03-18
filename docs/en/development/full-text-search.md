@@ -190,6 +190,22 @@ Pushes filterable/sortable attribute config to Meilisearch. Idempotent — safe 
 php artisan scout:import "App\Models\NoteTask"
 ```
 
+### 6. Ensure indexing jobs are actually processed
+
+If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must keep queue workers running (Horizon or Supervisor queue workers), otherwise search will not update after note/task changes.
+
+---
+
+## Production rollout checklist
+
+Run this once when enabling search in production:
+
+1. Deploy code with Scout + `Searchable` model changes.
+2. Verify env vars: `SCOUT_DRIVER=meilisearch`, `SCOUT_QUEUE=true`, `MEILISEARCH_HOST`, `MEILISEARCH_KEY`.
+3. Run `php artisan scout:sync-index-settings`.
+4. Run `php artisan scout:import "App\Models\NoteTask"`.
+5. Confirm Horizon/queue workers are running and consuming jobs.
+
 ### Notes
 
 - `127.0.0.1:7700` — Meilisearch is not publicly reachable, only the app talks to it

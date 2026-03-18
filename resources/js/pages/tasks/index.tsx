@@ -239,6 +239,7 @@ export default function TasksIndex({
     const [relativeNow, setRelativeNow] = useState<number>(() => Date.now());
     const [expandedTaskIds, setExpandedTaskIds] = useState<number[]>([]);
     const [searchInput, setSearchInput] = useState(filters.q ?? '');
+    const minSearchChars = 3;
 
     const favoriteFilterPresets = useMemo(
         () => filterPresets.filter((preset) => preset.favorite),
@@ -260,6 +261,24 @@ export default function TasksIndex({
     useEffect(() => {
         setSearchInput(localFilters.q ?? '');
     }, [localFilters.q]);
+
+    useEffect(() => {
+        const trimmedInput = searchInput.trim();
+        const activeQuery = localFilters.q.trim();
+        if (trimmedInput === activeQuery) {
+            return;
+        }
+
+        if (trimmedInput !== '' && trimmedInput.length < minSearchChars) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            applyFilters({ q: trimmedInput }, true);
+        }, 250);
+
+        return () => window.clearTimeout(timer);
+    }, [applyFilters, localFilters.q, minSearchChars, searchInput]);
     const updateTaskChecked = (
         task: TaskItem,
         checked: boolean,
@@ -1462,6 +1481,12 @@ export default function TasksIndex({
                                 </Button>
                             ) : null}
                         </form>
+                        <p className="text-xs text-muted-foreground">
+                            {t(
+                                'tasks_index.search_auto_hint',
+                                `Auto-search from ${minSearchChars} characters.`,
+                            )}
+                        </p>
                         <div className="grid grid-cols-1 gap-3 md:flex md:items-start md:justify-between md:gap-4">
                             <Popover>
                                 <div className="min-w-0">

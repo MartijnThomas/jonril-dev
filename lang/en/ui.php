@@ -135,6 +135,7 @@ return [
         'filter_preset_saved' => 'Filter saved.',
         'delete_filter_preset' => 'Delete filter',
         'search_placeholder' => 'Search tasks, notes, parents...',
+        'search_auto_hint' => 'Auto-search from 3 characters.',
         'all_workspaces' => 'All workspaces',
         'selected_workspaces' => ':count workspaces',
         'clear_workspace_filters' => 'Clear workspaces',
