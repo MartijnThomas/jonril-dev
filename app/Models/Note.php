@@ -146,7 +146,6 @@ class Note extends Model
 
         return [
             'title' => $this->display_title,
-            'slug' => $this->slug,
             'path_titles' => implode(' / ', $pathSegments),
             'workspace_id' => $this->workspace_id,
             'type' => $this->type,

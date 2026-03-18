@@ -143,12 +143,19 @@ return [
             'notes' => [
                 'searchableAttributes' => [
                     'title',
-                    'slug',
                     'path_titles',
                 ],
                 'filterableAttributes' => [
                     'workspace_id',
                     'type',
+                ],
+                'rankingRules' => [
+                    'words',
+                    'typo',
+                    'proximity',
+                    'attribute',
+                    'sort',
+                    'exactness',
                 ],
             ],
             'note_tasks' => [

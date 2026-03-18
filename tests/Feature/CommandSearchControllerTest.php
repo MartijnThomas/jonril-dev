@@ -40,6 +40,12 @@ test('command search returns note results and excludes journal by default', func
         'journal_date' => '2026-03-07',
     ]);
 
+    $slugOnly = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Unrelated title',
+        'slug' => 'secret-slug-token',
+    ]);
+
     $this
         ->actingAs($user)
         ->getJson("/w/{$slug}/search/command?mode=notes&q=project")
@@ -75,6 +81,15 @@ test('command search returns note results and excludes journal by default', func
         ->assertJsonPath('items.0.id', $journal->id)
         ->assertJsonPath('items.0.icon', 'calendar')
         ->assertJsonPath('items.0.icon_color', 'default');
+
+    $slugOnlyResponse = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=secret-slug-token")
+        ->assertOk()
+        ->assertJsonPath('mode', 'notes');
+
+    expect(collect($slugOnlyResponse->json('items'))->pluck('id')->all())
+        ->not->toContain($slugOnly->id);
 });
 
 test('command search returns heading results with anchor links', function () {

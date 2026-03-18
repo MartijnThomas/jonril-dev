@@ -14,13 +14,11 @@ test('note searchable payload includes parent path titles', function () {
     $child = $user->notes()->create([
         'type' => Note::TYPE_NOTE,
         'title' => 'Fix auth flow',
-        'slug' => 'fix-auth-flow',
         'parent_id' => $parent->id,
     ]);
 
     expect($child->toSearchableArray())->toBe([
         'title' => 'Fix auth flow',
-        'slug' => 'fix-auth-flow',
         'path_titles' => 'Engineering',
         'workspace_id' => $child->workspace_id,
         'type' => Note::TYPE_NOTE,
