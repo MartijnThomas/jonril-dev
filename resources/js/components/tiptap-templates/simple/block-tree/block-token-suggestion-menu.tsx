@@ -78,6 +78,7 @@ export function BlockTokenSuggestionMenu({
     workspaceSuggestions,
 }: BlockTokenSuggestionMenuProps) {
     const [activeToken, setActiveToken] = useState<ActiveToken | null>(null);
+    const activeTokenRef = useRef<ActiveToken | null>(null);
     const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
     const listRef = useRef<{ onKeyDown: (props: { event: KeyboardEvent }) => boolean } | null>(
         null,
@@ -119,19 +120,31 @@ export function BlockTokenSuggestionMenu({
             }
 
             const nextToken = getActiveToken(editor);
+            const prevToken = activeTokenRef.current;
 
             if (
                 nextToken &&
-                activeToken &&
-                nextToken.from === activeToken.from &&
-                nextToken.to <= activeToken.to &&
+                prevToken &&
+                nextToken.from === prevToken.from &&
+                nextToken.to <= prevToken.to &&
                 editor.state.selection.empty &&
                 editor.state.selection.from === nextToken.from
             ) {
-                editor.commands.setTextSelection(activeToken.to);
+                editor.commands.setTextSelection(prevToken.to);
                 return;
             }
 
+            // Skip re-render when the token hasn't changed by value
+            if (
+                nextToken?.from === prevToken?.from &&
+                nextToken?.to === prevToken?.to &&
+                nextToken?.char === prevToken?.char &&
+                nextToken?.query === prevToken?.query
+            ) {
+                return;
+            }
+
+            activeTokenRef.current = nextToken;
             setPosition(null);
             setActiveToken(nextToken);
         };
@@ -144,7 +157,7 @@ export function BlockTokenSuggestionMenu({
             editor.off('selectionUpdate', update);
             editor.off('update', update);
         };
-    }, [activeToken, editor]);
+    }, [editor]);
 
     useEffect(() => {
         if (!activeToken || items.length === 0 || !containerRef.current) {

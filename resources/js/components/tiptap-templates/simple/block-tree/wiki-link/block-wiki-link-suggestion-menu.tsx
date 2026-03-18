@@ -88,6 +88,7 @@ export function BlockWikiLinkSuggestionMenu({
     language,
 }: BlockWikiLinkSuggestionMenuProps) {
     const [activeQuery, setActiveQuery] = useState<ActiveWikiLinkQuery | null>(null);
+    const activeQueryRef = useRef<ActiveWikiLinkQuery | null>(null);
     const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const listRef = useRef<{ onKeyDown: (props: { event: KeyboardEvent }) => boolean } | null>(
@@ -127,19 +128,30 @@ export function BlockWikiLinkSuggestionMenu({
             }
 
             const nextQuery = getActiveWikiLinkQuery(editor);
+            const prevQuery = activeQueryRef.current;
 
             if (
                 nextQuery &&
-                activeQuery &&
-                nextQuery.from === activeQuery.from &&
-                nextQuery.to <= activeQuery.to &&
+                prevQuery &&
+                nextQuery.from === prevQuery.from &&
+                nextQuery.to <= prevQuery.to &&
                 editor.state.selection.empty &&
                 editor.state.selection.from === nextQuery.from
             ) {
-                editor.commands.setTextSelection(activeQuery.to);
+                editor.commands.setTextSelection(prevQuery.to);
                 return;
             }
 
+            // Skip re-render when the query hasn't changed by value
+            if (
+                nextQuery?.from === prevQuery?.from &&
+                nextQuery?.to === prevQuery?.to &&
+                nextQuery?.query === prevQuery?.query
+            ) {
+                return;
+            }
+
+            activeQueryRef.current = nextQuery;
             setPosition(null);
             setActiveQuery(nextQuery);
         };
@@ -152,7 +164,7 @@ export function BlockWikiLinkSuggestionMenu({
             editor.off('selectionUpdate', update);
             editor.off('update', update);
         };
-    }, [activeQuery, editor]);
+    }, [editor]);
 
     useEffect(() => {
         if (!activeQuery || items.length === 0 || !containerRef.current) {
