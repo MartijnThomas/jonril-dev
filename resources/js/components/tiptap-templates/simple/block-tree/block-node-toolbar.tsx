@@ -1,3 +1,4 @@
+import { useEditorState } from '@tiptap/react';
 import type { Editor } from '@tiptap/react';
 import {
     AtSign,
@@ -30,7 +31,6 @@ import {
     Superscript,
     Underline,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import {
     convertCurrentHeadingToParagraph,
     getCurrentBlockNode,
@@ -128,28 +128,13 @@ export function BlockNodeToolbar({
     meetingNotesCount = 0,
     onToggleMeetingNotes,
 }: BlockNodeToolbarProps) {
-    const [currentValue, setCurrentValue] = useState(() =>
-        getCurrentBlockValue(editor),
-    );
-    const [currentMarks, setCurrentMarks] = useState<Record<BlockMarkType, boolean>>(() =>
-        getCurrentMarkState(editor),
-    );
-
-    useEffect(() => {
-        const updateValue = () => {
-            setCurrentValue(getCurrentBlockValue(editor));
-            setCurrentMarks(getCurrentMarkState(editor));
-        };
-
-        updateValue();
-        editor.on('selectionUpdate', updateValue);
-        editor.on('update', updateValue);
-
-        return () => {
-            editor.off('selectionUpdate', updateValue);
-            editor.off('update', updateValue);
-        };
-    }, [editor]);
+    const { currentValue, currentMarks } = useEditorState({
+        editor,
+        selector: (ctx) => ({
+            currentValue: getCurrentBlockValue(ctx.editor),
+            currentMarks: getCurrentMarkState(ctx.editor),
+        }),
+    });
 
     const handleValueChange = (value: string) => {
         const currentBlock = getCurrentBlockNode(editor);
