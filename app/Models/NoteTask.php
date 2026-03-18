@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Laravel\Scout\Searchable;
 
 class NoteTask extends Model
 {
+    use Searchable;
+
     protected $fillable = [
         'workspace_id',
         'note_id',
@@ -52,6 +55,30 @@ class NoteTask extends Model
             'children' => 'array',
             'mentions' => 'array',
             'hashtags' => 'array',
+        ];
+    }
+
+    public function searchableAs(): string
+    {
+        return 'note_tasks';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'note_title' => $this->note_title,
+            'parent_note_title' => $this->parent_note_title,
+            'content_text' => $this->content_text,
+            'hashtags' => $this->hashtags ?? [],
+            'mentions' => $this->mentions ?? [],
+            'workspace_id' => $this->workspace_id,
+            'checked' => $this->checked,
+            'task_status' => $this->task_status,
+            'due_date' => $this->due_date?->toDateString(),
+            'journal_date' => $this->journal_date?->toDateString(),
         ];
     }
 

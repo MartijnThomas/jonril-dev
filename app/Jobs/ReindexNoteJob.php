@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Note;
+use App\Models\NoteTask;
 use App\Models\User;
 use App\Support\Notes\NoteHeadingIndexer;
 use App\Support\Notes\NoteTaskIndexer;
@@ -36,8 +37,14 @@ class ReindexNoteJob implements ShouldQueue
         $defaultDurationMinutes = $user?->defaultTimeblockDurationMinutes() ?? 60;
         $userTimezone = $user?->timezonePreference();
 
+        // Remove stale search records before the DELETE + INSERT cycle
+        NoteTask::query()->where('note_id', $note->id)->unsearchable();
+
         $taskIndexer->reindexNote($note);
         $headingIndexer->reindexNote($note);
         $timeblockIndexer->reindexNote($note, $defaultDurationMinutes, $userTimezone);
+
+        // Sync freshly inserted tasks to the search index
+        NoteTask::query()->where('note_id', $note->id)->searchable();
     }
 }

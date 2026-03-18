@@ -138,22 +138,63 @@ php artisan scout:import "App\Models\Note"
 
 ---
 
-## Forge Setup (Meilisearch daemon — when Phase 2 starts)
+## Forge Setup (Meilisearch daemon)
+
+> Status: laravel/scout + meilisearch/meilisearch-php installed locally (2026-03-18). Meilisearch running via brew locally. **Production Forge setup still needed.**
+
+### 1. Install binary on the server (SSH)
 
 ```bash
-# Install Meilisearch binary
 curl -L https://install.meilisearch.com | sh
-
-# Move to system path
 sudo mv ./meilisearch /usr/bin/meilisearch
-
-# Create Forge daemon:
-# Command:   meilisearch --db-path /var/lib/meilisearch/data --http-addr 127.0.0.1:7700
-# Restart:   always
-# User:      forge
+sudo mkdir -p /var/lib/meilisearch/data
+sudo chown -R forge:forge /var/lib/meilisearch
 ```
 
-Set `MEILISEARCH_HOST=http://127.0.0.1:7700` and `MEILISEARCH_KEY=` in `.env`.
+### 2. Create a Forge Daemon
+
+Forge → site → **Daemons** → New Daemon:
+
+| Field | Value |
+|---|---|
+| Command | `meilisearch --db-path /var/lib/meilisearch/data --http-addr 127.0.0.1:7700 --master-key YOUR_STRONG_KEY` |
+| User | `forge` |
+| Directory | `/var/lib/meilisearch` |
+| Processes | `1` |
+
+Generate a key: `openssl rand -hex 32`
+
+Forge wraps this in Supervisor — auto-restarts on crash.
+
+### 3. Set env vars in Forge → Environment
+
+```ini
+SCOUT_DRIVER=meilisearch
+MEILISEARCH_HOST=http://127.0.0.1:7700
+MEILISEARCH_KEY=YOUR_STRONG_KEY
+```
+
+`MEILISEARCH_KEY` must match `--master-key` in the daemon command.
+
+### 4. Add to deploy script
+
+```bash
+php artisan scout:sync-index-settings
+```
+
+Pushes filterable/sortable attribute config to Meilisearch. Idempotent — safe to run on every deploy.
+
+### 5. Initial index import (run once after Searchable trait is added)
+
+```bash
+php artisan scout:import "App\Models\NoteTask"
+```
+
+### Notes
+
+- `127.0.0.1:7700` — Meilisearch is not publicly reachable, only the app talks to it
+- Data directory persists on disk; if server is reprovisioned, re-run `scout:import`
+- Memory: ~150–300 MB RAM idle
 
 ---
 
