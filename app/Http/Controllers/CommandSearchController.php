@@ -303,7 +303,7 @@ class CommandSearchController extends Controller
         $indexName = (string) config('scout.prefix', '').(new Note)->searchableAs();
         $options = [
             'limit' => max(1, min($limit, 100)),
-            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'headings'],
+            'attributesToRetrieve' => ['id', 'title', 'path_titles', 'headings', 'headings_with_level'],
             'showMatchesPosition' => true,
             'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
             'attributesToSearchOn' => array_values(array_filter([
@@ -371,14 +371,24 @@ class CommandSearchController extends Controller
         }
 
         if ($matchSource === 'heading') {
+            $matchIndex = null;
+            $positions = $hit['_matchesPosition']['headings'] ?? null;
+            if (is_array($positions) && is_array($positions[0]['indices'] ?? null)) {
+                $matchIndex = (int) ($positions[0]['indices'][0] ?? 0);
+            }
+
+            $headingsWithLevel = $hit['headings_with_level'] ?? null;
+            if (is_array($headingsWithLevel) && isset($headingsWithLevel[$matchIndex]) && is_string($headingsWithLevel[$matchIndex])) {
+                return $headingsWithLevel[$matchIndex];
+            }
+
             $headings = $hit['headings'] ?? null;
             if (! is_array($headings) || $headings === []) {
                 return null;
             }
+            $fallback = $headings[$matchIndex] ?? $headings[0] ?? null;
 
-            $first = $headings[0] ?? null;
-
-            return is_string($first) ? $first : null;
+            return is_string($fallback) ? "### {$fallback}" : null;
         }
 
         return null;

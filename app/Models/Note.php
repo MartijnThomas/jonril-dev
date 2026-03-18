@@ -144,11 +144,22 @@ class Note extends Model
     {
         $pathSegments = $this->pathSegments();
         array_pop($pathSegments);
+        $extracted = app(NoteSearchExtractor::class)->extract($this->content);
+        $headings = $extracted['heading_terms'] ?? [];
+        $headingsWithLevel = collect($headings)
+            ->map(function ($heading) use ($extracted): string {
+                $term = is_string($heading) ? $heading : '';
+
+                return str_repeat('#', $this->headingLevelForTerm($term, $extracted)).' '.$term;
+            })
+            ->values()
+            ->all();
 
         return [
             'title' => $this->display_title,
             'path_titles' => implode(' / ', $pathSegments),
-            'headings' => app(NoteSearchExtractor::class)->extract($this->content)['heading_terms'],
+            'headings' => $headings,
+            'headings_with_level' => $headingsWithLevel,
             'workspace_id' => $this->workspace_id,
             'type' => $this->type,
             'journal_granularity' => $this->journal_granularity,
@@ -259,6 +270,29 @@ class Note extends Model
         $trimmed = trim($title);
 
         return $trimmed !== '' ? $trimmed : 'Untitled';
+    }
+
+    /**
+     * @param  array<string, mixed>  $extracted
+     */
+    private function headingLevelForTerm(string $term, array $extracted): int
+    {
+        if ($term === '') {
+            return 3;
+        }
+
+        for ($level = 1; $level <= 6; $level++) {
+            $bucket = $extracted["heading_h{$level}_terms"] ?? [];
+            if (! is_array($bucket)) {
+                continue;
+            }
+
+            if (in_array($term, $bucket, true)) {
+                return $level;
+            }
+        }
+
+        return 3;
     }
 
     /**

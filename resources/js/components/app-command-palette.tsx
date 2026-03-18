@@ -715,7 +715,7 @@ export function AppCommandPalette() {
             return (
                 <>
                     <div className="truncate text-xs text-muted-foreground">{pathText}</div>
-                    {renderHighlightedLine(`Heading: ${headingText}`, 'truncate text-xs text-muted-foreground')}
+                    {renderHighlightedLine(headingText, 'truncate text-xs text-muted-foreground')}
                 </>
             );
         }
