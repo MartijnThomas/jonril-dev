@@ -2002,6 +2002,71 @@ test('daily journal note uses english title and breadcrumbs when user language i
         );
 });
 
+test('show includes meeting children with workspace-scoped hrefs', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $parent = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Project',
+        'slug' => 'project',
+    ]);
+
+    $meeting = $workspace->notes()->create([
+        'type' => Note::TYPE_MEETING,
+        'title' => 'Kickoff',
+        'slug' => 'project/kickoff',
+        'parent_id' => $parent->id,
+        'meta' => ['event_block_id' => 'block-1', 'starts_at' => '2026-03-18T10:00:00Z'],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $parent->id))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('meetingChildren', 1)
+            ->where('meetingChildren.0.id', $meeting->id)
+            ->where('meetingChildren.0.href', scoped_note_url($workspace, $meeting->id)),
+        );
+});
+
+test('show meeting note includes sibling meeting hrefs with correct workspace slug', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $parent = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Project',
+        'slug' => 'project',
+    ]);
+
+    $meetingA = $workspace->notes()->create([
+        'type' => Note::TYPE_MEETING,
+        'title' => 'Sprint 1',
+        'slug' => 'project/sprint-1',
+        'parent_id' => $parent->id,
+        'meta' => ['starts_at' => '2026-03-10T09:00:00Z'],
+    ]);
+
+    $meetingB = $workspace->notes()->create([
+        'type' => Note::TYPE_MEETING,
+        'title' => 'Sprint 2',
+        'slug' => 'project/sprint-2',
+        'parent_id' => $parent->id,
+        'meta' => ['starts_at' => '2026-03-17T09:00:00Z'],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $meetingA->id))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('meetingChildren', 2)
+            ->where('meetingChildren.0.href', scoped_note_url($workspace, $meetingB->id))
+            ->where('meetingChildren.1.href', scoped_note_url($workspace, $meetingA->id)),
+        );
+
+});
+
 test('daily journal note includes due and deadline tasks for that day excluding current note tasks', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
