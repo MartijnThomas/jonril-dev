@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('calendar_synced_ranges', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('calendar_id')->constrained()->cascadeOnDelete();
+            $table->foreignUuid('calendar_id')->constrained()->cascadeOnDelete();
             $table->string('period', 7); // YYYY-MM
             $table->timestamp('synced_at');
 
