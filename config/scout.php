@@ -150,8 +150,12 @@ return [
                 ],
                 'filterableAttributes' => [
                     'workspace_id',
+                    'note_id',
+                    'parent_note_id',
+                    'hashtags',
                     'checked',
                     'task_status',
+                    'search_status',
                     'due_date',
                     'deadline_date',
                     'journal_date',

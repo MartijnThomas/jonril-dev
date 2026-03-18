@@ -138,8 +138,7 @@ test('tasks index extracts tasks and hides completed items by default', function
             ->where('tasks.data.0.mentions.0', 'Lea')
             ->where('tasks.data.0.hashtags.0', 'work')
             ->where('tasks.data.0.render_fragments.0.type', 'priority_token')
-            ->where('tasks.data.0.render_fragments.0.priority', 'normal')
-            ->where('filters.show_completed', false),
+            ->where('tasks.data.0.render_fragments.0.priority', 'normal'),
         );
 });
 
@@ -271,7 +270,7 @@ test('tasks index excludes tasks from workspaces marked as migrated source', fun
         );
 });
 
-test('tasks index can include completed tasks and filter by hashtag', function () {
+test('tasks index can include completed tasks via status filter', function () {
     $user = User::factory()->create();
 
     $note = $user->notes()->create([
@@ -313,15 +312,13 @@ test('tasks index can include completed tasks and filter by hashtag', function (
 
     $this
         ->actingAs($user)
-        ->get('/tasks?show_completed=1&hashtag=launch')
+        ->get('/tasks?status[]=completed')
         ->assertInertia(fn (Assert $page) => $page
             ->component('tasks/index')
             ->has('tasks.data', 1)
             ->where('tasks.data.0.checked', true)
             ->where('tasks.data.0.note.id', $note->id)
-            ->where('tasks.data.0.hashtags.0', 'launch')
-            ->where('filters.show_completed', true)
-            ->where('filters.hashtag', 'launch'),
+            ->where('tasks.data.0.hashtags.0', 'launch'),
         );
 });
 
@@ -385,7 +382,7 @@ test('tasks index exposes completed and canceled metadata timestamps', function 
 
     $this
         ->actingAs($user)
-        ->get('/tasks?show_completed=1&status[]=completed&status[]=canceled&status[]=in_progress')
+        ->get('/tasks?status[]=completed&status[]=canceled&status[]=in_progress')
         ->assertInertia(fn (Assert $page) => $page
             ->component('tasks/index')
             ->has('tasks.data', 3)

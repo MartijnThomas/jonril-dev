@@ -75,12 +75,33 @@ class NoteTask extends Model
             'hashtags' => $this->hashtags ?? [],
             'mentions' => $this->mentions ?? [],
             'workspace_id' => $this->workspace_id,
+            'note_id' => $this->note_id,
+            'parent_note_id' => $this->parent_note_id,
             'checked' => $this->checked,
             'task_status' => $this->task_status,
+            'search_status' => $this->normalizedSearchStatus(),
             'due_date' => $this->due_date?->toDateString(),
             'deadline_date' => $this->deadline_date?->toDateString(),
             'journal_date' => $this->journal_date?->toDateString(),
         ];
+    }
+
+    private function normalizedSearchStatus(): string
+    {
+        if ($this->checked) {
+            return 'completed';
+        }
+
+        $status = strtolower(trim((string) $this->task_status));
+        if (in_array($status, ['canceled', 'migrated', 'assigned', 'in_progress', 'starred'], true)) {
+            return $status;
+        }
+
+        if (in_array($status, ['backlog', 'question'], true)) {
+            return 'backlog';
+        }
+
+        return 'open';
     }
 
     public function note(): BelongsTo

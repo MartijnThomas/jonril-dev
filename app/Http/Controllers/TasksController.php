@@ -54,8 +54,8 @@ class TasksController extends Controller
             ->all();
 
         // Redirect to default preset when the page is visited with no filters.
-        $filterKeys = ['status', 'date_preset', 'date_from', 'date_to', 'workspace_ids', 'workspace_id',
-            'note_scope_ids', 'note_scope_id', 'group_by', 'hashtag', 'show_completed', 'q'];
+        $filterKeys = ['status', 'date_preset', 'date_from', 'date_to', 'workspace_ids',
+            'note_scope_ids', 'group_by', 'q'];
         if (! $request->hasAny($filterKeys)) {
             $defaultPreset = collect($this->taskFilterPresetsForUser($user))
                 ->first(fn (array $p) => (bool) ($p['default'] ?? false));
@@ -85,6 +85,9 @@ class TasksController extends Controller
                 if ($normalized['group_by'] !== '' && $normalized['group_by'] !== 'none') {
                     $query['group_by'] = $normalized['group_by'];
                 }
+                if ($normalized['q'] !== '') {
+                    $query['q'] = $normalized['q'];
+                }
 
                 if (! empty($query)) {
                     return redirect()->route('tasks.index', $query);
@@ -93,14 +96,8 @@ class TasksController extends Controller
         }
 
         $filters = $request->validate([
-            'workspace_id' => ['nullable', Rule::in($workspaceIds)],
             'workspace_ids' => ['nullable', 'array'],
             'workspace_ids.*' => [Rule::in($workspaceIds)],
-            'note_scope_id' => [
-                'nullable',
-                'uuid',
-                Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
-            ],
             'note_scope_ids' => ['nullable', 'array'],
             'note_scope_ids.*' => [
                 'uuid',
@@ -112,13 +109,9 @@ class TasksController extends Controller
             'status' => ['nullable', 'array'],
             'status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog', 'question'])],
             'group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
-            'show_completed' => ['nullable', 'boolean'],
-            'hashtag' => ['nullable', 'string', 'max:120'],
             'q' => ['nullable', 'string', 'max:160'],
         ]);
 
-        $showCompleted = $request->boolean('show_completed');
-        $hashtag = ltrim(trim((string) ($filters['hashtag'] ?? '')), '#');
         $searchQuery = trim((string) ($filters['q'] ?? ''));
 
         $selectedWorkspaceIds = collect($filters['workspace_ids'] ?? [])
@@ -127,12 +120,7 @@ class TasksController extends Controller
             ->unique()
             ->values();
 
-        if ($selectedWorkspaceIds->isEmpty() && is_string($filters['workspace_id'] ?? null) && $filters['workspace_id'] !== '') {
-            $selectedWorkspaceIds = collect([(string) $filters['workspace_id']]);
-        }
-
-        $hasWorkspaceFilterInput = $request->has('workspace_ids') || $request->has('workspace_id');
-        if (! $hasWorkspaceFilterInput && $selectedWorkspaceIds->isEmpty()) {
+        if (! $request->has('workspace_ids') && $selectedWorkspaceIds->isEmpty()) {
             $currentWorkspaceId = (string) ($user->currentWorkspace()?->id ?? '');
             if ($currentWorkspaceId !== '' && in_array($currentWorkspaceId, $workspaceIds, true)) {
                 $selectedWorkspaceIds = collect([$currentWorkspaceId]);
@@ -144,10 +132,6 @@ class TasksController extends Controller
             ->filter(fn (string $id) => $id !== '')
             ->unique()
             ->values();
-
-        if ($selectedNoteScopeIds->isEmpty() && is_string($filters['note_scope_id'] ?? null) && $filters['note_scope_id'] !== '') {
-            $selectedNoteScopeIds = collect([(string) $filters['note_scope_id']]);
-        }
 
         $query = NoteTask::query()
             ->whereIn('workspace_id', $workspaceIds)
@@ -168,9 +152,7 @@ class TasksController extends Controller
             ->values();
 
         if ($selectedStatuses->isEmpty()) {
-            $selectedStatuses = $showCompleted
-                ? collect(['open', 'completed'])
-                : collect(['open']);
+            $selectedStatuses = collect(['open']);
         }
 
         $query->where(function (Builder $statusQuery) use ($selectedStatuses): void {
@@ -198,25 +180,6 @@ class TasksController extends Controller
                 $inner->whereIn('note_id', $scopeIds)
                     ->orWhereIn('parent_note_id', $scopeIds);
             });
-        }
-
-        if ($hashtag !== '') {
-            $query->whereJsonContains('hashtags', $hashtag);
-        }
-
-        if ($searchQuery !== '') {
-            $workspaceScopeForSearch = $selectedWorkspaceIds->isEmpty()
-                ? $workspaceIds
-                : $selectedWorkspaceIds->values()->all();
-            $matchingTaskIds = $this->taskSearchController->matchingTaskIdsForWorkspaces(
-                $searchQuery,
-                $workspaceScopeForSearch,
-            );
-            if ($matchingTaskIds === []) {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->whereIn('id', $matchingTaskIds);
-            }
         }
 
         $datePreset = is_string($filters['date_preset'] ?? null)
@@ -260,6 +223,27 @@ class TasksController extends Controller
                     }
                 });
             });
+        }
+
+        if ($searchQuery !== '') {
+            $workspaceScopeForSearch = $selectedWorkspaceIds->isEmpty()
+                ? $workspaceIds
+                : $selectedWorkspaceIds->values()->all();
+            $matchingTaskIds = $this->taskSearchController->matchingTaskIdsForWorkspaces(
+                $searchQuery,
+                $workspaceScopeForSearch,
+                filters: [
+                    'note_scope_ids' => $selectedNoteScopeIds->all(),
+                    'status' => $selectedStatuses->values()->all(),
+                    'date_from' => $dateFrom,
+                    'date_to' => $dateTo,
+                ],
+            );
+            if ($matchingTaskIds === []) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn('id', $matchingTaskIds);
+            }
         }
 
         $query
@@ -380,8 +364,6 @@ class TasksController extends Controller
                 'date_to' => $dateTo ?? '',
                 'group_by' => $filters['group_by'] ?? 'none',
                 'status' => $selectedStatuses->values()->all(),
-                'show_completed' => $showCompleted,
-                'hashtag' => $hashtag,
                 'q' => $searchQuery,
             ],
             'filterPresets' => $this->taskFilterPresetsForUser($user),
@@ -426,6 +408,7 @@ class TasksController extends Controller
             'filters.status' => ['nullable', 'array'],
             'filters.status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog', 'question'])],
             'filters.group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
+            'filters.q' => ['nullable', 'string', 'max:160'],
         ]);
 
         $normalizedFilters = $this->normalizeTaskPresetFilters((array) ($validated['filters'] ?? []));
