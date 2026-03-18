@@ -95,7 +95,7 @@ function getCurrentBlockValue(editor: Editor): string {
 }
 
 function canToggleMark(editor: Editor, mark: BlockMarkType): boolean {
-    return editor.isEditable && editor.can().chain().focus().toggleMark(mark).run();
+    return editor.isEditable && editor.can().toggleMark(mark);
 }
 
 function getCurrentMarkState(editor: Editor): Record<BlockMarkType, boolean> {
