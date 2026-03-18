@@ -81,7 +81,7 @@ test('tasks index extracts tasks and hides completed items by default', function
                                 [
                                     'type' => 'paragraph',
                                     'content' => [
-                                        ['type' => 'text', 'text' => '< ! Call '],
+                                        ['type' => 'text', 'text' => '! Call '],
                                         [
                                             'type' => 'mention',
                                             'attrs' => [
@@ -133,16 +133,76 @@ test('tasks index extracts tasks and hides completed items by default', function
             ->where('tasks.data.0.checked', false)
             ->where('tasks.data.0.due_date', '2026-03-10')
             ->where('tasks.data.0.deadline_date', '2026-03-12')
-            ->where('tasks.data.0.task_status', 'assigned')
+            ->where('tasks.data.0.task_status', null)
             ->where('tasks.data.0.priority', 'normal')
             ->where('tasks.data.0.mentions.0', 'Lea')
             ->where('tasks.data.0.hashtags.0', 'work')
-            ->where('tasks.data.0.render_fragments.0.type', 'status_token')
-            ->where('tasks.data.0.render_fragments.0.status', 'assigned')
-            ->where('tasks.data.0.render_fragments.2.type', 'priority_token')
-            ->where('tasks.data.0.render_fragments.2.priority', 'normal')
+            ->where('tasks.data.0.render_fragments.0.type', 'priority_token')
+            ->where('tasks.data.0.render_fragments.0.priority', 'normal')
             ->where('filters.show_completed', false),
         );
+});
+
+test('open status filter shows only null-status tasks excluding assigned in_progress starred backlog', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $noteContent = fn (string $status, string $text) => [
+        'type' => 'taskItem',
+        'attrs' => ['checked' => false, 'taskStatus' => $status],
+        'content' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => $text]]]],
+    ];
+
+    $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Status test',
+        'workspace_id' => $workspace->id,
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => ['checked' => false],
+                        'content' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Open task']]]],
+                    ],
+                    $noteContent('assigned', 'Assigned task'),
+                    $noteContent('in_progress', 'In progress task'),
+                    $noteContent('starred', 'Starred task'),
+                    $noteContent('backlog', 'Backlog task'),
+                    $noteContent('canceled', 'Canceled task'),
+                    $noteContent('migrated', 'Migrated task'),
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => ['checked' => true],
+                        'content' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Completed task']]]],
+                    ],
+                ],
+            ]],
+        ],
+    ]);
+
+    // Default view (status=open) shows only null-status tasks.
+    $this
+        ->actingAs($user)
+        ->get('/tasks')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('tasks.data', 1)
+            ->where('tasks.data.0.task_status', null)
+            ->where('tasks.data.0.content', 'Open task'),
+        );
+
+    // Each non-open status is individually filterable.
+    foreach (['assigned', 'in_progress', 'starred', 'backlog'] as $status) {
+        $this
+            ->actingAs($user)
+            ->get("/tasks?status[]={$status}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('tasks.data', 1)
+                ->where('tasks.data.0.task_status', $status),
+            );
+    }
 });
 
 test('tasks index excludes tasks from workspaces marked as migrated source', function () {

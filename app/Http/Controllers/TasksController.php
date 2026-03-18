@@ -135,11 +135,7 @@ class TasksController extends Controller
             foreach ($selectedStatuses as $status) {
                 $statusQuery->orWhere(function (Builder $inner) use ($status): void {
                     match ($status) {
-                        'open' => $inner->where('checked', false)
-                            ->where(function (Builder $sub): void {
-                                $sub->whereNull('task_status')
-                                    ->orWhereNotIn('task_status', ['canceled', 'migrated']);
-                            }),
+                        'open' => $inner->where('checked', false)->whereNull('task_status'),
                         'completed' => $inner->where('checked', true),
                         'canceled' => $inner->where('task_status', 'canceled'),
                         'migrated' => $inner->where('task_status', 'migrated'),
