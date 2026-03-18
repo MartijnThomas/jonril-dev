@@ -160,6 +160,7 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
   - `tags` (from properties)
   - `mentions`
   - `hashtags`
+  - `heading_terms` (normalized heading texts)
   - `parent_id`
   - `task_terms` (flattened searchable task terms for this note, derived from `note_tasks`)
 - Add `searchableAs()` for a dedicated index (for example `notes`).
@@ -167,13 +168,14 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
 ### Phase B: Implement deterministic content extraction
 - Create dedicated extractors (for example `NoteSearchTextExtractor` + `NoteSearchMetaExtractor`) that:
   - extract visible body text from note JSON (headings/paragraphs/list/task text)
+  - extract heading text into `heading_terms` for stronger heading matching
   - extract properties/tags/hashtags/mentions from note metadata
   - derive `task_terms` from indexed `note_tasks` rows (or from the same task indexing pipeline)
 - Keep extraction deterministic and side-effect free so reindexing is stable.
 
 ### Phase C: Configure Meilisearch index settings
 - Add `notes` settings in `config/scout.php`:
-  - `searchableAttributes`: `title`, `content_text`, `tags`, `hashtags`, `mentions`, `task_terms`
+  - `searchableAttributes`: `title`, `heading_terms`, `content_text`, `tags`, `hashtags`, `mentions`, `task_terms`
   - `filterableAttributes`: `workspace_id`, `type`, `journal_granularity`, `journal_date`, `parent_id`
   - `sortableAttributes`: `updated_at`, `journal_date`, `title`
 - Run `php artisan scout:sync-index-settings`.
