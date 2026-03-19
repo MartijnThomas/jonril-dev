@@ -47,6 +47,18 @@ return [
             'report' => false,
         ],
 
+        'backups' => [
+            'driver' => 's3',
+            'key' => env('HETZNER_S3_ACCESS_KEY_ID'),
+            'secret' => env('HETZNER_S3_SECRET_ACCESS_KEY'),
+            'region' => env('HETZNER_S3_REGION', 'fsn1'),
+            'bucket' => env('HETZNER_S3_BUCKET'),
+            'endpoint' => env('HETZNER_S3_ENDPOINT'),
+            'use_path_style_endpoint' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

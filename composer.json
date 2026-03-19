@@ -20,9 +20,11 @@
         "laravel/telescope": "^5.18",
         "laravel/tinker": "^2.10.1",
         "laravel/wayfinder": "^0.1.9",
+        "league/flysystem-aws-s3-v3": "^3.32",
         "meilisearch/meilisearch-php": "^1.16",
         "sabre/dav": "^4.7",
         "sabre/vobject": "^4.5",
+        "spatie/laravel-backup": "^10.1",
         "ueberdosis/tiptap-php": "^2.1"
     },
     "require-dev": {
