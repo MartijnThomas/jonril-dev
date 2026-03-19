@@ -483,7 +483,7 @@ export function RightSidebarTodayEvents({
                                     ) : null}
                                     <p
                                         className={cn(
-                                            'min-w-0 flex-1 truncate text-[0.82rem] text-foreground/80',
+                                            'min-w-0 flex-1 line-clamp-2 text-[0.82rem] text-foreground/80',
                                             event.remote_deleted &&
                                                 'line-through opacity-60',
                                         )}
