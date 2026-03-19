@@ -224,12 +224,12 @@ return [
      */
     'notifications' => [
         'notifications' => [
-            BackupHasFailedNotification::class => ['mail'],
-            UnhealthyBackupWasFoundNotification::class => ['mail'],
-            CleanupHasFailedNotification::class => ['mail'],
-            BackupWasSuccessfulNotification::class => ['mail'],
-            HealthyBackupWasFoundNotification::class => ['mail'],
-            CleanupWasSuccessfulNotification::class => ['mail'],
+            BackupHasFailedNotification::class => ['slack'],
+            UnhealthyBackupWasFoundNotification::class => ['slack'],
+            CleanupHasFailedNotification::class => ['slack'],
+            BackupWasSuccessfulNotification::class => [],
+            HealthyBackupWasFoundNotification::class => [],
+            CleanupWasSuccessfulNotification::class => [],
         ],
 
         /*
@@ -248,7 +248,7 @@ return [
         ],
 
         'slack' => [
-            'webhook_url' => '',
+            'webhook_url' => env('SLACK_WEBHOOK_URL', ''),
 
             /*
              * If this is set to null the default channel of the webhook will be used.
