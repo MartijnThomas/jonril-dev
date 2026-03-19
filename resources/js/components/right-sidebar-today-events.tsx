@@ -1061,7 +1061,7 @@ export function RightSidebarTodayEvents({
                                                 ) : null}
                                                 <p
                                                     className={cn(
-                                                        'truncate text-[0.86rem] leading-snug font-medium text-foreground',
+                                                        'line-clamp-2 text-[0.86rem] leading-snug font-medium text-foreground',
                                                         isLinkedTaskCompleted &&
                                                             'line-through',
                                                         event.remote_deleted &&
