@@ -20,7 +20,40 @@ Route::inertia('/', 'welcome', [
     'canRegister' => Features::enabled(Features::registration()),
 ])->name('home');
 
-Route::get('/healthz', fn () => response()->json(['status' => 'ok']))->name('healthz');
+Route::get('/healthz', function () {
+    $meilisearch = ['status' => 'unavailable', 'error' => null];
+
+    try {
+        $client = app(\Meilisearch\Client::class);
+        $health = $client->health();
+        $version = $client->version();
+        $indexes = collect($client->getIndexes()->getResults())
+            ->map(fn ($index) => $index->getUid())
+            ->values();
+
+        $meilisearch = [
+            'status' => $health['status'] ?? 'unknown',
+            'version' => $version['pkgVersion'] ?? null,
+            'indexes' => $indexes,
+            'error' => null,
+        ];
+    } catch (\Meilisearch\Exceptions\ApiException $e) {
+        $meilisearch['error'] = 'api_error: '.$e->getMessage();
+    } catch (\Meilisearch\Exceptions\CommunicationException $e) {
+        $meilisearch['error'] = 'connection_refused: '.config('scout.meilisearch.host');
+    } catch (\Throwable $e) {
+        $meilisearch['error'] = 'unexpected: '.$e->getMessage();
+    }
+
+    $healthy = $meilisearch['status'] === 'available';
+
+    return response()->json([
+        'status' => $healthy ? 'ok' : 'degraded',
+        'services' => [
+            'meilisearch' => $meilisearch,
+        ],
+    ], $healthy ? 200 : 503);
+})->name('healthz');
 
 if (app()->environment('local')) {
     Route::get('dev/auth/token-login', function (Request $request) {
