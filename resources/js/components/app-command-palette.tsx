@@ -5,6 +5,7 @@ import {
     ChevronUp,
     Command as CommandIcon,
     FileText,
+    Heading,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clear, destroy, rename } from '@/actions/App/Http/Controllers/NotesController';
@@ -37,6 +38,7 @@ type NoteSearchItem = {
     match_source?: 'title' | 'path' | 'heading' | 'content' | null;
     match_text?: string | null;
     match_block_id?: string | null;
+    match_heading?: string | null;
 };
 
 type TaskSearchItem = {
@@ -55,6 +57,7 @@ type TaskSearchItem = {
     icon_bg?: string | null;
     task_status?: string | null;
     checked?: boolean;
+    section_heading?: string | null;
 };
 
 type SearchResultItem = NoteSearchItem & {
@@ -754,59 +757,18 @@ export function AppCommandPalette() {
             }));
     };
 
-    const renderHighlightedLine = (text: string, className: string) => {
-        const fragments = highlightedFragments(text, effectiveQuery);
-
-        return (
-            <div className={className}>
-                {fragments.map((fragment, index) => (
-                    <span
-                        key={`${fragment.text}-${index}`}
-                        className={fragment.highlighted ? 'bg-yellow-200/70 text-foreground rounded px-0.5' : undefined}
-                    >
-                        {fragment.text}
-                    </span>
-                ))}
-            </div>
-        );
-    };
-
-    const renderResultTitle = (item: NoteSearchItem) => {
-        if (item.match_source === 'title') {
-            return renderHighlightedLine(item.title, 'truncate');
-        }
-
-        return <div className="truncate">{item.title}</div>;
-    };
-
-    const renderResultDetails = (item: NoteSearchItem) => {
-        const pathText = item.path ?? item.href;
-        const matchText = typeof item.match_text === 'string' ? item.match_text : '';
-
-        if (item.match_source === 'heading' && matchText.trim() !== '') {
-            return (
-                <>
-                    <div className="truncate text-xs text-muted-foreground">{pathText}</div>
-                    {renderHighlightedLine(matchText, 'truncate text-xs text-muted-foreground')}
-                </>
-            );
-        }
-
-        if (item.match_source === 'path' && pathText.trim() !== '') {
-            return renderHighlightedLine(pathText, 'truncate text-xs text-muted-foreground');
-        }
-
-        if (item.match_source === 'content' && matchText.trim() !== '') {
-            return (
-                <>
-                    <div className="truncate text-xs text-muted-foreground">{pathText}</div>
-                    {renderHighlightedLine(matchText, 'truncate text-xs text-muted-foreground')}
-                </>
-            );
-        }
-
-        return <div className="truncate text-xs text-muted-foreground">{pathText}</div>;
-    };
+    const renderHighlightedText = (text: string, className?: string) => (
+        <span className={className}>
+            {highlightedFragments(text, effectiveQuery).map((fragment, j) => (
+                <span
+                    key={j}
+                    className={fragment.highlighted ? 'bg-yellow-200/70 text-foreground rounded px-0.5' : undefined}
+                >
+                    {fragment.text}
+                </span>
+            ))}
+        </span>
+    );
 
     const resolveTaskStatusForDisplay = (task: TaskSearchItem): TaskStatus => {
         if (task.checked === true) {
@@ -832,20 +794,6 @@ export function AppCommandPalette() {
         }
 
         return 'open';
-    };
-
-    const renderTaskMatch = (task: TaskSearchItem) => {
-        const displayStatus = resolveTaskStatusForDisplay(task);
-        const statusMeta = TASK_STATUS_ICONS[displayStatus];
-        const StatusIcon = statusMeta.icon;
-        const taskText = task.task_title?.trim() || task.title?.trim() || 'Task';
-
-        return (
-            <div key={`task-match-${task.id}`} className="flex items-center gap-1.5">
-                <StatusIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                {renderHighlightedLine(taskText, 'truncate text-xs text-muted-foreground')}
-            </div>
-        );
     };
 
     const resultItems = useMemo<SearchResultItem[]>(() => {
@@ -1050,7 +998,7 @@ export function AppCommandPalette() {
             }}
             title="Search notes"
             description="Find notes by title, path, or headings."
-            className="top-[12%] translate-y-0 sm:top-[18%] sm:max-w-xl"
+            className="top-[8%] translate-y-0 sm:top-[12%] sm:max-w-3xl"
             commandProps={{
                 shouldFilter: false,
                 value: selectedCommandValue,
@@ -1158,7 +1106,7 @@ export function AppCommandPalette() {
                     )}
                 </div>
             )}
-            <CommandList>
+            <CommandList className="max-h-120">
                 <CommandEmpty>
                     {isCommandMode
                         ? commandDefinitions.some((command) => command.available)
@@ -1242,55 +1190,254 @@ export function AppCommandPalette() {
                             ))}
                     </CommandGroup>
                 )}
-                {!isCommandMode && effectiveQuery !== '' && (
-                    <CommandGroup heading="Results">
-                        {resultItems.map((item) => (
-                            <CommandItem
-                                key={item.id}
-                                value={`${item.title} ${item.slug ?? ''} ${item.path ?? ''} ${item.matchedTasks.map((task) => task.task_title ?? task.title ?? '').join(' ')}`}
-                                onSelect={() => {
-                                    const firstTaskHref = item.matchedTasks.find((task) => typeof task.href === 'string' && task.href.trim() !== '')?.href;
-                                    const headingHref =
-                                        item.match_source === 'heading' &&
-                                        typeof item.match_block_id === 'string' &&
-                                        item.match_block_id.trim() !== ''
-                                            ? `${item.href}#${item.match_block_id}`
-                                            : null;
-                                    const targetHref =
-                                        headingHref ??
-                                        firstTaskHref ??
-                                        item.href;
+                {!isCommandMode &&
+                    effectiveQuery !== '' &&
+                    resultItems.map((item) => {
+                        const navigate = (href: string) => {
+                            upsertRecentItem({ ...item, href });
+                            setOpen(false);
+                            router.get(href, {}, { preserveState: false, preserveScroll: false });
+                        };
 
-                                    upsertRecentItem({
-                                        ...item,
-                                        href: targetHref,
-                                    });
-                                    setOpen(false);
-                                    router.get(
-                                        targetHref,
-                                        {},
-                                        {
-                                            preserveState: false,
-                                            preserveScroll: false,
-                                        },
-                                    );
-                                }}
-                            >
+                        const pathSegments = (item.path ?? '').split(' / ').filter(Boolean);
+                        const parentPath = pathSegments.length > 1 ? pathSegments.slice(0, -1).join(' / ') : null;
+
+                        const isSingleColumnMatch =
+                            item.match_source === 'title' ||
+                            item.match_source === 'path';
+
+                        const hasTasks = item.matchedTasks.length > 0;
+                        const groupHeading = (isSingleColumnMatch && !hasTasks) ? undefined : (
+                            <div className="flex items-center gap-1.5">
                                 {renderNoteIcon(item)}
-                                <div className="min-w-0 flex-1">
-                                    {renderResultTitle(item)}
-                                    {renderResultDetails(item)}
-                                    {item.matchedTasks.length > 0 && (
-                                        <div className="mt-1 space-y-1">
-                                            {item.matchedTasks.map((task) => renderTaskMatch(task))}
-                                        </div>
-                                    )}
-                                </div>
-                                <CommandShortcut>↵</CommandShortcut>
-                            </CommandItem>
-                        ))}
-                    </CommandGroup>
-                )}
+                                <span className="text-foreground font-medium">{item.title}</span>
+                                {parentPath && (
+                                    <span className="text-muted-foreground/60 font-normal">{parentPath}</span>
+                                )}
+                            </div>
+                        );
+
+                        // Build a flat list of rows: each has a heading label and content to render.
+                        // Consecutive rows sharing the same heading only show it on the first.
+                        type MatchRow =
+                            | { kind: 'note' }
+                            | { kind: 'task'; task: TaskSearchItem };
+
+                        const rows: MatchRow[] = [];
+                        if (item.match_source !== null) {
+                            rows.push({ kind: 'note' });
+                        }
+                        for (const task of item.matchedTasks) {
+                            rows.push({ kind: 'task', task });
+                        }
+
+                        // Derive the section heading label for two-column rows only
+                        const headingFor = (row: MatchRow): string | null => {
+                            if (row.kind === 'note') {
+                                return item.match_source === 'content' ? (item.match_heading ?? null) : null;
+                            }
+                            return row.task.section_heading ?? null;
+                        };
+
+                        return (
+                            <CommandGroup key={item.id} heading={groupHeading}>
+                                {rows.map((row, rowIndex) => {
+                                    const heading = headingFor(row);
+                                    const prevHeading = rowIndex > 0 ? headingFor(rows[rowIndex - 1]) : undefined;
+                                    const showHeading = heading !== null && heading !== prevHeading;
+
+                                    if (row.kind === 'note') {
+                                        const href =
+                                            item.match_source === 'heading' &&
+                                            typeof item.match_block_id === 'string' &&
+                                            item.match_block_id.trim() !== ''
+                                                ? `${item.href}#${item.match_block_id}`
+                                                : item.href;
+
+                                        // Title match: standalone → full row; with tasks → heading-style row inside group
+                                        if (item.match_source === 'title') {
+                                            if (hasTasks) {
+                                                return (
+                                                    <CommandItem
+                                                        key={`${item.id}-note`}
+                                                        value={`${item.id} ${item.title}`}
+                                                        onSelect={() => navigate(href)}
+                                                    >
+                                                        <div className="flex min-w-0 flex-1 items-start gap-3">
+                                                            <div className="w-36 shrink-0 flex items-start justify-end pt-px">
+                                                                <Heading className="w-3 h-3 mt-px shrink-0 text-muted-foreground/40" />
+                                                            </div>
+                                                            <div className="mt-0.5 w-px self-stretch shrink-0 bg-border" />
+                                                            <div className="min-w-0 flex-1">
+                                                                {renderHighlightedText(item.title, 'text-sm line-clamp-3')}
+                                                            </div>
+                                                        </div>
+                                                        <CommandShortcut>↵</CommandShortcut>
+                                                    </CommandItem>
+                                                );
+                                            }
+
+                                            return (
+                                                <CommandItem
+                                                    key={`${item.id}-note`}
+                                                    value={`${item.id} ${item.title}`}
+                                                    onSelect={() => navigate(href)}
+                                                >
+                                                    {renderNoteIcon(item)}
+                                                    <div className="min-w-0 flex-1">
+                                                        {renderHighlightedText(item.title, 'truncate block text-sm font-medium')}
+                                                        {parentPath && (
+                                                            <span className="truncate block text-sm text-muted-foreground">{parentPath}</span>
+                                                        )}
+                                                    </div>
+                                                    <CommandShortcut>↵</CommandShortcut>
+                                                </CommandItem>
+                                            );
+                                        }
+
+                                        // Path match: standalone → full row; with tasks → heading-style row inside group
+                                        if (item.match_source === 'path') {
+                                            if (hasTasks) {
+                                                return (
+                                                    <CommandItem
+                                                        key={`${item.id}-note`}
+                                                        value={`${item.id} ${item.title} ${item.match_text ?? ''}`}
+                                                        onSelect={() => navigate(href)}
+                                                    >
+                                                        <div className="flex min-w-0 flex-1 items-start gap-3">
+                                                            <div className="w-36 shrink-0 flex items-start justify-end pt-px">
+                                                                <Heading className="w-3 h-3 mt-px shrink-0 text-muted-foreground/40" />
+                                                            </div>
+                                                            <div className="mt-0.5 w-px self-stretch shrink-0 bg-border" />
+                                                            <div className="min-w-0 flex-1">
+                                                                {renderHighlightedText(item.title, 'text-sm line-clamp-3')}
+                                                            </div>
+                                                        </div>
+                                                        <CommandShortcut>↵</CommandShortcut>
+                                                    </CommandItem>
+                                                );
+                                            }
+
+                                            return (
+                                                <CommandItem
+                                                    key={`${item.id}-note`}
+                                                    value={`${item.id} ${item.title} ${item.match_text ?? ''}`}
+                                                    onSelect={() => navigate(href)}
+                                                >
+                                                    {renderNoteIcon(item)}
+                                                    <div className="min-w-0 flex-1">
+                                                        <span className="truncate block text-sm font-medium">{item.title}</span>
+                                                        {item.match_text && (
+                                                            renderHighlightedText(item.match_text, 'truncate block text-sm text-muted-foreground')
+                                                        )}
+                                                    </div>
+                                                    <CommandShortcut>↵</CommandShortcut>
+                                                </CommandItem>
+                                            );
+                                        }
+
+                                        // Heading match: indented single-column with hash prefix
+                                        if (item.match_source === 'heading') {
+                                            return (
+                                                <CommandItem
+                                                    key={`${item.id}-note`}
+                                                    value={`${item.id} ${item.title} ${item.match_text ?? ''}`}
+                                                    onSelect={() => navigate(href)}
+                                                >
+                                                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                                                        <div className="w-36 shrink-0 flex items-start justify-end pt-px">
+                                                            <Heading className="w-3 h-3 mt-px shrink-0 text-muted-foreground/40" />
+                                                        </div>
+                                                        <div className="mt-0.5 w-px self-stretch shrink-0 bg-border" />
+                                                        <div className="min-w-0 flex-1">
+                                                            {renderHighlightedText(item.match_text ?? item.title, 'text-sm line-clamp-3')}
+                                                        </div>
+                                                    </div>
+                                                    <CommandShortcut>↵</CommandShortcut>
+                                                </CommandItem>
+                                            );
+                                        }
+
+                                        // Content match: two-column layout
+                                        const contentLines = item.match_source === 'content' && item.match_text
+                                            ? item.match_text.split('\n').filter((l) => l.trim() !== '')
+                                            : [];
+                                        const matchingLines = contentLines.filter((l) =>
+                                            l.toLowerCase().includes(effectiveQuery.toLowerCase()),
+                                        );
+                                        const snippetLines = (matchingLines.length > 0 ? matchingLines : contentLines).slice(0, 3);
+
+                                        return (
+                                            <CommandItem
+                                                key={`${item.id}-note`}
+                                                value={`${item.id} ${item.title} ${item.match_text ?? ''}`}
+                                                onSelect={() => navigate(href)}
+                                            >
+                                                <div className="flex min-w-0 flex-1 items-start gap-3">
+                                                    <div className="w-36 shrink-0 pt-px text-right text-sm text-muted-foreground/70 line-clamp-2">
+                                                        {showHeading ? heading : ''}
+                                                    </div>
+                                                    <div className="mt-0.5 w-px self-stretch shrink-0 bg-border" />
+                                                    <div className="min-w-0 flex-1">
+                                                        {snippetLines.length > 0 ? (
+                                                            <div className="space-y-0.5">
+                                                                {snippetLines.map((line, i) => (
+                                                                    <div key={i}>
+                                                                        {renderHighlightedText(line.trim(), 'block text-sm text-muted-foreground')}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+                                                <CommandShortcut>↵</CommandShortcut>
+                                            </CommandItem>
+                                        );
+                                    }
+
+                                    const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
+                                        open: 'text-muted-foreground/60',
+                                        in_progress: 'text-amber-500',
+                                        assigned: 'text-blue-500',
+                                        starred: 'text-yellow-500',
+                                        migrated: 'text-violet-400',
+                                        canceled: 'text-muted-foreground/40',
+                                        completed: 'text-emerald-500',
+                                        deferred: 'text-muted-foreground/50',
+                                        backlog: 'text-muted-foreground/50',
+                                    };
+
+                                    const { task } = row;
+                                    const displayStatus = resolveTaskStatusForDisplay(task);
+                                    const statusMeta = TASK_STATUS_ICONS[displayStatus];
+                                    const StatusIcon = statusMeta.icon;
+                                    const taskText = task.task_title?.trim() || task.title?.trim() || 'Task';
+
+                                    return (
+                                        <CommandItem
+                                            key={`${item.id}-task-${task.id}`}
+                                            value={`${item.id} task ${task.id} ${taskText}`}
+                                            onSelect={() => navigate(task.href)}
+                                        >
+                                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                                                <div className="w-36 shrink-0 flex items-start justify-end gap-1 pt-px">
+                                                    <span className="line-clamp-2 text-sm text-muted-foreground/70 text-right min-w-0">
+                                                        {showHeading ? heading : ''}
+                                                    </span>
+                                                    <StatusIcon className={cn('w-3 h-3 mt-px shrink-0', TASK_STATUS_COLORS[displayStatus])} aria-hidden="true" />
+                                                </div>
+                                                <div className="mt-0.5 w-px self-stretch shrink-0 bg-border" />
+                                                <div className="min-w-0 flex-1">
+                                                    {renderHighlightedText(taskText, 'text-sm text-muted-foreground line-clamp-3')}
+                                                </div>
+                                            </div>
+                                            <CommandShortcut>↵</CommandShortcut>
+                                        </CommandItem>
+                                    );
+                                })}
+                            </CommandGroup>
+                        );
+                    })}
             </CommandList>
         </CommandDialog>
     );

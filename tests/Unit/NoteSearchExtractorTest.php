@@ -27,7 +27,7 @@ it('extracts deterministic content text headings mentions and hashtags from note
 
     $result = app(NoteSearchExtractor::class)->extract($content);
 
-    expect($result['content_text'])->toContain('Sprint Planning');
+    expect($result['content_text'])->not->toContain('Sprint Planning');
     expect($result['content_text'])->toContain('Discuss with @Lea and #Launch team');
     expect($result['heading_terms'])->toBe(['Sprint Planning']);
     expect($result['heading_block_ids'])->toBe(['h-1']);
@@ -116,4 +116,103 @@ it('accepts json string content and keeps heading terms unique', function () {
     expect($result['heading_block_ids'])->toBe(['h-1']);
     expect($result['heading_h1_terms'])->toBe(['Roadmap']);
     expect($result['heading_h2_terms'])->toBe(['Roadmap']);
+});
+
+it('excludes headings and task items from content text', function () {
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'heading',
+                'attrs' => ['level' => 1, 'id' => 'h-1'],
+                'content' => [['type' => 'text', 'text' => 'My Heading']],
+            ],
+            [
+                'type' => 'paragraph',
+                'content' => [['type' => 'text', 'text' => 'Regular paragraph text']],
+            ],
+            [
+                'type' => 'taskList',
+                'content' => [
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => ['checked' => false],
+                        'content' => [
+                            ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'A task item']]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $result = app(NoteSearchExtractor::class)->extract($content);
+
+    expect($result['content_text'])->not->toContain('My Heading');
+    expect($result['content_text'])->toContain('Regular paragraph text');
+    expect($result['content_text'])->not->toContain('A task item');
+    expect($result['heading_terms'])->toBe(['My Heading']);
+});
+
+it('excludes block-editor paragraph tasks from content text', function () {
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'paragraph',
+                'content' => [['type' => 'text', 'text' => 'Regular paragraph']],
+            ],
+            [
+                'type' => 'paragraph',
+                'attrs' => ['blockStyle' => 'task'],
+                'content' => [['type' => 'text', 'text' => 'Block editor task']],
+            ],
+        ],
+    ];
+
+    $result = app(NoteSearchExtractor::class)->extract($content);
+
+    expect($result['content_text'])->toContain('Regular paragraph');
+    expect($result['content_text'])->not->toContain('Block editor task');
+});
+
+it('separates block level nodes with newlines in content text', function () {
+    $content = [
+        'type' => 'doc',
+        'content' => [
+            [
+                'type' => 'paragraph',
+                'content' => [['type' => 'text', 'text' => 'First paragraph']],
+            ],
+            [
+                'type' => 'paragraph',
+                'content' => [['type' => 'text', 'text' => 'Second paragraph']],
+            ],
+            [
+                'type' => 'bulletList',
+                'content' => [
+                    [
+                        'type' => 'listItem',
+                        'content' => [
+                            ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'List item one']]],
+                        ],
+                    ],
+                    [
+                        'type' => 'listItem',
+                        'content' => [
+                            ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'List item two']]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $result = app(NoteSearchExtractor::class)->extract($content);
+
+    $lines = explode("\n", $result['content_text']);
+    expect($lines)->toContain('First paragraph');
+    expect($lines)->toContain('Second paragraph');
+    expect($lines)->toContain('List item one');
+    expect($lines)->toContain('List item two');
 });

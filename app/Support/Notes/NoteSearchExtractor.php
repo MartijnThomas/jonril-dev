@@ -147,6 +147,35 @@ class NoteSearchExtractor
             return '';
         }
 
+        // Headings: collect terms but exclude text from content_text
+        if ($type === 'heading') {
+            $parts = [];
+            foreach ($content as $child) {
+                if (! is_array($child)) {
+                    continue;
+                }
+                $parts[] = $this->extractNodeText($child, $mentions, $hashtags, $headingTerms, $headingTermsByLevel);
+            }
+            $headingText = $this->normalizeHeadingText(implode('', $parts));
+            if ($headingText !== '') {
+                $headingTerms[] = $headingText;
+                $level = $this->normalizeHeadingLevel($node['attrs']['level'] ?? null);
+                $headingTermsByLevel[$level][] = $headingText;
+            }
+
+            return '';
+        }
+
+        // Task items: exclude from content_text (indexed separately via NoteTask)
+        if ($type === 'taskItem') {
+            return '';
+        }
+
+        // Block-editor paragraph tasks (blockStyle: task): also exclude
+        if ($type === 'paragraph' && (string) ($node['attrs']['blockStyle'] ?? '') === 'task') {
+            return '';
+        }
+
         $parts = [];
         foreach ($content as $child) {
             if (! is_array($child)) {
@@ -162,17 +191,13 @@ class NoteSearchExtractor
             );
         }
 
-        $combined = implode(' ', $parts);
-        if ($type === 'heading') {
-            $headingText = $this->normalizeHeadingText($combined);
-            if ($headingText !== '') {
-                $headingTerms[] = $headingText;
-                $level = $this->normalizeHeadingLevel($node['attrs']['level'] ?? null);
-                $headingTermsByLevel[$level][] = $headingText;
-            }
+        $blockTypes = ['paragraph', 'listItem', 'blockquote', 'codeBlock'];
+
+        if (in_array($type, $blockTypes, true)) {
+            return implode('', $parts)."\n";
         }
 
-        return $combined;
+        return implode('', $parts);
     }
 
     /**
@@ -295,9 +320,15 @@ class NoteSearchExtractor
 
     private function normalizeText(string $text): string
     {
-        $collapsed = preg_replace('/\s+/u', ' ', trim($text));
+        $lines = explode("\n", $text);
+        $lines = array_map(
+            fn (string $line) => trim(preg_replace('/\h+/u', ' ', $line) ?? $line),
+            $lines,
+        );
+        $normalized = implode("\n", $lines);
+        $normalized = preg_replace('/\n{3,}/u', "\n\n", $normalized) ?? $normalized;
 
-        return is_string($collapsed) ? $collapsed : '';
+        return trim($normalized);
     }
 
     /**

@@ -45,9 +45,10 @@ class NoteTaskIndexer
 
         $rows = [];
         $position = 0;
+        $currentHeading = null;
         $this->walkNodes(
             Arr::get($content, 'content', []),
-            function (array $taskItem) use ($note, &$rows, &$position): void {
+            function (array $taskItem, ?string $sectionHeading) use ($note, &$rows, &$position): void {
                 $position++;
 
                 $mentions = [];
@@ -96,6 +97,7 @@ class NoteTaskIndexer
                     'workspace_id' => $note->workspace_id,
                     'note_id' => $note->id,
                     'block_id' => Arr::get($attrs, 'id'),
+                    'section_heading' => $sectionHeading,
                     'note_title' => $note->title,
                     'parent_note_id' => $note->parent_id,
                     'parent_note_title' => $note->parent?->title,
@@ -123,6 +125,7 @@ class NoteTaskIndexer
                     'updated_at' => now(),
                 ];
             },
+            $currentHeading,
         );
 
         if ($rows !== []) {
@@ -132,24 +135,51 @@ class NoteTaskIndexer
 
     /**
      * @param  array<int, mixed>  $nodes
-     * @param  callable(array): void  $onTaskItem
+     * @param  callable(array, ?string): void  $onTaskItem
      */
-    private function walkNodes(array $nodes, callable $onTaskItem): void
+    private function walkNodes(array $nodes, callable $onTaskItem, ?string &$currentHeading = null): void
     {
         foreach ($nodes as $node) {
             if (! is_array($node)) {
                 continue;
             }
 
+            if ((string) ($node['type'] ?? '') === 'heading') {
+                $headingText = $this->extractHeadingText($node);
+                if ($headingText !== '') {
+                    $currentHeading = $headingText;
+                }
+            }
+
             if ($this->isTaskNode($node)) {
-                $onTaskItem($node);
+                $onTaskItem($node, $currentHeading);
             }
 
             $children = Arr::get($node, 'content', []);
             if (is_array($children)) {
-                $this->walkNodes($children, $onTaskItem);
+                $this->walkNodes($children, $onTaskItem, $currentHeading);
             }
         }
+    }
+
+    private function extractHeadingText(array $node): string
+    {
+        $parts = [];
+        foreach (Arr::get($node, 'content', []) as $child) {
+            if (! is_array($child)) {
+                continue;
+            }
+
+            if ((string) ($child['type'] ?? '') === 'text') {
+                $parts[] = (string) ($child['text'] ?? '');
+            }
+        }
+
+        $text = trim(preg_replace('/\h+/u', ' ', implode('', $parts)) ?? '');
+        // Strip leading markdown heading markers if present
+        $text = (string) preg_replace('/^#{1,6}\s+/u', '', $text);
+
+        return trim($text);
     }
 
     private function isTaskNode(array $node): bool

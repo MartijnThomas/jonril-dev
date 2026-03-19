@@ -191,6 +191,7 @@ class CommandSearchController extends Controller
                     'match_source' => null,
                     'match_text' => null,
                     'match_block_id' => null,
+                    'match_heading' => null,
                 ];
             })
             ->values()
@@ -340,6 +341,7 @@ class CommandSearchController extends Controller
                 return [
                     'id' => (string) $task->id,
                     'note_id' => (string) $note->id,
+                    'section_heading' => is_string($task->section_heading) && trim($task->section_heading) !== '' ? trim($task->section_heading) : null,
                     'title' => (string) ($task->content_text ?? ''),
                     'task_title' => (string) ($task->content_text ?? ''),
                     'note_title' => $note->display_title,
@@ -447,6 +449,10 @@ class CommandSearchController extends Controller
                     ? (string) $hit['href']
                     : $this->fallbackHrefFromHit($hit);
 
+                $matchHeading = $matchSource === 'content'
+                    ? $this->nearestHeadingForContentMatch($hit)
+                    : null;
+
                 return [
                     'id' => $id,
                     'title' => is_string($hit['title'] ?? null) ? (string) $hit['title'] : 'Untitled',
@@ -461,6 +467,7 @@ class CommandSearchController extends Controller
                     'match_source' => $matchSource,
                     'match_text' => $matchText,
                     'match_block_id' => $matchBlockId,
+                    'match_heading' => $matchHeading,
                 ];
             })
             ->filter(fn (?array $value) => is_array($value))
@@ -519,6 +526,7 @@ class CommandSearchController extends Controller
                 'id',
                 'note_id',
                 'block_id',
+                'section_heading',
                 'content_text',
                 'task_status',
                 'checked',
@@ -622,18 +630,13 @@ class CommandSearchController extends Controller
                 $matchIndex = (int) ($positions[0]['indices'][0] ?? 0);
             }
 
-            $headingsWithLevel = $hit['headings_with_level'] ?? null;
-            if (is_array($headingsWithLevel) && isset($headingsWithLevel[$matchIndex]) && is_string($headingsWithLevel[$matchIndex])) {
-                return $headingsWithLevel[$matchIndex];
-            }
-
             $headings = $hit['headings'] ?? null;
             if (! is_array($headings) || $headings === []) {
                 return null;
             }
-            $fallback = $headings[$matchIndex] ?? $headings[0] ?? null;
+            $candidate = $headings[$matchIndex] ?? $headings[0] ?? null;
 
-            return is_string($fallback) ? "### {$fallback}" : null;
+            return is_string($candidate) ? $candidate : null;
         }
 
         if ($matchSource === 'content') {
@@ -677,42 +680,52 @@ class CommandSearchController extends Controller
             return null;
         }
 
-        $cleanContent = trim(preg_replace('/\s+/u', ' ', $content) ?? $content);
-        if ($cleanContent === '') {
+        $lines = array_values(array_filter(
+            explode("\n", $content),
+            fn (string $line) => trim($line) !== '',
+        ));
+
+        if ($lines === []) {
             return null;
         }
 
         $start = $this->contentMatchStartFromHit($hit);
-        if ($start === null && trim($query) !== '') {
-            $position = mb_stripos($cleanContent, trim($query));
-            $start = $position !== false ? $position : null;
+        $trimmedQuery = trim($query);
+
+        // Find which line index contains the match position
+        $matchLineIndex = null;
+        if ($start !== null) {
+            $offset = 0;
+            foreach ($lines as $i => $line) {
+                $lineLength = mb_strlen($line) + 1; // +1 for the newline
+                if ($start < $offset + $lineLength) {
+                    $matchLineIndex = $i;
+                    break;
+                }
+                $offset += $lineLength;
+            }
         }
 
-        if ($start === null) {
-            $snippet = mb_substr($cleanContent, 0, 120);
-
-            return mb_strlen($cleanContent) > mb_strlen($snippet)
-                ? rtrim($snippet).'...'
-                : $snippet;
+        // Fall back to first line containing the query string
+        if ($matchLineIndex === null && $trimmedQuery !== '') {
+            foreach ($lines as $i => $line) {
+                if (mb_stripos($line, $trimmedQuery) !== false) {
+                    $matchLineIndex = $i;
+                    break;
+                }
+            }
         }
 
-        $before = 40;
-        $after = 80;
-        $snippetStart = max(0, $start - $before);
-        $snippetLength = $before + $after + 20;
-        $snippet = trim(mb_substr($cleanContent, $snippetStart, $snippetLength));
-        if ($snippet === '') {
-            return null;
+        // Fall back to first 3 lines
+        if ($matchLineIndex === null) {
+            return implode("\n", array_slice($lines, 0, 3));
         }
 
-        if ($snippetStart > 0) {
-            $snippet = '...'.$snippet;
-        }
-        if (($snippetStart + $snippetLength) < mb_strlen($cleanContent)) {
-            $snippet .= '...';
-        }
+        // Return the matched line plus one line of context above and below
+        $from = max(0, $matchLineIndex - 1);
+        $slice = array_slice($lines, $from, 3);
 
-        return $snippet;
+        return implode("\n", $slice);
     }
 
     private function contentMatchStartFromHit(array $hit): ?int
@@ -732,6 +745,36 @@ class CommandSearchController extends Controller
         }
 
         return null;
+    }
+
+    private function nearestHeadingForContentMatch(array $hit): ?string
+    {
+        $headings = $hit['headings'] ?? null;
+        if (! is_array($headings) || $headings === []) {
+            return null;
+        }
+
+        $first = is_string($headings[0] ?? null) ? $headings[0] : null;
+
+        if (count($headings) === 1) {
+            return $first;
+        }
+
+        $content = is_string($hit['content_text'] ?? null) ? $hit['content_text'] : '';
+        $contentLength = mb_strlen($content);
+        $start = $this->contentMatchStartFromHit($hit);
+
+        if ($start === null || $contentLength === 0) {
+            return $first;
+        }
+
+        // Map the match position proportionally to a heading index
+        $ratio = $start / $contentLength;
+        $index = (int) floor($ratio * count($headings));
+        $index = max(0, min(count($headings) - 1, $index));
+        $candidate = $headings[$index] ?? null;
+
+        return is_string($candidate) ? $candidate : $first;
     }
 
     private function matchedPathFieldFromHit(array $hit): ?string
@@ -834,6 +877,7 @@ class CommandSearchController extends Controller
         return [
             'id' => $taskId,
             'note_id' => $noteId,
+            'section_heading' => is_string($hit['section_heading'] ?? null) && trim((string) $hit['section_heading']) !== '' ? trim((string) $hit['section_heading']) : null,
             'title' => (string) ($hit['content_text'] ?? ''),
             'task_title' => (string) ($hit['content_text'] ?? ''),
             'note_title' => is_string($hit['note_display_title'] ?? null) ? (string) $hit['note_display_title'] : 'Untitled',
