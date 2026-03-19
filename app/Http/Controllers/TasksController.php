@@ -362,6 +362,15 @@ class TasksController extends Controller
             ])
             ->values();
 
+        $journalNotes = Note::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->when(! $selectedWorkspaceIds->isEmpty(), fn ($query) => $query->whereIn('workspace_id', $selectedWorkspaceIds->all()))
+            ->whereNotNull('journal_granularity')
+            ->whereNotNull('journal_date')
+            ->orderByDesc('journal_date')
+            ->get(['id', 'title', 'workspace_id', 'journal_granularity', 'journal_date']);
+
         $showWorkspacePrefixForNoteTree = $selectedWorkspaceIds->isEmpty()
             ? count($workspaceIds) > 1
             : $selectedWorkspaceIds->count() > 1;
@@ -372,6 +381,14 @@ class TasksController extends Controller
             $selectedWorkspaceIds->all(),
             $showWorkspacePrefixForNoteTree,
         );
+
+        foreach (($selectedWorkspaceIds->isEmpty() ? collect($workspaceIds) : $selectedWorkspaceIds) as $wsId) {
+            $wsJournalNotes = $journalNotes->where('workspace_id', $wsId)->values();
+            if ($wsJournalNotes->isNotEmpty()) {
+                $journalRows = $this->buildJournalTreeOptions((string) $wsId, $wsJournalNotes, $showWorkspacePrefixForNoteTree ? ($workspaceNamesById[$wsId] ?? null) : null);
+                $noteTreeOptions = array_merge($noteTreeOptions, $journalRows);
+            }
+        }
 
         return Inertia::render('tasks/index', [
             'tasks' => $tasks,
@@ -907,7 +924,7 @@ class TasksController extends Controller
      * @param  array<string, string>  $workspaceNamesById
      * @param  array<int, array{id: string, title: string, workspace_id: string, workspace_name: string|null}>  $notes
      * @param  array<int, string>  $workspaceIds
-     * @return array<int, array{id: string, title: string, depth: int, workspace_id: string, workspace_name: string|null}>
+     * @return array<int, array{id: string, title: string, depth: int, workspace_id: string, workspace_name: string|null, is_journal: bool, is_virtual: bool}>
      */
     private function buildNoteTreeOptions(
         array $workspaceNamesById,
@@ -1005,6 +1022,8 @@ class TasksController extends Controller
                 'depth' => $depth,
                 'workspace_id' => $workspaceId,
                 'workspace_name' => $showWorkspacePrefix ? ($workspaceNamesById[$workspaceId] ?? 'Workspace') : null,
+                'is_journal' => false,
+                'is_virtual' => false,
             ];
 
             foreach ($childrenByParent[$id] ?? [] as $childId) {
@@ -1015,6 +1034,114 @@ class TasksController extends Controller
         foreach ($workspaceOrder as $workspaceId) {
             foreach ($rootIdsByWorkspace[$workspaceId] ?? [] as $rootId) {
                 $appendNode($rootId, 0, $workspaceId);
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Build a virtual journal hierarchy (Journal → Year → Month → Week → Day) for a workspace.
+     * Virtual grouper nodes use synthetic IDs prefixed with "__j_" and are never selectable.
+     *
+     * @param  \Illuminate\Support\Collection<int, Note>  $journalNotes
+     * @return array<int, array{id: string, title: string, depth: int, workspace_id: string, workspace_name: string|null, is_journal: bool, is_virtual: bool}>
+     */
+    private function buildJournalTreeOptions(string $workspaceId, \Illuminate\Support\Collection $journalNotes, ?string $workspaceName): array
+    {
+        $rows = [];
+
+        $rows[] = [
+            'id' => "__j_{$workspaceId}",
+            'title' => 'Journal',
+            'depth' => 0,
+            'workspace_id' => $workspaceId,
+            'workspace_name' => $workspaceName,
+            'is_journal' => true,
+            'is_virtual' => true,
+        ];
+
+        // Group by year (desc)
+        $byYear = $journalNotes->groupBy(fn (Note $n) => (int) $n->journal_date->format('Y'));
+        $sortedYears = $byYear->keys()->sortDesc()->values();
+
+        foreach ($sortedYears as $year) {
+            $yearNotes = $byYear[$year];
+            $yearNote = $yearNotes->first(fn (Note $n) => $n->journal_granularity === Note::JOURNAL_YEARLY);
+
+            $yearId = $yearNote ? (string) $yearNote->id : "__j_{$workspaceId}_y{$year}";
+            $rows[] = [
+                'id' => $yearId,
+                'title' => $yearNote ? (string) ($yearNote->title ?? (string) $year) : (string) $year,
+                'depth' => 1,
+                'workspace_id' => $workspaceId,
+                'workspace_name' => null,
+                'is_journal' => true,
+                'is_virtual' => $yearNote === null,
+            ];
+
+            $subNotes = $yearNotes->filter(fn (Note $n) => $n->journal_granularity !== Note::JOURNAL_YEARLY);
+
+            // Group by year-month (desc)
+            $byMonth = $subNotes->groupBy(fn (Note $n) => $n->journal_date->format('Y-m'));
+            $sortedMonths = $byMonth->keys()->sortDesc()->values();
+
+            foreach ($sortedMonths as $yearMonth) {
+                $monthNotes = $byMonth[$yearMonth];
+                $monthNote = $monthNotes->first(fn (Note $n) => $n->journal_granularity === Note::JOURNAL_MONTHLY);
+
+                $monthId = $monthNote ? (string) $monthNote->id : "__j_{$workspaceId}_m{$yearMonth}";
+                $monthTitle = $monthNote
+                    ? (string) ($monthNote->title ?? $yearMonth)
+                    : Str::ucfirst(\Carbon\CarbonImmutable::createFromFormat('Y-m', $yearMonth)?->isoFormat('MMMM YYYY') ?? $yearMonth);
+
+                $rows[] = [
+                    'id' => $monthId,
+                    'title' => $monthTitle,
+                    'depth' => 2,
+                    'workspace_id' => $workspaceId,
+                    'workspace_name' => null,
+                    'is_journal' => true,
+                    'is_virtual' => $monthNote === null,
+                ];
+
+                $subSubNotes = $monthNotes->filter(fn (Note $n) => $n->journal_granularity !== Note::JOURNAL_MONTHLY);
+
+                // Group by ISO week (desc)
+                $byWeek = $subSubNotes->groupBy(fn (Note $n) => $n->journal_date->isoWeekYear().'-W'.str_pad((string) $n->journal_date->isoWeek(), 2, '0', STR_PAD_LEFT));
+                $sortedWeeks = $byWeek->keys()->sortDesc()->values();
+
+                foreach ($sortedWeeks as $isoWeek) {
+                    $weekNotes = $byWeek[$isoWeek];
+                    $weekNote = $weekNotes->first(fn (Note $n) => $n->journal_granularity === Note::JOURNAL_WEEKLY);
+
+                    $weekId = $weekNote ? (string) $weekNote->id : "__j_{$workspaceId}_w{$isoWeek}";
+                    $rows[] = [
+                        'id' => $weekId,
+                        'title' => $weekNote ? (string) ($weekNote->title ?? $isoWeek) : $isoWeek,
+                        'depth' => 3,
+                        'workspace_id' => $workspaceId,
+                        'workspace_name' => null,
+                        'is_journal' => true,
+                        'is_virtual' => $weekNote === null,
+                    ];
+
+                    $dailyNotes = $weekNotes
+                        ->filter(fn (Note $n) => $n->journal_granularity === Note::JOURNAL_DAILY)
+                        ->sortByDesc(fn (Note $n) => $n->journal_date->toDateString());
+
+                    foreach ($dailyNotes as $dailyNote) {
+                        $rows[] = [
+                            'id' => (string) $dailyNote->id,
+                            'title' => (string) ($dailyNote->title ?? $dailyNote->journal_date->toDateString()),
+                            'depth' => 4,
+                            'workspace_id' => $workspaceId,
+                            'workspace_name' => null,
+                            'is_journal' => true,
+                            'is_virtual' => false,
+                        ];
+                    }
+                }
             }
         }
 

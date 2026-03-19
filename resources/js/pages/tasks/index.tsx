@@ -141,7 +141,7 @@ type Props = {
     filters: Filters;
     filterPresets: FilterPreset[];
     workspaces: { id: string; name: string }[];
-    noteTreeOptions: { id: string; title: string; depth: number; workspace_name: string | null; workspace_id: string }[];
+    noteTreeOptions: { id: string; title: string; depth: number; workspace_name: string | null; workspace_id: string; is_journal: boolean; is_virtual: boolean }[];
 };
 
 type NoteTreeNode = {
@@ -150,6 +150,8 @@ type NoteTreeNode = {
     depth: number;
     workspace_name: string | null;
     workspace_id: string;
+    is_journal: boolean;
+    is_virtual: boolean;
     children: NoteTreeNode[];
 };
 
@@ -892,6 +894,8 @@ export default function TasksIndex({
                 depth: option.depth,
                 workspace_name: option.workspace_name,
                 workspace_id: option.workspace_id,
+                is_journal: option.is_journal,
+                is_virtual: option.is_virtual,
                 children: [],
             };
 
@@ -1029,14 +1033,16 @@ export default function TasksIndex({
         const parentCandidates = selectedIds
             .filter((id) => {
                 const descendants = descendantIdsById.get(id) ?? [];
-                return descendants.length > 0 && descendants.every((childId) => selectedNoteScopeSet.has(childId));
+                const selectable = descendants.filter((d) => !d.startsWith('__j_'));
+                return selectable.length > 0 && selectable.every((childId) => selectedNoteScopeSet.has(childId));
             })
             .sort((a, b) => (noteDepthById.get(a) ?? 0) - (noteDepthById.get(b) ?? 0));
 
         const coveredIds = new Set<string>();
         for (const parentId of parentCandidates) {
             const descendants = descendantIdsById.get(parentId) ?? [];
-            const subtreeIds = [parentId, ...descendants];
+            const selectableDescendants = descendants.filter((d) => !d.startsWith('__j_'));
+            const subtreeIds = [parentId, ...selectableDescendants];
             if (subtreeIds.some((id) => coveredIds.has(id))) {
                 continue;
             }
@@ -1044,7 +1050,7 @@ export default function TasksIndex({
             subtreeIds.forEach((id) => coveredIds.add(id));
             pills.push({
                 key: `parent:${parentId}`,
-                label: `${noteTitleById.get(parentId) ?? t('tasks_index.untitled_task', 'Untitled task')} (${descendants.length})`,
+                label: `${noteTitleById.get(parentId) ?? t('tasks_index.untitled_task', 'Untitled task')} (${selectableDescendants.length})`,
                 kind: 'parent',
             });
         }
@@ -1161,14 +1167,15 @@ export default function TasksIndex({
     };
 
     const toggleNoteScopeWithDescendants = (id: string) => {
-        const subtreeIds = [id, ...(descendantIdsById.get(id) ?? [])];
-        const allSelected = subtreeIds.every((subtreeId) => selectedNoteScopeSet.has(subtreeId));
+        const allIds = [id, ...(descendantIdsById.get(id) ?? [])];
+        const selectableIds = allIds.filter((sid) => !sid.startsWith('__j_'));
+        const allSelected = selectableIds.length > 0 && selectableIds.every((sid) => selectedNoteScopeSet.has(sid));
 
         const nextSet = new Set(localFilters.note_scope_ids);
         if (allSelected) {
-            subtreeIds.forEach((subtreeId) => nextSet.delete(subtreeId));
+            selectableIds.forEach((sid) => nextSet.delete(sid));
         } else {
-            subtreeIds.forEach((subtreeId) => nextSet.add(subtreeId));
+            selectableIds.forEach((sid) => nextSet.add(sid));
         }
 
         applyFilters(
@@ -1181,12 +1188,13 @@ export default function TasksIndex({
 
     const renderNoteTreeNode = (node: NoteTreeNode, depthOffset = 0) => {
         const descendants = descendantIdsById.get(node.id) ?? [];
-        const hasChildren = descendants.length > 0;
+        const selectableDescendants = descendants.filter((id) => !id.startsWith('__j_'));
+        const hasChildren = node.children.length > 0;
         const isExpanded = expandedNoteNodeIds.has(node.id);
-        const isChecked = selectedNoteScopeSet.has(node.id);
-        const selectedDescendantsCount = descendants.filter((id) => selectedNoteScopeSet.has(id)).length;
-        const allDescendantsSelected = hasChildren && descendants.every((id) => selectedNoteScopeSet.has(id));
-        const isIndeterminate = !isChecked && selectedDescendantsCount > 0 && !allDescendantsSelected;
+        const isChecked = !node.is_virtual && selectedNoteScopeSet.has(node.id);
+        const selectedSelectableCount = selectableDescendants.filter((id) => selectedNoteScopeSet.has(id)).length;
+        const allSelectableSelected = selectableDescendants.length > 0 && selectableDescendants.every((id) => selectedNoteScopeSet.has(id));
+        const isIndeterminate = !isChecked && selectedSelectableCount > 0 && !allSelectableSelected;
 
         return (
             <div key={node.id} className="space-y-0.5">
@@ -1215,9 +1223,15 @@ export default function TasksIndex({
                     </button>
 
                     <Checkbox
-                        checked={isIndeterminate ? 'indeterminate' : isChecked}
+                        checked={isIndeterminate ? 'indeterminate' : (node.is_virtual ? allSelectableSelected : isChecked)}
+                        disabled={node.is_virtual}
                         className="h-4 w-4"
-                        onCheckedChange={() => toggleSingleNoteScope(node.id)}
+                        onCheckedChange={() => {
+                            toggleSingleNoteScope(node.id);
+                            if (hasChildren && !isExpanded) {
+                                toggleNoteNodeExpanded(node.id);
+                            }
+                        }}
                     />
 
                     <span className="min-w-0 flex-1 truncate">{node.title}</span>
@@ -1227,7 +1241,7 @@ export default function TasksIndex({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-6 px-2 text-xs"
+                            className={cn('h-6 px-2 text-xs', allSelectableSelected && 'text-primary')}
                             onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
