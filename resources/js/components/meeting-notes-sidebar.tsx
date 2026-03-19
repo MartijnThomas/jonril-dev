@@ -89,13 +89,13 @@ function MeetingNoteItem({ note, language, currentNoteId }: { note: MeetingNote;
                     ) : null}
                     <span className="flex items-center gap-1.5">
                         <span className={cn(
-                            'min-w-0 truncate font-medium leading-snug text-foreground',
+                            'min-w-0 line-clamp-2 font-medium leading-snug text-foreground',
                             isDeleted && 'line-through decoration-muted-foreground/60',
                         )}>
                             {note.title}
                         </span>
                         {isDeleted && (
-                            <span className="shrink-0 rounded px-1 py-px text-[0.62rem] font-medium uppercase tracking-wide bg-destructive/10 text-destructive">
+                            <span className="shrink-0 rounded px-1 py-px text-[0.62rem] font-medium uppercase tracking-wide bg-muted/10 text-muted">
                                 Deleted
                             </span>
                         )}
