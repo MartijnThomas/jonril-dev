@@ -367,7 +367,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array<int, array{id: string, name: string, slug: string, color: string, timeblock_color: string|null, icon: string, role: string, is_migrated_source: bool}>
+     * @return array<int, array{id: string, name: string, slug: string, color: string, timeblock_color: string|null, icon: string, role: string, is_personal: bool, is_migrated_source: bool}>
      */
     private function workspaceSummary(Request $request): array
     {
@@ -377,7 +377,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $user->workspaces()
-            ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.timeblock_color', 'workspaces.icon', 'workspaces.migrated_at', 'workspace_user.role')
+            ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.timeblock_color', 'workspaces.icon', 'workspaces.is_personal', 'workspaces.migrated_at', 'workspace_user.role')
             ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
             ->orderBy('workspaces.name')
             ->get()
@@ -389,6 +389,7 @@ class HandleInertiaRequests extends Middleware
                 'timeblock_color' => $workspace->timeblock_color,
                 'icon' => $workspace->icon,
                 'role' => (string) ($workspace->pivot->role ?? 'member'),
+                'is_personal' => (bool) $workspace->is_personal,
                 'is_migrated_source' => $workspace->migrated_at !== null,
             ])
             ->values()

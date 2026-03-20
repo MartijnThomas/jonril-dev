@@ -3,6 +3,7 @@
 use App\Jobs\SyncCalendarJob;
 use App\Models\Calendar;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\CalDavService;
 use Illuminate\Support\Facades\Bus;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -25,6 +26,26 @@ test('non-owner cannot connect a calendar', function () {
     ]);
 
     $response->assertStatus(403);
+    expect(Calendar::query()->where('workspace_id', $workspace->id)->count())->toBe(0);
+});
+
+test('owner cannot connect a calendar in non-personal workspace', function () {
+    $workspace = Workspace::factory()->create([
+        'owner_id' => $this->user->id,
+        'is_personal' => false,
+    ]);
+    $workspace->users()->syncWithoutDetaching([
+        $this->user->id => ['role' => 'owner'],
+    ]);
+
+    $response = $this->post("/settings/workspaces/{$workspace->id}/calendars", [
+        'name' => 'Team Calendar',
+        'url' => 'https://caldav.example.com/',
+        'username' => 'user@example.com',
+        'password' => 'secret',
+    ]);
+
+    $response->assertStatus(409);
     expect(Calendar::query()->where('workspace_id', $workspace->id)->count())->toBe(0);
 });
 
@@ -238,6 +259,20 @@ test('workspace member can refresh all active calendars', function () {
 
     $response->assertOk()->assertJson(['ok' => true]);
     Bus::assertDispatchedTimes(SyncCalendarJob::class, 1);
+});
+
+test('calendar refresh is blocked for non-personal workspace', function () {
+    $workspace = Workspace::factory()->create([
+        'owner_id' => $this->user->id,
+        'is_personal' => false,
+    ]);
+    $workspace->users()->syncWithoutDetaching([
+        $this->user->id => ['role' => 'owner'],
+    ]);
+
+    $response = $this->postJson("/w/{$workspace->slug}/calendar/refresh");
+
+    $response->assertStatus(409);
 });
 
 test('non-member cannot refresh calendars', function () {

@@ -69,6 +69,11 @@ class ClearWorkspaceNotes extends Command
         $this->line(" Note headings  : <fg=cyan>{$summary['note_headings']}</>");
         $this->line(" Note revisions : <fg=cyan>{$summary['note_revisions']}</>");
         $this->line(" Legacy notes   : <fg=cyan>{$summary['legacy_notes']}</>");
+        $this->line(" Events         : <fg=cyan>{$summary['events']}</>");
+        $this->line(" Timeblocks     : <fg=cyan>{$summary['timeblocks']}</>");
+        $this->line(" Calendars      : <fg=cyan>{$summary['calendars']}</>");
+        $this->line(" Calendar items : <fg=cyan>{$summary['calendar_items']}</>");
+        $this->line(" Synced ranges  : <fg=cyan>{$summary['calendar_synced_ranges']}</>");
         $this->line(str_repeat('-', 72));
         $this->line($dryRun
             ? '<fg=yellow>Dry run complete. No rows were deleted.</>'

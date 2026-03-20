@@ -17,6 +17,7 @@ class WorkspaceFactory extends Factory
     {
         return [
             'owner_id' => User::factory(),
+            'is_personal' => false,
             'name' => fake()->company().' Workspace',
             'color' => fake()->randomElement([
                 'black',

@@ -30,6 +30,7 @@ class Workspace extends Model
 
     protected $fillable = [
         'owner_id',
+        'is_personal',
         'name',
         'slug',
         'color',
@@ -146,12 +147,18 @@ class Workspace extends Model
             'mention_suggestions' => 'array',
             'hashtag_suggestions' => 'array',
             'migrated_at' => 'datetime',
+            'is_personal' => 'boolean',
         ];
     }
 
     public function isMigratedSource(): bool
     {
         return $this->migrated_at !== null;
+    }
+
+    public function isPersonal(): bool
+    {
+        return (bool) $this->is_personal;
     }
 
     public function owner(): BelongsTo

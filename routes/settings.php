@@ -46,6 +46,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('workspaces.settings.data');
     Route::patch('settings/workspaces/{workspace}', [WorkspaceController::class, 'update'])
         ->name('workspaces.settings.update');
+    Route::post('settings/workspaces/{workspace}/clear', [WorkspaceController::class, 'clear'])
+        ->name('workspaces.settings.clear');
     Route::delete('settings/workspaces/{workspace}', [WorkspaceController::class, 'destroy'])
         ->name('workspaces.settings.destroy');
     Route::post('settings/workspaces/{workspace}/migrate', [WorkspaceController::class, 'migrateToBlock'])

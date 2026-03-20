@@ -196,6 +196,34 @@ This order gives visible UX improvement quickly without schema-heavy changes fir
   - allow erase action for personal workspace
 - Add feature tests for each rule.
 
+Status (2026-03-20):
+- Implemented:
+  - `workspaces.is_personal` added + backfill (one personal workspace per owner).
+  - Personal workspace auto-created for new users.
+  - Newly created extra workspaces default to non-personal.
+  - Guardrails: personal workspace delete blocked, ownership transfer blocked.
+  - Feature tests for delete/transfer guardrails.
+  - Console command added to reassign personal workspace for existing users:
+    - `php artisan workspaces:set-personal --user=<id|email> --workspace=<id|slug> [--force]`
+    - Command removes `is_personal` from the previous personal workspace and sets it on the selected workspace.
+  - Workspace settings UI updated:
+    - personal workspace: delete section replaced by clear-workspace flow with confirmation dialog
+    - non-personal workspace: existing delete flow unchanged
+  - Personal workspace clear action implemented:
+    - route: `POST /settings/workspaces/{workspace}/clear`
+    - owner-only + personal-workspace-only guardrails
+    - clears all notes (including soft-deleted) and journal notes via hard delete
+    - also clears workspace content related to notes: events, timeblocks, calendar items and synced ranges
+    - supports user option `include_calendars` to also remove calendar connections
+    - related workspace data cleared consistently via `ClearWorkspaceContent`
+  - Calendars restricted to personal workspaces only:
+    - backend guards added to calendar connect/update/disconnect/sync/refresh actions
+    - workspace settings sidebar and section rendering hide calendars for non-personal workspaces
+    - feature tests added for non-personal workspace calendar guardrails
+  - Feature tests added for clear action success and guardrails.
+- Pending:
+  - Decide whether non-personal workspaces should also support clear/erase in future.
+
 ### Step 2: Add personal workspace resolver and tests
 
 Create a single source of truth for "personal workspace for current user".

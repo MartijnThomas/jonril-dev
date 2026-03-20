@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\LegacyImport\ClearWorkspaceContent;
 use App\Models\Note;
 use App\Models\User;
 use App\Models\Workspace;
@@ -54,6 +55,7 @@ class WorkspaceController extends Controller
 
         $workspace = Workspace::query()->create([
             'owner_id' => $user->id,
+            'is_personal' => false,
             'name' => trim($data['name']),
             'color' => array_key_exists('color', $data) ? $data['color'] : null,
             'timeblock_color' => array_key_exists('timeblock_color', $data) ? $data['timeblock_color'] : null,
@@ -232,6 +234,12 @@ class WorkspaceController extends Controller
         $targetRole = (string) $data['role'];
 
         if ($targetRole === 'owner') {
+            if ($workspace->isPersonal()) {
+                return back()->withErrors([
+                    'role' => 'Personal workspace ownership cannot be transferred.',
+                ]);
+            }
+
             DB::transaction(function () use ($workspace, $targetUserId): void {
                 DB::table('workspace_user')
                     ->where('workspace_id', $workspace->id)
@@ -269,6 +277,7 @@ class WorkspaceController extends Controller
     public function destroy(Request $request, Workspace $workspace): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertWorkspaceDeletable($workspace);
 
         $owner = $request->user();
         if (! $owner) {
@@ -300,6 +309,20 @@ class WorkspaceController extends Controller
         return redirect()->route('notes.index', [
             'type' => 'all',
         ])->with('status', 'workspace-deleted');
+    }
+
+    public function clear(Request $request, Workspace $workspace, ClearWorkspaceContent $clearer): RedirectResponse
+    {
+        $this->assertOwner($request, $workspace);
+        $this->assertWorkspaceClearable($workspace);
+
+        $data = $request->validate([
+            'include_calendars' => ['nullable', 'boolean'],
+        ]);
+
+        $clearer->clear($workspace, includeCalendars: (bool) ($data['include_calendars'] ?? false));
+
+        return back()->with('status', 'workspace-cleared');
     }
 
     public function reactivate(Request $request, Workspace $workspace): RedirectResponse
@@ -337,6 +360,24 @@ class WorkspaceController extends Controller
         abort(409, 'Migrated source workspaces are read-only.');
     }
 
+    private function assertWorkspaceDeletable(Workspace $workspace): void
+    {
+        if (! $workspace->isPersonal()) {
+            return;
+        }
+
+        abort(409, 'Personal workspace cannot be deleted.');
+    }
+
+    private function assertWorkspaceClearable(Workspace $workspace): void
+    {
+        if ($workspace->isPersonal()) {
+            return;
+        }
+
+        abort(409, 'Only personal workspace can be cleared.');
+    }
+
     private function assertAdmin(Request $request): void
     {
         abort_unless((string) ($request->user()?->role ?? '') === 'admin', 403);
@@ -344,7 +385,7 @@ class WorkspaceController extends Controller
 
     /**
      * @return array{
-     *     workspace: array{id: string, name: string, color: string, timeblock_color: string|null, editor_mode: string, icon: string, owner_id: int, is_migrated_source: bool, can_migrate_to_block: bool},
+     *     workspace: array{id: string, name: string, color: string, timeblock_color: string|null, editor_mode: string, icon: string, owner_id: int, is_personal: bool, is_migrated_source: bool, can_migrate_to_block: bool},
      *     members: array<int, array{id: int, name: string, email: string, role: string}>,
      *     migrationSummary: array{
      *         workspace: array{id: string, name: string, slug: string},
@@ -393,6 +434,7 @@ class WorkspaceController extends Controller
                 'editor_mode' => $workspace->editor_mode,
                 'icon' => $workspace->icon,
                 'owner_id' => (int) $workspace->owner_id,
+                'is_personal' => $workspace->isPersonal(),
                 'is_migrated_source' => $workspace->isMigratedSource(),
                 'can_migrate_to_block' => $workspace->editor_mode === Workspace::EDITOR_MODE_LEGACY && ! $workspace->isMigratedSource(),
             ],

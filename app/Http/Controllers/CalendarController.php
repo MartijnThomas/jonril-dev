@@ -17,6 +17,7 @@ class CalendarController extends Controller
     public function store(Request $request, Workspace $workspace): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertPersonalWorkspace($workspace);
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -60,6 +61,7 @@ class CalendarController extends Controller
     public function destroy(Request $request, Workspace $workspace, Calendar $calendar): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertPersonalWorkspace($workspace);
         abort_unless($calendar->workspace_id === $workspace->id, 404);
 
         $calendar->delete();
@@ -70,6 +72,7 @@ class CalendarController extends Controller
     public function update(Request $request, Workspace $workspace, Calendar $calendar): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertPersonalWorkspace($workspace);
         abort_unless($calendar->workspace_id === $workspace->id, 404);
 
         $data = $request->validate([
@@ -84,6 +87,7 @@ class CalendarController extends Controller
     public function sync(Request $request, Workspace $workspace, Calendar $calendar): RedirectResponse
     {
         $this->assertOwner($request, $workspace);
+        $this->assertPersonalWorkspace($workspace);
         abort_unless($calendar->workspace_id === $workspace->id, 404);
 
         SyncCalendarJob::dispatchSync($calendar);
@@ -97,6 +101,7 @@ class CalendarController extends Controller
             $workspace->users()->where('users.id', $request->user()->id)->exists(),
             403,
         );
+        $this->assertPersonalWorkspace($workspace);
 
         Calendar::query()
             ->where('workspace_id', $workspace->id)
@@ -120,5 +125,10 @@ class CalendarController extends Controller
             ->exists();
 
         abort_unless($isOwner, 403);
+    }
+
+    private function assertPersonalWorkspace(Workspace $workspace): void
+    {
+        abort_unless($workspace->isPersonal(), 409, 'Calendars are only available in the personal workspace.');
     }
 }

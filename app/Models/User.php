@@ -74,6 +74,7 @@ class User extends Authenticatable
 
             $workspace = Workspace::query()->create([
                 'owner_id' => $user->id,
+                'is_personal' => true,
                 'name' => trim("{$user->name} Workspace"),
             ]);
 

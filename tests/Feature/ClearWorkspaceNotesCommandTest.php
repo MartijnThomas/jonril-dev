@@ -1,10 +1,15 @@
 <?php
 
+use App\Models\Calendar;
+use App\Models\CalendarItem;
+use App\Models\CalendarSyncedRange;
+use App\Models\Event;
 use App\Models\LegacyNote;
 use App\Models\Note;
 use App\Models\NoteHeading;
 use App\Models\NoteRevision;
 use App\Models\NoteTask;
+use App\Models\Timeblock;
 use App\Models\User;
 use App\Models\Workspace;
 
@@ -55,6 +60,45 @@ test('clear workspace command dry run shows summary without deleting', function 
         'properties' => [],
     ]);
 
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Team Calendar',
+        'provider' => 'caldav',
+        'url' => 'https://calendar.test/team.ics',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+    ]);
+    CalendarSyncedRange::query()->create([
+        'calendar_id' => $calendar->id,
+        'period' => '2026-03',
+        'synced_at' => now(),
+    ]);
+    $calendarItem = CalendarItem::query()->create([
+        'calendar_id' => $calendar->id,
+        'uid' => 'dry-run-uid',
+    ]);
+    $timeblock = Timeblock::query()->create([
+        'location' => 'Desk',
+    ]);
+    Event::query()->create([
+        'workspace_id' => $workspace->id,
+        'eventable_type' => Timeblock::class,
+        'eventable_id' => $timeblock->id,
+        'title' => 'Focus block',
+        'starts_at' => now(),
+        'ends_at' => now()->addHour(),
+        'timezone' => 'UTC',
+    ]);
+    Event::query()->create([
+        'workspace_id' => $workspace->id,
+        'eventable_type' => CalendarItem::class,
+        'eventable_id' => $calendarItem->id,
+        'title' => 'Calendar event',
+        'starts_at' => now(),
+        'ends_at' => now()->addHour(),
+        'timezone' => 'UTC',
+    ]);
+
     $this->artisan('notes:clear-workspace', [
         '--workspace' => $workspace->id,
         '--dry-run' => true,
@@ -69,6 +113,10 @@ test('clear workspace command dry run shows summary without deleting', function 
     expect(NoteHeading::query()->where('workspace_id', $workspace->id)->count())->toBe(1);
     expect(LegacyNote::query()->where('workspace_id', $workspace->id)->count())->toBe(1);
     expect(NoteRevision::query()->where('note_id', $note->id)->count())->toBe(1);
+    expect(Event::query()->where('workspace_id', $workspace->id)->count())->toBe(2);
+    expect(Timeblock::query()->whereKey($timeblock->id)->exists())->toBeTrue();
+    expect(CalendarItem::query()->whereKey($calendarItem->id)->exists())->toBeTrue();
+    expect(CalendarSyncedRange::query()->where('calendar_id', $calendar->id)->count())->toBe(1);
 
     expect(Note::query()->withTrashed()->where('workspace_id', $otherWorkspace->id)->count())->toBe(1);
     expect($otherNote->id)->not->toBe($note->id);
@@ -133,6 +181,67 @@ test('clear workspace command removes workspace notes and legacy rows on live ru
         'properties' => [],
     ]);
 
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Team Calendar',
+        'provider' => 'caldav',
+        'url' => 'https://calendar.test/team.ics',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+    ]);
+    CalendarSyncedRange::query()->create([
+        'calendar_id' => $calendar->id,
+        'period' => '2026-03',
+        'synced_at' => now(),
+    ]);
+    $calendarItem = CalendarItem::query()->create([
+        'calendar_id' => $calendar->id,
+        'uid' => 'live-run-uid',
+    ]);
+    $timeblock = Timeblock::query()->create([
+        'location' => 'Room 1',
+    ]);
+    Event::query()->create([
+        'workspace_id' => $workspace->id,
+        'eventable_type' => Timeblock::class,
+        'eventable_id' => $timeblock->id,
+        'title' => 'Timeblock event',
+        'starts_at' => now(),
+        'ends_at' => now()->addHour(),
+        'timezone' => 'UTC',
+    ]);
+    Event::query()->create([
+        'workspace_id' => $workspace->id,
+        'eventable_type' => CalendarItem::class,
+        'eventable_id' => $calendarItem->id,
+        'title' => 'Calendar event',
+        'starts_at' => now(),
+        'ends_at' => now()->addHour(),
+        'timezone' => 'UTC',
+    ]);
+
+    $otherCalendar = Calendar::query()->create([
+        'workspace_id' => $otherWorkspace->id,
+        'name' => 'Other Calendar',
+        'provider' => 'caldav',
+        'url' => 'https://calendar.test/other.ics',
+        'username' => 'other@example.com',
+        'password' => 'secret',
+    ]);
+    $otherCalendarItem = CalendarItem::query()->create([
+        'calendar_id' => $otherCalendar->id,
+        'uid' => 'other-uid',
+    ]);
+    Event::query()->create([
+        'workspace_id' => $otherWorkspace->id,
+        'eventable_type' => CalendarItem::class,
+        'eventable_id' => $otherCalendarItem->id,
+        'title' => 'Other workspace event',
+        'starts_at' => now(),
+        'ends_at' => now()->addHour(),
+        'timezone' => 'UTC',
+    ]);
+
     $this->artisan('notes:clear-workspace', [
         '--workspace' => $workspace->id,
         '--force' => true,
@@ -146,7 +255,13 @@ test('clear workspace command removes workspace notes and legacy rows on live ru
     expect(NoteHeading::query()->where('workspace_id', $workspace->id)->count())->toBe(0);
     expect(LegacyNote::query()->where('workspace_id', $workspace->id)->count())->toBe(0);
     expect(NoteRevision::query()->whereIn('note_id', [$note->id, $trashedNote->id])->count())->toBe(0);
+    expect(Event::query()->where('workspace_id', $workspace->id)->count())->toBe(0);
+    expect(Timeblock::query()->whereKey($timeblock->id)->exists())->toBeFalse();
+    expect(CalendarItem::query()->whereKey($calendarItem->id)->exists())->toBeFalse();
+    expect(CalendarSyncedRange::query()->where('calendar_id', $calendar->id)->count())->toBe(0);
 
     expect(Note::query()->withTrashed()->where('workspace_id', $otherWorkspace->id)->count())->toBe(1);
     expect(Note::query()->where('id', $otherNote->id)->exists())->toBeTrue();
+    expect(Event::query()->where('workspace_id', $otherWorkspace->id)->count())->toBe(1);
+    expect(CalendarItem::query()->whereKey($otherCalendarItem->id)->exists())->toBeTrue();
 });

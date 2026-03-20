@@ -34,6 +34,7 @@ test('registration creates a default owned workspace and selects it', function (
 
     expect($workspace)->not->toBeNull();
     expect($workspace?->owner_id)->toBe($user->id);
+    expect($workspace?->is_personal)->toBeTrue();
     expect($workspace?->name)->toBe('Test User Workspace');
     expect(data_get($user->settings, 'workspace_id'))->toBe($workspace?->id);
 

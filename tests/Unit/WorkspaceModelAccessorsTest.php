@@ -19,6 +19,7 @@ test('workspace accessors provide defaults for color and icon', function () {
 
     expect($workspace->color)->toBe(Workspace::DEFAULT_COLOR);
     expect($workspace->icon)->toBe(Workspace::DEFAULT_ICON);
+    expect($workspace->isPersonal())->toBeFalse();
     expect($workspace->slug)->toBe('defaulted-workspace');
 });
 

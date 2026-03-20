@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Calendar;
 use App\Models\Note;
 use App\Models\User;
 use App\Models\Workspace;
@@ -136,7 +137,13 @@ test('non-owner cannot manage workspace settings', function () {
 
 test('workspace owner can transfer ownership by setting a member role to owner', function () {
     $owner = User::factory()->create();
-    $workspace = $owner->currentWorkspace();
+    $workspace = Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'is_personal' => false,
+    ]);
+    $workspace->users()->syncWithoutDetaching([
+        $owner->id => ['role' => 'owner'],
+    ]);
     $member = User::factory()->create();
 
     $workspace?->users()->syncWithoutDetaching([
@@ -161,6 +168,26 @@ test('workspace owner can transfer ownership by setting a member role to owner',
     )->toBe('owner');
 });
 
+test('workspace owner cannot transfer ownership for personal workspace', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+    $member = User::factory()->create();
+
+    $workspace?->users()->syncWithoutDetaching([
+        $member->id => ['role' => 'member'],
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->patch(route('workspaces.settings.members.role', ['workspace' => $workspace?->id], absolute: false), [
+            'user_id' => $member->id,
+            'role' => 'owner',
+        ])
+        ->assertSessionHasErrors('role');
+
+    expect($workspace?->fresh()?->owner_id)->toBe($owner->id);
+});
+
 test('workspace owner can create a new workspace', function () {
     $owner = User::factory()->create();
 
@@ -174,6 +201,7 @@ test('workspace owner can create a new workspace', function () {
     $workspace = $owner->fresh()?->workspaces()->where('name', 'New Workspace')->first();
 
     expect($workspace)->not->toBeNull();
+    expect($workspace?->is_personal)->toBeFalse();
 });
 
 test('workspace owner can trigger legacy workspace migration to block', function () {
@@ -281,31 +309,157 @@ test('workspace settings payload includes migration summary when migrated block 
 
 test('workspace owner can delete workspace when another workspace exists', function () {
     $owner = User::factory()->create();
-    $workspace = $owner->currentWorkspace();
+    $personalWorkspace = $owner->currentWorkspace();
 
-    $otherWorkspace = Workspace::factory()->create([
+    $collaborationWorkspace = Workspace::factory()->create([
         'owner_id' => $owner->id,
-        'name' => 'Second Workspace',
+        'name' => 'Team Workspace',
+        'is_personal' => false,
     ]);
-    $otherWorkspace->users()->syncWithoutDetaching([
+    $collaborationWorkspace->users()->syncWithoutDetaching([
         $owner->id => ['role' => 'owner'],
     ]);
 
     $owner->forceFill([
         'settings' => [
             ...(is_array($owner->settings) ? $owner->settings : []),
-            'workspace_id' => $workspace?->id,
+            'workspace_id' => $collaborationWorkspace->id,
         ],
     ])->save();
 
     $this
         ->actingAs($owner)
-        ->delete(route('workspaces.settings.destroy', ['workspace' => $workspace?->id], absolute: false))
+        ->delete(route('workspaces.settings.destroy', ['workspace' => $collaborationWorkspace->id], absolute: false))
         ->assertRedirect(route('notes.index', ['type' => 'all'], absolute: false))
         ->assertSessionHas('status', 'workspace-deleted');
 
-    expect(Workspace::query()->whereKey($workspace?->id)->exists())->toBeFalse();
-    expect($owner->fresh()?->currentWorkspace()?->id)->toBe($otherWorkspace->id);
+    expect(Workspace::query()->whereKey($collaborationWorkspace->id)->exists())->toBeFalse();
+    expect($owner->fresh()?->currentWorkspace()?->id)->toBe($personalWorkspace?->id);
+});
+
+test('workspace owner cannot delete personal workspace', function () {
+    $owner = User::factory()->create();
+    $personalWorkspace = $owner->currentWorkspace();
+
+    Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'is_personal' => false,
+    ])->users()->syncWithoutDetaching([
+        $owner->id => ['role' => 'owner'],
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->delete(route('workspaces.settings.destroy', ['workspace' => $personalWorkspace?->id], absolute: false))
+        ->assertStatus(409);
+
+    expect(Workspace::query()->whereKey($personalWorkspace?->id)->exists())->toBeTrue();
+});
+
+test('workspace owner can clear personal workspace content', function () {
+    $owner = User::factory()->create();
+    $personalWorkspace = $owner->currentWorkspace();
+
+    $note = Note::factory()->create([
+        'workspace_id' => $personalWorkspace?->id,
+        'type' => Note::TYPE_NOTE,
+    ]);
+    $journalNote = Note::factory()->create([
+        'workspace_id' => $personalWorkspace?->id,
+        'type' => Note::TYPE_JOURNAL,
+    ]);
+
+    $trashedNote = Note::factory()->create([
+        'workspace_id' => $personalWorkspace?->id,
+        'type' => Note::TYPE_NOTE,
+    ]);
+    $trashedNote->delete();
+
+    $otherWorkspace = Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'is_personal' => false,
+    ]);
+    $otherWorkspace->users()->syncWithoutDetaching([
+        $owner->id => ['role' => 'owner'],
+    ]);
+    $otherWorkspaceNote = Note::factory()->create([
+        'workspace_id' => $otherWorkspace->id,
+        'type' => Note::TYPE_NOTE,
+    ]);
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $personalWorkspace?->id,
+        'name' => 'Primary Calendar',
+        'provider' => 'caldav',
+        'url' => 'https://calendar.test/personal.ics',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.clear', ['workspace' => $personalWorkspace?->id], absolute: false))
+        ->assertRedirect()
+        ->assertSessionHas('status', 'workspace-cleared');
+
+    expect(Note::query()->withTrashed()->where('workspace_id', $personalWorkspace?->id)->count())->toBe(0);
+    expect(Note::query()->whereKey($note->id)->exists())->toBeFalse();
+    expect(Note::query()->whereKey($journalNote->id)->exists())->toBeFalse();
+    expect(Note::query()->withTrashed()->whereKey($trashedNote->id)->exists())->toBeFalse();
+    expect(Calendar::query()->whereKey($calendar->id)->exists())->toBeTrue();
+
+    expect(Note::query()->whereKey($otherWorkspaceNote->id)->exists())->toBeTrue();
+});
+
+test('workspace owner can clear personal workspace content including calendars', function () {
+    $owner = User::factory()->create();
+    $personalWorkspace = $owner->currentWorkspace();
+
+    Note::factory()->create([
+        'workspace_id' => $personalWorkspace?->id,
+        'type' => Note::TYPE_NOTE,
+    ]);
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $personalWorkspace?->id,
+        'name' => 'Primary Calendar',
+        'provider' => 'caldav',
+        'url' => 'https://calendar.test/personal.ics',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.clear', ['workspace' => $personalWorkspace?->id], absolute: false), [
+            'include_calendars' => true,
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('status', 'workspace-cleared');
+
+    expect(Note::query()->withTrashed()->where('workspace_id', $personalWorkspace?->id)->count())->toBe(0);
+    expect(Calendar::query()->whereKey($calendar->id)->exists())->toBeFalse();
+});
+
+test('workspace owner cannot clear non-personal workspace', function () {
+    $owner = User::factory()->create();
+
+    $workspace = Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'is_personal' => false,
+    ]);
+    $workspace->users()->syncWithoutDetaching([
+        $owner->id => ['role' => 'owner'],
+    ]);
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace->id,
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.clear', ['workspace' => $workspace->id], absolute: false))
+        ->assertStatus(409);
+
+    expect(Note::query()->whereKey($note->id)->exists())->toBeTrue();
 });
 
 test('workspace owner cannot delete last workspace', function () {
@@ -315,7 +469,7 @@ test('workspace owner cannot delete last workspace', function () {
     $this
         ->actingAs($owner)
         ->delete(route('workspaces.settings.destroy', ['workspace' => $workspace?->id], absolute: false))
-        ->assertSessionHasErrors('workspace');
+        ->assertStatus(409);
 
     expect(Workspace::query()->whereKey($workspace?->id)->exists())->toBeTrue();
 });
