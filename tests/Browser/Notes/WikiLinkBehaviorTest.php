@@ -31,6 +31,151 @@ function focusBlockEditorAtDocumentEnd($page): void
 JS);
 }
 
+function currentBlockSnapshot($page): array
+{
+    $snapshot = $page->script(<<<'JS'
+(() => {
+    const selection = window.getSelection();
+    const anchor = selection?.anchorNode ?? null;
+    const editor = document.querySelector('.tiptap.ProseMirror.simple-editor');
+
+    if (!editor || !anchor) {
+        return null;
+    }
+
+    const element =
+        (anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentElement)?.closest(
+            'p.bt-paragraph, h1.bt-heading, h2.bt-heading, h3.bt-heading, h4.bt-heading, h5.bt-heading, h6.bt-heading',
+        ) ?? null;
+
+    if (!element) {
+        return null;
+    }
+
+    return {
+        tag: element.tagName.toLowerCase(),
+        blockStyle: element.getAttribute('data-block-style') ?? '',
+        indent: Number(element.getAttribute('data-indent') ?? '0'),
+        text: element.textContent ?? '',
+    };
+})();
+JS);
+
+    return is_array($snapshot) ? $snapshot : [];
+}
+
+function placeCursorAtStartOfCurrentParagraph($page): void
+{
+    $page->script(<<<'JS'
+(() => {
+    const selection = window.getSelection();
+    const editor = document.querySelector('.tiptap.ProseMirror.simple-editor');
+    if (!selection || !editor) {
+        return false;
+    }
+
+    const anchor = selection.anchorNode;
+    const paragraph =
+        (anchor?.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement)?.closest(
+            'p.bt-paragraph',
+        ) ?? editor.querySelector('p.bt-paragraph:last-of-type');
+
+    if (!paragraph) {
+        return false;
+    }
+
+    const range = document.createRange();
+    const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+    const firstTextNode = walker.nextNode();
+
+    if (firstTextNode) {
+        range.setStart(firstTextNode, 0);
+        range.collapse(true);
+    } else {
+        range.selectNodeContents(paragraph);
+        range.collapse(true);
+    }
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editor.focus();
+
+    return true;
+})();
+JS);
+}
+
+function placeCursorAtStartOfParagraphContaining($page, string $text): void
+{
+    $escapedText = json_encode($text, JSON_THROW_ON_ERROR);
+
+    $page->script(<<<JS
+(() => {
+    const targetText = {$escapedText};
+    const selection = window.getSelection();
+    const editor = document.querySelector('.tiptap.ProseMirror.simple-editor');
+    if (!selection || !editor) {
+        return false;
+    }
+
+    const paragraph = Array.from(editor.querySelectorAll('p.bt-paragraph'))
+        .find((node) => (node.textContent ?? '').includes(targetText));
+
+    if (!paragraph) {
+        return false;
+    }
+
+    const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+    const firstTextNode = walker.nextNode();
+    const range = document.createRange();
+
+    if (firstTextNode) {
+        range.setStart(firstTextNode, 0);
+        range.collapse(true);
+    } else {
+        range.selectNodeContents(paragraph);
+        range.collapse(true);
+    }
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editor.focus();
+
+    return true;
+})();
+JS);
+}
+
+function paragraphSnapshotContaining($page, string $text): array
+{
+    $escapedText = json_encode($text, JSON_THROW_ON_ERROR);
+
+    $snapshot = $page->script(<<<JS
+(() => {
+    const targetText = {$escapedText};
+    const editor = document.querySelector('.tiptap.ProseMirror.simple-editor');
+    if (!editor) {
+        return null;
+    }
+
+    const paragraph = Array.from(editor.querySelectorAll('p.bt-paragraph'))
+        .find((node) => (node.textContent ?? '').includes(targetText));
+
+    if (!paragraph) {
+        return null;
+    }
+
+    return {
+        blockStyle: paragraph.getAttribute('data-block-style') ?? '',
+        indent: Number(paragraph.getAttribute('data-indent') ?? '0'),
+        text: paragraph.textContent ?? '',
+    };
+})();
+JS);
+
+    return is_array($snapshot) ? $snapshot : [];
+}
+
 it('inserts a wiki-link from suggestions when pressing Enter', function () {
     $user = User::factory()->create([
         'password' => bcrypt('password'),
@@ -245,4 +390,82 @@ JS);
     expect($result['hasWikiInBullet'] ?? false)->toBeTrue();
     expect($result['noteId'] ?? '')->toBe((string) $target->id);
     expect($result['text'] ?? '')->toContain('Zed Bullet Target');
+});
+
+it('supports quote block flow for indent enter enter text and backspace dedent', function () {
+    $user = User::factory()->create([
+        'password' => bcrypt('password'),
+    ]);
+
+    $workspace = $user->currentWorkspace();
+    expect($workspace)->toBeInstanceOf(Workspace::class);
+
+    $workspace->forceFill([
+        'editor_mode' => Workspace::EDITOR_MODE_BLOCK,
+    ])->save();
+
+    $source = Note::factory()->for($workspace)->create([
+        'title' => 'Quote Flow Source',
+    ]);
+
+    $page = browserLogin($user);
+
+    $page->navigate(browserScopedNoteUrl($source))
+        ->assertPathIs(browserScopedNoteUrl($source))
+        ->assertNoJavaScriptErrors();
+
+    focusBlockEditorAtDocumentEnd($page);
+
+    $page->keys('.tiptap.ProseMirror.simple-editor', [
+        'Enter',
+        '>',
+        'Space',
+        'Q',
+        'u',
+        'o',
+        't',
+        'e',
+        ' ',
+        'f',
+        'l',
+        'o',
+        'w',
+    ]);
+
+    $step1 = currentBlockSnapshot($page);
+    expect($step1['blockStyle'] ?? '')->toBe('quote');
+    expect($step1['indent'] ?? -1)->toBe(0);
+    expect($step1['text'] ?? '')->toContain('Quote flow');
+
+    $page->keys('.tiptap.ProseMirror.simple-editor', 'Tab');
+    $step2 = currentBlockSnapshot($page);
+    expect($step2['blockStyle'] ?? '')->toBe('quote');
+    expect($step2['indent'] ?? -1)->toBe(1);
+
+    $page->keys('.tiptap.ProseMirror.simple-editor', 'Enter');
+    $step3 = currentBlockSnapshot($page);
+    expect($step3['blockStyle'] ?? '')->toBe('quote');
+    expect($step3['indent'] ?? -1)->toBe(1);
+    expect(trim((string) ($step3['text'] ?? '')))->toBe('');
+
+    $page->keys('.tiptap.ProseMirror.simple-editor', 'Enter');
+    $step4 = currentBlockSnapshot($page);
+    expect($step4['blockStyle'] ?? '')->toBe('paragraph');
+    expect($step4['indent'] ?? -1)->toBe(1);
+    expect(trim((string) ($step4['text'] ?? '')))->toBe('');
+
+    $page->keys('.tiptap.ProseMirror.simple-editor', ['N', 'e', 's', 't', 'e', 'd', ' ', 't', 'e', 'x', 't']);
+    $step5 = paragraphSnapshotContaining($page, 'Nested text');
+    expect($step5['blockStyle'] ?? '')->toBe('paragraph');
+    expect($step5['indent'] ?? -1)->toBe(1);
+    expect($step5['text'] ?? '')->toContain('Nested text');
+
+    placeCursorAtStartOfParagraphContaining($page, 'Nested text');
+    $page->keys('.tiptap.ProseMirror.simple-editor', 'Backspace');
+    $page->wait(0.15);
+
+    $step6 = paragraphSnapshotContaining($page, 'Nested text');
+    expect($step6['blockStyle'] ?? '')->toBe('paragraph');
+    expect($step6['indent'] ?? -1)->toBe(0);
+    expect($step6['text'] ?? '')->toContain('Nested text');
 });
