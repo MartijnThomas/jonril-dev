@@ -303,8 +303,9 @@ Status (2026-03-20):
   - Middleware now keeps `currentWorkspace` as the user's active workspace on `journal.*` routes.
   - Shared props now include `personalWorkspace` summary for journal-context consumers.
   - Right sidebar calendar now fetches events/sync from personal workspace while on journal pages.
+  - Added backend feature tests for sidebar events behavior in journal context and membership guardrails.
 - Pending:
-  - Add dedicated backend feature tests for sidebar events endpoint behavior in journal context.
+  - None.
 
 Acceptance criteria:
 
