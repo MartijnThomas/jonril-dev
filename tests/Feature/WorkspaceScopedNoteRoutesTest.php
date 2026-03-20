@@ -85,7 +85,7 @@ test('workspace scoped note url resolves note by nested slug', function () {
             ->where('noteUrl', "/w/{$workspace->slug}/notes/{$child->id}"));
 });
 
-test('workspace scoped journal url resolves for workspace', function () {
+test('workspace scoped journal granularity url redirects to canonical journal period url', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
 
@@ -93,20 +93,18 @@ test('workspace scoped journal url resolves for workspace', function () {
 
     $response = $this
         ->actingAs($user)
-        ->get(route('journal.show', [
+        ->get(route('journal.show.scoped', [
             'workspace' => $workspace->slug,
             'granularity' => 'daily',
             'period' => '2026-03-10',
         ], absolute: false));
 
-    $response->assertOk();
-    $response->assertInertia(fn (Assert $page) => $page
-        ->where('noteType', Note::TYPE_JOURNAL)
-        ->where('journalGranularity', 'daily')
-        ->where('journalPeriod', '2026-03-10'));
+    $response->assertRedirect(route('journal.show.by-period', [
+        'period' => '2026-03-10',
+    ], absolute: false));
 });
 
-test('workspace scoped simplified journal period url resolves for workspace', function () {
+test('workspace scoped simplified journal period url redirects to canonical journal period url', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
 
@@ -114,21 +112,18 @@ test('workspace scoped simplified journal period url resolves for workspace', fu
 
     $response = $this
         ->actingAs($user)
-        ->get(route('journal.show.by-period', [
+        ->get(route('journal.show.by-period.scoped', [
             'workspace' => $workspace->slug,
             'period' => '2026-03',
         ], absolute: false));
 
-    $response->assertOk();
-    $response->assertInertia(fn (Assert $page) => $page
-        ->where('noteType', Note::TYPE_JOURNAL)
-        ->where('journalGranularity', 'monthly')
-        ->where('journalPeriod', '2026-03'));
+    $response->assertRedirect(route('journal.show.by-period', [
+        'period' => '2026-03',
+    ], absolute: false));
 });
 
-test('workspace scoped journal url redirects to personal workspace when scoped workspace is non-personal', function () {
+test('workspace scoped journal url redirects to canonical journal period url when scoped workspace is non-personal', function () {
     $user = User::factory()->create();
-    $personalWorkspace = $user->currentWorkspace();
 
     $otherWorkspace = Workspace::factory()->create([
         'owner_id' => $user->id,
@@ -140,21 +135,18 @@ test('workspace scoped journal url redirects to personal workspace when scoped w
 
     $this
         ->actingAs($user)
-        ->get(route('journal.show', [
+        ->get(route('journal.show.scoped', [
             'workspace' => $otherWorkspace->slug,
             'granularity' => 'daily',
             'period' => '2026-03-10',
         ], absolute: false))
-        ->assertRedirect(route('journal.show', [
-            'workspace' => $personalWorkspace?->slug,
-            'granularity' => 'daily',
+        ->assertRedirect(route('journal.show.by-period', [
             'period' => '2026-03-10',
         ], absolute: false));
 });
 
-test('workspace scoped simplified journal period url redirects to personal workspace when scoped workspace is non-personal', function () {
+test('workspace scoped simplified journal period url redirects to canonical journal period url when scoped workspace is non-personal', function () {
     $user = User::factory()->create();
-    $personalWorkspace = $user->currentWorkspace();
 
     $otherWorkspace = Workspace::factory()->create([
         'owner_id' => $user->id,
@@ -166,12 +158,11 @@ test('workspace scoped simplified journal period url redirects to personal works
 
     $this
         ->actingAs($user)
-        ->get(route('journal.show.by-period', [
+        ->get(route('journal.show.by-period.scoped', [
             'workspace' => $otherWorkspace->slug,
             'period' => '2026-03',
         ], absolute: false))
         ->assertRedirect(route('journal.show.by-period', [
-            'workspace' => $personalWorkspace?->slug,
             'period' => '2026-03',
         ], absolute: false));
 });

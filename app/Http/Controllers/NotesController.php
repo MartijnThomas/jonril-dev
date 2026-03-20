@@ -251,33 +251,30 @@ class NotesController extends Controller
 
     public function showJournal(Request $request, string $granularity, string $period)
     {
-        return $this->showJournalForWorkspace(
-            request: $request,
-            workspace: $this->personalWorkspace(),
-            granularity: $granularity,
-            period: $period,
-        );
+        try {
+            $parsedDate = $this->journalNoteService->parsePeriod($granularity, $period);
+        } catch (InvalidArgumentException) {
+            abort(404);
+        }
+
+        return redirect()->route('journal.show.by-period', [
+            'period' => $this->journalNoteService->periodFor($granularity, $parsedDate),
+        ]);
     }
 
     public function showJournalScoped(Request $request, Workspace $workspace, string $granularity, string $period)
     {
         $this->assertWorkspaceMembership($workspace);
 
-        $personalWorkspace = $this->personalWorkspace();
-        if ($workspace->id !== $personalWorkspace->id) {
-            return redirect()->route('journal.show', [
-                'workspace' => $personalWorkspace->slug,
-                'granularity' => $granularity,
-                'period' => $period,
-            ]);
+        try {
+            $parsedDate = $this->journalNoteService->parsePeriod($granularity, $period);
+        } catch (InvalidArgumentException) {
+            abort(404);
         }
 
-        return $this->showJournalForWorkspace(
-            request: $request,
-            workspace: $personalWorkspace,
-            granularity: $granularity,
-            period: $period,
-        );
+        return redirect()->route('journal.show.by-period', [
+            'period' => $this->journalNoteService->periodFor($granularity, $parsedDate),
+        ]);
     }
 
     public function showJournalByPeriod(Request $request, string $period)
@@ -299,20 +296,9 @@ class NotesController extends Controller
         $granularity = $this->resolveJournalGranularityFromPeriod($period);
         abort_if($granularity === null, 404);
 
-        $personalWorkspace = $this->personalWorkspace();
-        if ($workspace->id !== $personalWorkspace->id) {
-            return redirect()->route('journal.show.by-period', [
-                'workspace' => $personalWorkspace->slug,
-                'period' => $period,
-            ]);
-        }
-
-        return $this->showJournalForWorkspace(
-            request: $request,
-            workspace: $personalWorkspace,
-            granularity: $granularity,
-            period: $period,
-        );
+        return redirect()->route('journal.show.by-period', [
+            'period' => $period,
+        ]);
     }
 
     private function showJournalForWorkspace(

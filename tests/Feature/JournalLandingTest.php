@@ -13,13 +13,11 @@ test('journal landing redirects authenticated users to today daily note', functi
     CarbonImmutable::setTestNow('2026-03-07 10:00:00');
 
     $user = User::factory()->create();
-    $workspace = $user->currentWorkspace();
     $this->actingAs($user);
 
     $response = $this->get(route('journal.landing'));
 
     $response->assertRedirect(route('journal.show.by-period', [
-        'workspace' => $workspace?->slug,
         'period' => '2026-03-07',
     ], absolute: false));
 
@@ -30,13 +28,11 @@ test('notes landing redirects authenticated users to today daily note', function
     CarbonImmutable::setTestNow('2026-03-07 10:00:00');
 
     $user = User::factory()->create();
-    $workspace = $user->currentWorkspace();
     $this->actingAs($user);
 
     $response = $this->get(route('notes.landing'));
 
     $response->assertRedirect(route('journal.show.by-period', [
-        'workspace' => $workspace?->slug,
         'period' => '2026-03-07',
     ], absolute: false));
 
@@ -47,7 +43,6 @@ test('journal and notes landing use personal workspace when active workspace is 
     CarbonImmutable::setTestNow('2026-03-07 10:00:00');
 
     $user = User::factory()->create();
-    $personalWorkspace = $user->currentWorkspace();
 
     $otherWorkspace = Workspace::factory()->create([
         'owner_id' => $user->id,
@@ -68,13 +63,11 @@ test('journal and notes landing use personal workspace when active workspace is 
 
     $this->get(route('journal.landing'))
         ->assertRedirect(route('journal.show.by-period', [
-            'workspace' => $personalWorkspace?->slug,
             'period' => '2026-03-07',
         ], absolute: false));
 
     $this->get(route('notes.landing'))
         ->assertRedirect(route('journal.show.by-period', [
-            'workspace' => $personalWorkspace?->slug,
             'period' => '2026-03-07',
         ], absolute: false));
 

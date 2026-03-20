@@ -5,9 +5,9 @@
 - Every note (including journal notes) belongs to a workspace via `workspace_id`.
 - Journal notes are unique per `(workspace_id, journal_granularity, journal_date)`.
 - Journal routes currently exist in both forms:
-  - workspace-scoped: `/w/{workspace}/journal/{granularity}/{period}`
-  - legacy non-scoped aliases: `/journal/{granularity}/{period}`
-- Journal entry points (`/journal`, `/notes`) already resolve against personal workspace.
+  - canonical non-scoped: `/journal/{period}`
+  - compatibility redirects: `/journal/{granularity}/{period}` and `/w/{workspace}/journal/...`
+- Journal entry points (`/journal`, `/notes`) resolve against personal workspace.
 - Switching workspaces still updates `user.settings['workspace_id']`.
 - Users can have multiple workspaces. The personal workspace is auto-created on registration.
 
@@ -282,7 +282,12 @@ Controller behaviour:
 Keep existing `/w/{workspace}/journal/...` routes for backward compatibility during transition.
 
 Status (2026-03-20):
-- Not started yet (next step).
+- Implemented:
+  - Canonical journal route is now `/journal/{period}` (`journal.show.by-period`).
+  - `/journal/{granularity}/{period}` redirects to the canonical period route.
+  - Workspace-scoped journal routes are kept for backward compatibility and redirect to canonical non-scoped routes.
+- Pending:
+  - Update any remaining frontend route generation to prefer canonical non-scoped journal URLs everywhere.
 
 ### Step 5: Prevent workspace context switch on journal pages
 

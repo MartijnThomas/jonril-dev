@@ -98,7 +98,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         }
 
         return redirect()->route('journal.show.by-period', [
-            'workspace' => $workspace->slug,
             'period' => now()->toDateString(),
         ]);
     })->name('journal.landing');
@@ -117,7 +116,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         }
 
         return redirect()->route('journal.show.by-period', [
-            'workspace' => $workspace->slug,
             'period' => now()->toDateString(),
         ]);
     })->name('notes.landing');
@@ -142,10 +140,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('sidebar-events.attachable');
 
     Route::get('w/{workspace:slug}/journal/{granularity}/{period}', [NotesController::class, 'showJournalScoped'])
-        ->name('journal.show');
+        ->name('journal.show.scoped');
     Route::get('w/{workspace:slug}/journal/{period}', [NotesController::class, 'showJournalScopedByPeriod'])
         ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)')
-        ->name('journal.show.by-period');
+        ->name('journal.show.by-period.scoped');
 
     Route::get('notes/{noteId}/history', [NotesController::class, 'showRevisions'])
         ->whereUuid('noteId')
@@ -188,12 +186,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->where('note', '.*')
         ->name('notes.update');
 
-    // Legacy non-workspace-scoped URLs (kept for backward compatibility).
+    // Canonical non-workspace-scoped journal URLs.
     Route::get('journal/{granularity}/{period}', [NotesController::class, 'showJournal'])
-        ->name('journal.show.legacy');
+        ->name('journal.show');
     Route::get('journal/{period}', [NotesController::class, 'showJournalByPeriod'])
         ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)')
-        ->name('journal.show.legacy.by-period');
+        ->name('journal.show.by-period');
+
+    // Legacy non-workspace-scoped URLs kept for note routes only.
     Route::get('notes/{note}/hash', [NotesController::class, 'contentHash'])
         ->name('notes.hash.legacy');
     Route::get('notes/{note}', [NotesController::class, 'show'])
