@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Note;
 use App\Models\NoteTask;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\NoteSlugService;
+use App\Support\Workspaces\PersonalWorkspaceResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -21,6 +23,7 @@ class TasksController extends Controller
         private readonly NoteSlugService $noteSlugService,
         private readonly JournalNoteService $journalNoteService,
         private readonly TaskSearchController $taskSearchController,
+        private readonly PersonalWorkspaceResolver $personalWorkspaceResolver,
     ) {}
 
     public function index(Request $request)
@@ -713,6 +716,7 @@ class TasksController extends Controller
             ->findOrFail($data['source_note_id']);
 
         $workspaceId = (string) $sourceNote->workspace_id;
+        $personalWorkspace = $this->personalWorkspaceFor($user);
         $limit = (int) ($data['limit'] ?? 20);
         $query = trim((string) ($data['q'] ?? ''));
         $language = $this->userLanguage($user);
@@ -729,7 +733,7 @@ class TasksController extends Controller
         ];
 
         $existingJournalNotes = Note::query()
-            ->where('workspace_id', $workspaceId)
+            ->where('workspace_id', $personalWorkspace->id)
             ->where('type', Note::TYPE_JOURNAL)
             ->where(function ($builder) use ($presetTargets): void {
                 foreach ($presetTargets as [$granularity, $date]) {
@@ -760,7 +764,7 @@ class TasksController extends Controller
             $items[] = [
                 'key' => "journal:{$granularity}:{$period}",
                 'title' => $title,
-                'path' => $this->noteSlugService->journalUrlFor($sourceNote->workspace, $granularity, $period),
+                'path' => $this->noteSlugService->journalUrlFor($personalWorkspace, $granularity, $period),
                 'target_note_id' => $existing?->id,
                 'target_journal_granularity' => $granularity,
                 'target_journal_period' => $period,
@@ -870,10 +874,7 @@ class TasksController extends Controller
             is_string($data['target_journal_granularity'] ?? null) &&
             is_string($data['target_journal_period'] ?? null)
         ) {
-            $workspace = $sourceNote->workspace()->first();
-            if (! $workspace) {
-                abort(404);
-            }
+            $workspace = $this->personalWorkspaceFor($user);
 
             $targetNote = $this->journalNoteService->resolveOrCreate(
                 $workspace,
@@ -918,6 +919,16 @@ class TasksController extends Controller
         $targetNote->save();
 
         return back();
+    }
+
+    private function personalWorkspaceFor(User $user): Workspace
+    {
+        $workspace = $this->personalWorkspaceResolver->resolveFor($user);
+        if (! $workspace) {
+            abort(403, 'No workspace available.');
+        }
+
+        return $workspace;
     }
 
     /**

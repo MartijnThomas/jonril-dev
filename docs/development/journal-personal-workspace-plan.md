@@ -256,8 +256,10 @@ Status (2026-03-20):
   - Journal show flows now resolve against personal workspace.
   - Scoped journal URLs (`/w/{workspace}/journal/...`) redirect to the personal workspace URL when `{workspace}` is non-personal.
   - Feature tests added for both scoped journal route variants.
+  - Task migrate flows now create/use journal targets in the personal workspace (never in non-personal source workspaces).
+  - Feature tests added to verify no journal is created in non-personal workspace during task-to-journal migration.
 - Pending:
-  - Explicitly enforce "no journal creation in non-personal workspaces" in all remaining journal creation paths.
+  - Evaluate command/import-only flows that may still create historical journal notes outside personal workspace.
 
 ### Step 4: Introduce workspace-agnostic journal routes
 

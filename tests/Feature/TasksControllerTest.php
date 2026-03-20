@@ -1378,6 +1378,37 @@ test('migrate targets endpoint returns journal presets and workspace notes', fun
     ))->toBeTrue();
 });
 
+test('migrate targets endpoint returns journal preset paths for personal workspace when source note is in non-personal workspace', function () {
+    $user = User::factory()->create();
+    $personalWorkspace = $user->currentWorkspace();
+
+    $nonPersonalWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+    ]);
+    $nonPersonalWorkspace->users()->syncWithoutDetaching([
+        $user->id => ['role' => 'owner'],
+    ]);
+
+    $source = $nonPersonalWorkspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Shared source note',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson('/tasks/migrate-targets?source_note_id='.$source->id.'&q=');
+
+    $response->assertOk();
+
+    $dailyPreset = collect((array) $response->json('items'))
+        ->first(fn (array $item) => ($item['target_journal_granularity'] ?? null) === Note::JOURNAL_DAILY);
+
+    expect($dailyPreset)->not()->toBeNull();
+    expect((string) ($dailyPreset['path'] ?? ''))->toContain("/w/{$personalWorkspace?->slug}/journal/");
+    expect((string) ($dailyPreset['path'] ?? ''))->not->toContain("/w/{$nonPersonalWorkspace->slug}/journal/");
+});
+
 test('migrating a task marks source as migrated and appends cloned task to target note', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
@@ -1453,6 +1484,68 @@ test('migrating a task marks source as migrated and appends cloned task to targe
         ->first();
 
     expect($sourceIndexed?->task_status)->toBe('migrated');
+});
+
+test('migrating to a journal target creates the journal note in personal workspace', function () {
+    $user = User::factory()->create();
+    $personalWorkspace = $user->currentWorkspace();
+
+    $nonPersonalWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+    ]);
+    $nonPersonalWorkspace->users()->syncWithoutDetaching([
+        $user->id => ['role' => 'owner'],
+    ]);
+
+    $source = $nonPersonalWorkspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Shared source',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'task-migrate-to-journal-1',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Move me to personal journal']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->post('/tasks/migrate', [
+            'source_note_id' => $source->id,
+            'block_id' => 'task-migrate-to-journal-1',
+            'target_journal_granularity' => Note::JOURNAL_DAILY,
+            'target_journal_period' => '2026-03-18',
+        ])
+        ->assertRedirect();
+
+    $journalInPersonal = Note::query()
+        ->where('workspace_id', $personalWorkspace?->id)
+        ->where('type', Note::TYPE_JOURNAL)
+        ->where('journal_granularity', Note::JOURNAL_DAILY)
+        ->whereDate('journal_date', '2026-03-18')
+        ->first();
+
+    $journalInNonPersonal = Note::query()
+        ->where('workspace_id', $nonPersonalWorkspace->id)
+        ->where('type', Note::TYPE_JOURNAL)
+        ->where('journal_granularity', Note::JOURNAL_DAILY)
+        ->whereDate('journal_date', '2026-03-18')
+        ->first();
+
+    expect($journalInPersonal)->not()->toBeNull();
+    expect($journalInNonPersonal)->toBeNull();
 });
 
 test('migrating a block task marks source as migrated and appends cloned block task to target note', function () {
