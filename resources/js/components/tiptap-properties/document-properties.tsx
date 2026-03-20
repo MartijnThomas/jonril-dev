@@ -23,10 +23,9 @@ import {
 } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
 import {
-    PopoverAnchor,
     Popover,
+    PopoverAnchor,
     PopoverContent,
-    PopoverTrigger,
 } from '@/components/ui/popover';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -232,7 +231,7 @@ export function TokenPropertyInput({
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
+            <PopoverAnchor asChild>
                 <div
                     className={cn(
                         'flex h-8 w-full items-center gap-1 rounded-none border-0 bg-transparent px-2 text-left text-sm shadow-none focus-within:bg-white md:text-xs',
@@ -317,7 +316,7 @@ export function TokenPropertyInput({
                         className="min-w-[6rem] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground md:text-sm"
                     />
                 </div>
-            </PopoverTrigger>
+            </PopoverAnchor>
             <PopoverContent
                 align="start"
                 className="w-72 p-0"
