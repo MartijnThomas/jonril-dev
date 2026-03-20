@@ -50,10 +50,10 @@ import {
 
 const BLOCK_NODE_OPTIONS = [
     { value: 'paragraph', label: 'Paragraph', icon: Pilcrow },
+    { value: 'quote', label: 'Block quote', icon: Quote },
     { value: 'bullet', label: 'Bullet list item', icon: List },
     { value: 'checklist', label: 'Checklist item', icon: ListChecks },
     { value: 'ordered', label: 'Ordered list item', icon: ListOrdered },
-    { value: 'quote', label: 'Block quote', icon: Quote },
     { value: 'code-block', label: 'Code block', icon: SquareCode },
 ] as const;
 
@@ -68,10 +68,10 @@ const HEADING_OPTIONS = [
 
 const BLOCK_MARK_OPTIONS = [
     { value: 'bold', label: 'Bold', icon: Bold },
-    { value: 'code', label: 'Inline code', icon: Code2 },
     { value: 'italic', label: 'Italic', icon: Italic },
     { value: 'underline', label: 'Underline', icon: Underline },
     { value: 'strike', label: 'Strikethrough', icon: Strikethrough },
+    { value: 'code', label: 'Inline code', icon: Code2 },
     { value: 'superscript', label: 'Superscript', icon: Superscript },
     { value: 'subscript', label: 'Subscript', icon: Subscript },
 ] as const;
@@ -467,14 +467,16 @@ export function BlockNodeToolbar({
     const isParagraphBlock = currentBlock?.type === 'paragraph';
     const squareButtonBaseClass =
         'size-7 rounded-lg p-0 [&>svg]:size-3.5';
-    const activeSquareButtonClass = `${squareButtonBaseClass} border border-violet-200 bg-violet-100 text-violet-600 shadow-none`;
+    const subtleActiveSquareButtonClass = `${squareButtonBaseClass} border border-violet-200/70 bg-violet-50 text-violet-500 shadow-none`;
     const activeSquareButtonHoverClass =
-        `${activeSquareButtonClass} hover:bg-muted`;
+        `${subtleActiveSquareButtonClass} hover:bg-violet-100/70`;
     const inactiveSquareButtonClass = `${squareButtonBaseClass} border border-transparent text-muted-foreground hover:bg-muted hover:text-foreground`;
     const currentHeadingOption = HEADING_OPTIONS.find((option) => option.value === currentValue) ?? null;
     const HeadingIcon = currentHeadingOption?.icon ?? Heading1;
     const headingButtonLabel = currentHeadingOption?.label ?? 'Headings';
     const isHeadingActive = currentHeadingOption !== null;
+    const paragraphOption = BLOCK_NODE_OPTIONS.find((option) => option.value === 'paragraph') ?? BLOCK_NODE_OPTIONS[0];
+    const nonParagraphBlockOptions = BLOCK_NODE_OPTIONS.filter((option) => option.value !== 'paragraph');
 
     const hasMeetingToggle = hasMeetingNotes && !showMeetingNotes;
 
@@ -483,31 +485,24 @@ export function BlockNodeToolbar({
             <div className={`mx-auto w-full overflow-x-auto overflow-y-hidden px-2 py-1.5 md:px-4 ${hasMeetingToggle ? 'pr-20!' : ''}`}>
                 <div className="mx-auto inline-flex min-w-max items-center gap-2.5">
                         <div className="flex items-center gap-2">
-                        {BLOCK_NODE_OPTIONS.map((option) => {
-                            const isActive = currentValue === option.value;
-                            const Icon = option.icon;
-
-                            return (
-                                <Button
-                                    key={option.value}
-                                    type="button"
-                                    size="sm"
-                                    variant={isActive ? 'default' : 'ghost'}
-                                    className={
-                                        isActive
-                                            ? activeSquareButtonHoverClass
-                                            : inactiveSquareButtonClass
-                                    }
-                                    onClick={() => handleValueChange(option.value)}
-                                    aria-pressed={isActive}
-                                    aria-label={option.label}
-                                    title={option.label}
-                                >
-                                    <Icon className="size-4" />
-                                    <span className="sr-only">{option.label}</span>
-                                </Button>
-                            );
-                        })}
+                        <Button
+                            key={paragraphOption.value}
+                            type="button"
+                            size="sm"
+                            variant={currentValue === paragraphOption.value ? 'default' : 'ghost'}
+                            className={
+                                currentValue === paragraphOption.value
+                                    ? activeSquareButtonHoverClass
+                                    : inactiveSquareButtonClass
+                            }
+                            onClick={() => handleValueChange(paragraphOption.value)}
+                            aria-pressed={currentValue === paragraphOption.value}
+                            aria-label={paragraphOption.label}
+                            title={paragraphOption.label}
+                        >
+                            <Pilcrow className="size-4" />
+                            <span className="sr-only">{paragraphOption.label}</span>
+                        </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
@@ -545,6 +540,31 @@ export function BlockNodeToolbar({
                                 })}
                             </DropdownMenuContent>
                         </DropdownMenu>
+                        {nonParagraphBlockOptions.map((option) => {
+                            const isActive = currentValue === option.value;
+                            const Icon = option.icon;
+
+                            return (
+                                <Button
+                                    key={option.value}
+                                    type="button"
+                                    size="sm"
+                                    variant={isActive ? 'default' : 'ghost'}
+                                    className={
+                                        isActive
+                                            ? activeSquareButtonHoverClass
+                                            : inactiveSquareButtonClass
+                                    }
+                                    onClick={() => handleValueChange(option.value)}
+                                    aria-pressed={isActive}
+                                    aria-label={option.label}
+                                    title={option.label}
+                                >
+                                    <Icon className="size-4" />
+                                    <span className="sr-only">{option.label}</span>
+                                </Button>
+                            );
+                        })}
                         </div>
 
                         <div className="h-6 w-px bg-border/60" />
@@ -619,7 +639,7 @@ export function BlockNodeToolbar({
                                             variant="ghost"
                                             className={
                                                 currentMarks.highlight
-                                                    ? 'h-7 gap-0.5 rounded-lg border border-violet-200 bg-violet-100 px-1.5 text-foreground shadow-none hover:bg-muted'
+                                                    ? 'h-7 gap-0.5 rounded-lg border border-violet-200/70 bg-violet-50 px-1.5 text-foreground shadow-none hover:bg-violet-100/70'
                                                     : 'h-7 gap-0.5 rounded-lg border border-transparent px-1.5 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground'
                                             }
                                             onPointerDown={(event) => {
@@ -644,7 +664,7 @@ export function BlockNodeToolbar({
                                             <Highlighter
                                                 className={
                                                     currentMarks.highlight
-                                                        ? 'size-3.5 text-violet-600'
+                                                        ? 'size-3.5 text-violet-500'
                                                         : 'size-3.5'
                                                 }
                                             />
