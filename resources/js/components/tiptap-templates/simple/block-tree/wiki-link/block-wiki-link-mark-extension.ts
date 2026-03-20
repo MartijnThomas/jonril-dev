@@ -119,6 +119,32 @@ export const BlockWikiLinkMark = Mark.create<{
 
     addProseMirrorPlugins() {
         const buildNotesByTargetPath = () => {
+            const editableQueryPathForNote = (
+                note: BlockWikiLinkNote,
+                targetPath: string,
+            ): string => {
+                if (targetPath.startsWith('journal/')) {
+                    return wikiLinkInsertTextFromTargetPath(
+                        targetPath,
+                        note.title,
+                    );
+                }
+
+                const explicitEditablePath = (note.editablePath ?? '').trim();
+                if (explicitEditablePath !== '') {
+                    return explicitEditablePath;
+                }
+
+                const parentPath = (note.path ?? '').trim();
+                const title = note.title.trim();
+
+                if (parentPath !== '') {
+                    return `${parentPath} / ${title}`;
+                }
+
+                return title;
+            };
+
             const notesByTargetPath = new Map<
                 string,
                 {
@@ -161,7 +187,7 @@ export const BlockWikiLinkMark = Mark.create<{
                     href: note.href,
                     title: note.title,
                     targetPath,
-                    editablePath: displayPathFromNote(note, targetPath),
+                    editablePath: editableQueryPathForNote(note, targetPath),
                     headings: Array.isArray(note.headings) ? note.headings : [],
                 };
 
