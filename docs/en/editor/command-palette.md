@@ -35,8 +35,24 @@ Use search to find notes by typing in the palette input.
 ### Search behavior
 
 - Typing normal text searches using the active pills/scopes.
+- Note results are Scout/Meilisearch-backed and match on:
+  - `title`
+  - `path_titles`
+  - localized journal path (`journal_path_nl` / `journal_path_en`)
+  - `headings`
+  - `content_text`
+  - note metadata terms (`mentions`, `hashtags`, `tags`, `property_terms`, `task_terms`)
 - `# ` prefix mode is deprecated and no longer required for heading results.
 - Typing `:` switches to command mode.
+
+### Index sync requirement
+
+When note search fields are added or changed, production must run:
+
+- `php artisan scout:sync-index-settings`
+- `php artisan scout:import "App\Models\Note"`
+
+Without this reindex step, new searchable note fields will not appear in palette results yet.
 
 ## Commands
 

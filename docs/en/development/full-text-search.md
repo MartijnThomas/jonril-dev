@@ -45,9 +45,9 @@ section: Development
   - `content_text`
   - with scoped status filters mapped to `search_status`
 
-### Gap: props coverage in note index
+### Note props coverage in note index
 
-`NoteSearchExtractor` already extracts:
+`NoteSearchExtractor` extracts and `Note::toSearchableArray()` now publishes:
 
 - `mentions`
 - `hashtags`
@@ -55,7 +55,7 @@ section: Development
 - `property_terms`
 - `task_terms`
 
-But `Note::toSearchableArray()` currently does not publish these fields in the `notes` index payload, so command search cannot match note properties/tags/mention metadata reliably yet.
+This means command search can now match note metadata/properties (for example tags, participants mentions, and other property values) through the `notes` index.
 
 ---
 
@@ -160,18 +160,17 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
 - Tune ranking/searchable attributes (title/path stronger than content if desired).
 - Add acceptance tests for expected ranking order on common queries.
 
-### 4. Close note props indexing gap
-- Add to `Note::toSearchableArray()`:
+### 4. Keep props indexing in sync
+- Ensure `config/scout.php` `notes.searchableAttributes` keeps:
   - `mentions`
   - `hashtags`
   - `tags`
   - `property_terms`
   - `task_terms`
-- Update `config/scout.php` `notes.searchableAttributes` to include these fields.
-- Re-sync and backfill:
+- Deploy/reindex when settings or payload shape change:
   - `php artisan scout:sync-index-settings`
   - `php artisan scout:import "App\Models\Note"`
-- Add feature coverage for command search matching by properties (context/tags/participants mentions).
+- Keep feature coverage for command search matching by properties (context/tags/participants mentions).
 
 ---
 
