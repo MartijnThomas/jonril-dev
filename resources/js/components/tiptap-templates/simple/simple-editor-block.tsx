@@ -144,7 +144,7 @@ function MeetingEventMeta({
                                     ? '+ deelnemers toevoegen'
                                     : '+ add participants'
                             }
-                            className="h-8 rounded-sm bg-muted/30 px-1 text-[0.82rem]"
+                            className="!w-auto h-8 max-w-full rounded-sm bg-muted/30 px-1 text-[0.82rem]"
                         />
                         <button
                             type="button"
