@@ -146,7 +146,7 @@ class Note extends Model
     {
         $pathSegments = $this->pathSegments();
         array_pop($pathSegments);
-        $extracted = app(NoteSearchExtractor::class)->extract($this->content);
+        $extracted = app(NoteSearchExtractor::class)->extract($this->content, $this->properties);
         $headings = $extracted['heading_terms'] ?? [];
         $headingsWithLevel = collect($headings)
             ->map(function ($heading) use ($extracted): string {
@@ -171,6 +171,11 @@ class Note extends Model
             'headings_with_level' => $headingsWithLevel,
             'heading_block_ids' => $extracted['heading_block_ids'] ?? [],
             'content_text' => $extracted['content_text'] ?? '',
+            'mentions' => $extracted['mentions'] ?? [],
+            'hashtags' => $extracted['hashtags'] ?? [],
+            'tags' => $extracted['tags'] ?? [],
+            'property_terms' => $extracted['property_terms'] ?? [],
+            'task_terms' => $extracted['task_terms'] ?? [],
             'icon' => $this->icon,
             'icon_color' => $this->icon_color,
             'icon_bg' => $this->icon_bg,

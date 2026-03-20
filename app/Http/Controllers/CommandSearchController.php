@@ -410,6 +410,11 @@ class CommandSearchController extends Controller
                 'headings_with_level',
                 'heading_block_ids',
                 'content_text',
+                'mentions',
+                'hashtags',
+                'tags',
+                'property_terms',
+                'task_terms',
                 'type',
                 'journal_granularity',
                 'icon',
@@ -425,6 +430,11 @@ class CommandSearchController extends Controller
                 $includeNotes ? 'journal_path_en' : null,
                 $includeHeadings ? 'headings' : null,
                 $includeNotes ? 'content_text' : null,
+                $includeNotes ? 'mentions' : null,
+                $includeNotes ? 'hashtags' : null,
+                $includeNotes ? 'tags' : null,
+                $includeNotes ? 'property_terms' : null,
+                $includeNotes ? 'task_terms' : null,
             ])),
         ];
 
@@ -495,6 +505,21 @@ class CommandSearchController extends Controller
             return 'heading';
         }
         if (isset($positions['content_text'])) {
+            return 'content';
+        }
+        if (isset($positions['mentions'])) {
+            return 'content';
+        }
+        if (isset($positions['hashtags'])) {
+            return 'content';
+        }
+        if (isset($positions['tags'])) {
+            return 'content';
+        }
+        if (isset($positions['property_terms'])) {
+            return 'content';
+        }
+        if (isset($positions['task_terms'])) {
             return 'content';
         }
 
@@ -640,6 +665,11 @@ class CommandSearchController extends Controller
         }
 
         if ($matchSource === 'content') {
+            $propertyMatch = $this->propertyMatchSnippetFromHit($hit);
+            if ($propertyMatch !== null) {
+                return $propertyMatch;
+            }
+
             return $this->contentSnippetFromHit($hit, $query);
         }
 
@@ -742,6 +772,30 @@ class CommandSearchController extends Controller
 
         if (isset($first['start']) && is_numeric($first['start'])) {
             return (int) $first['start'];
+        }
+
+        return null;
+    }
+
+    private function propertyMatchSnippetFromHit(array $hit): ?string
+    {
+        $positions = $hit['_matchesPosition'] ?? null;
+        if (! is_array($positions)) {
+            return null;
+        }
+
+        foreach (['mentions', 'hashtags', 'tags', 'property_terms', 'task_terms'] as $field) {
+            if (! isset($positions[$field])) {
+                continue;
+            }
+
+            $value = $hit[$field] ?? null;
+            if (is_array($value) && is_string($value[0] ?? null)) {
+                return (string) $value[0];
+            }
+            if (is_string($value) && trim($value) !== '') {
+                return $value;
+            }
         }
 
         return null;

@@ -2,8 +2,16 @@
 
 test('meilisearch note indexes configure typo tolerance for command search', function (): void {
     $settings = config('scout.meilisearch.index-settings');
+    $searchableAttributes = data_get($settings, 'notes.searchableAttributes');
 
     expect(data_get($settings, 'notes.typoTolerance.enabled'))->toBeTrue()
+        ->and($searchableAttributes)->toContain(
+            'mentions',
+            'hashtags',
+            'tags',
+            'property_terms',
+            'task_terms',
+        )
         ->and(data_get($settings, 'notes.typoTolerance.minWordSizeForTypos.oneTypo'))->toBe(3)
         ->and(data_get($settings, 'notes.typoTolerance.minWordSizeForTypos.twoTypos'))->toBe(7)
         ->and(data_get($settings, 'note_tasks.typoTolerance.enabled'))->toBeTrue()

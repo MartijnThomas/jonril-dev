@@ -148,6 +148,11 @@ return [
                     'journal_path_en',
                     'headings',
                     'content_text',
+                    'mentions',
+                    'hashtags',
+                    'tags',
+                    'property_terms',
+                    'task_terms',
                 ],
                 'typoTolerance' => [
                     'enabled' => true,

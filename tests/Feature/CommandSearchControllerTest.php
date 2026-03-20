@@ -97,6 +97,40 @@ test('command search returns note results and excludes journal by default', func
         ->not->toContain($slugOnly->id);
 });
 
+test('command search can find notes by property terms', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $slug = $workspace?->slug;
+
+    $matching = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Meeting prep',
+        'properties' => [
+            'participants' => ['@andriette', '@aida'],
+        ],
+    ]);
+
+    $nonMatching = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Roadmap',
+        'properties' => [
+            'participants' => ['@john'],
+        ],
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=andriette")
+        ->assertOk()
+        ->assertJsonPath('mode', 'notes');
+
+    $ids = collect($response->json('items'))->pluck('id')->all();
+
+    expect($ids)
+        ->toContain($matching->id)
+        ->not->toContain($nonMatching->id);
+});
+
 test('command search returns heading results with anchor links', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
