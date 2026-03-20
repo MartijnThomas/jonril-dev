@@ -97,23 +97,10 @@ function MeetingEventMeta({
     onParticipantsChange: (value: string) => void;
     onPersistParticipant: (value: string) => Promise<string[]>;
 }) {
-    const [showInlineParticipantsEditor, setShowInlineParticipantsEditor] = useState(false);
     const participantInputRef = useRef<HTMLInputElement | null>(null);
     const participants = parseParticipants(participantsValue);
     const timeLabel = formatMeetingTimeRange(event.starts_at, event.ends_at, language);
     const shouldRenderMeta = Boolean(timeLabel || event.location || participants.length > 0);
-
-    useEffect(() => {
-        if (!showInlineParticipantsEditor) {
-            return;
-        }
-
-        const frame = requestAnimationFrame(() => {
-            participantInputRef.current?.focus();
-        });
-
-        return () => cancelAnimationFrame(frame);
-    }, [showInlineParticipantsEditor]);
 
     if (!shouldRenderMeta) return null;
 
@@ -135,61 +122,41 @@ function MeetingEventMeta({
                     <span className="text-[0.82rem]">{event.location}</span>
                 </div>
             ) : null}
-            {participants.length > 0 ? (
-                <div className="flex items-baseline gap-3 text-muted-foreground">
-                    <span className="w-16 shrink-0 whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
-                        {language === 'nl' ? 'Wie' : 'Who'}
-                    </span>
-                    <span className="flex flex-wrap items-center gap-1">
-                        {participants.map((participant) => (
-                            <span
-                                key={participant}
-                                className="inline-flex items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                            >
-                                @{participant}
-                            </span>
-                        ))}
-                    </span>
-                </div>
-            ) : (
-                <div className="flex items-baseline gap-3 text-muted-foreground">
-                    <span className="w-16 shrink-0 whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
-                        {language === 'nl' ? 'Wie' : 'Who'}
-                    </span>
-                    <div className="min-w-[15rem]">
-                        {!showInlineParticipantsEditor ? (
-                            <button
-                                type="button"
-                                onClick={() => setShowInlineParticipantsEditor(true)}
-                                className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground/80 hover:bg-muted hover:text-foreground"
-                            >
-                                <Plus className="size-3" />
-                                {language === 'nl' ? 'Deelnemers toevoegen' : 'Add participants'}
-                            </button>
-                        ) : (
-                            <TokenPropertyInput
-                                mode="participants"
-                                inputRef={(element) => {
-                                    participantInputRef.current = element;
-                                }}
-                                value={participantsValue}
-                                onChange={onParticipantsChange}
-                                onPersist={async (_kind, value) =>
-                                    onPersistParticipant(value)
-                                }
-                                options={participantOptions}
-                                placeholder="@participant1, @participant2"
-                                onBlur={() => {
-                                    if (parseParticipants(participantsValue).length === 0) {
-                                        setShowInlineParticipantsEditor(false);
-                                    }
-                                }}
-                                className="h-8 rounded-sm bg-transparent px-0 text-[0.82rem]"
-                            />
-                        )}
+            <div className="flex items-start gap-3 text-muted-foreground">
+                <span className="w-16 shrink-0 whitespace-nowrap pt-1 text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
+                    {language === 'nl' ? 'Wie' : 'Who'}
+                </span>
+                <div className="min-w-[15rem]">
+                    <div className="flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={() => participantInputRef.current?.focus()}
+                            className="inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-xs text-muted-foreground/80 hover:bg-muted hover:text-foreground"
+                            aria-label={language === 'nl' ? 'Deelnemer toevoegen' : 'Add participant'}
+                        >
+                            <Plus className="size-3" />
+                        </button>
+                        <TokenPropertyInput
+                            mode="participants"
+                            inputRef={(element) => {
+                                participantInputRef.current = element;
+                            }}
+                            value={participantsValue}
+                            onChange={onParticipantsChange}
+                            onPersist={async (_kind, value) =>
+                                onPersistParticipant(value)
+                            }
+                            options={participantOptions}
+                            placeholder={
+                                language === 'nl'
+                                    ? '+ deelnemers toevoegen'
+                                    : '+ add participants'
+                            }
+                            className="h-8 rounded-sm bg-muted/30 px-1 text-[0.82rem]"
+                        />
                     </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 }
