@@ -86,7 +86,7 @@ const isPropertyVisibilityMetaKey = (key: string) =>
 
 const isDefaultVisibleProperty = (key: string) => {
     const normalized = key.trim().toLowerCase();
-    return normalized === 'context' || normalized === 'participants' || normalized === 'tags';
+    return normalized === 'context' || normalized === 'tags';
 };
 
 const normalizeTokenValue = (value: string) =>
