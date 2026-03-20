@@ -1154,6 +1154,10 @@
 .simple-editor-content .tiptap.ProseMirror.simple-editor .md-highlight,
 .simple-editor-content .tiptap.ProseMirror.simple-editor mark {
     color: inherit;
+    background-color: var(--tt-color-highlight-yellow);
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor mark[data-color] {
     background-color: transparent;
 }
 
