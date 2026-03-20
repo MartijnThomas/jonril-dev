@@ -7,11 +7,11 @@ import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
+import { MeetingNotesSidebar } from '@/components/meeting-notes-sidebar';
 import {
     NoteRelatedPanel,
     NoteRelatedPanelPlaceholder,
 } from '@/components/note-related-panel';
-import { MeetingNotesSidebar } from '@/components/meeting-notes-sidebar';
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
 import type { DocumentPropertiesValue } from '@/components/tiptap-properties/document-properties';
 import {
@@ -49,6 +49,17 @@ type MeetingEventData = {
     location: string | null;
 };
 
+function parseParticipants(value: string | null | undefined): string[] {
+    if (!value) {
+        return [];
+    }
+
+    return value
+        .split(',')
+        .map((entry) => entry.trim().replace(/^@/, ''))
+        .filter((entry) => entry !== '');
+}
+
 function formatMeetingTimeRange(
     startsAt: string | null | undefined,
     endsAt: string | null | undefined,
@@ -69,9 +80,17 @@ function formatMeetingTimeRange(
     return `${dateStr} · ${startTime}`;
 }
 
-function MeetingEventMeta({ event, language }: { event: MeetingEventData; language: 'nl' | 'en' }) {
+function MeetingEventMeta({
+    event,
+    language,
+    participants,
+}: {
+    event: MeetingEventData;
+    language: 'nl' | 'en';
+    participants: string[];
+}) {
     const timeLabel = formatMeetingTimeRange(event.starts_at, event.ends_at, language);
-    if (!timeLabel && !event.location) return null;
+    if (!timeLabel && !event.location && participants.length === 0) return null;
 
     return (
         <div className="mt-3 mb-1 flex flex-col gap-1.5 text-sm">
@@ -89,6 +108,16 @@ function MeetingEventMeta({ event, language }: { event: MeetingEventData; langua
                         {language === 'nl' ? 'Waar' : 'Where'}
                     </span>
                     <span className="text-[0.82rem]">{event.location}</span>
+                </div>
+            ) : null}
+            {participants.length > 0 ? (
+                <div className="flex items-baseline gap-3 text-muted-foreground">
+                    <span className="w-16 shrink-0 whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
+                        {language === 'nl' ? 'Wie' : 'Who'}
+                    </span>
+                    <span className="text-[0.82rem]">
+                        {participants.map((participant) => `@${participant}`).join(', ')}
+                    </span>
                 </div>
             ) : null}
         </div>
@@ -273,6 +302,10 @@ function SimpleEditorComponent({
         workspaceSuggestions?.mentions ?? EMPTY_SUGGESTIONS;
     const hashtagSuggestions =
         workspaceSuggestions?.hashtags ?? EMPTY_SUGGESTIONS;
+    const meetingParticipants = useMemo(
+        () => parseParticipants(documentProperties.participants),
+        [documentProperties.participants],
+    );
 
     const previousNoteIdRef = useRef<string | null>(null);
     const previousLoadedContentSerializedRef = useRef<string>('');
@@ -691,7 +724,11 @@ function SimpleEditorComponent({
                     <div className="mx-auto w-full max-w-3xl">
                         <div className="px-8">
                             {meetingEvent && noteType === 'meeting' ? (
-                                <MeetingEventMeta event={meetingEvent} language={language} />
+                                <MeetingEventMeta
+                                    event={meetingEvent}
+                                    language={language}
+                                    participants={meetingParticipants}
+                                />
                             ) : null}
                             <EditorContent
                                 editor={editor}

@@ -52,6 +52,7 @@ const DEFAULT_PROPERTY_OPTIONS = [
     'icon-color',
     'icon-bg',
     'context',
+    'participants',
     'tags',
     'project',
 ] as const;
@@ -86,7 +87,7 @@ const isPropertyVisibilityMetaKey = (key: string) =>
 
 const isDefaultVisibleProperty = (key: string) => {
     const normalized = key.trim().toLowerCase();
-    return normalized === 'context' || normalized === 'tags';
+    return normalized === 'context' || normalized === 'participants' || normalized === 'tags';
 };
 
 const normalizeTokenValue = (value: string) =>
@@ -117,7 +118,7 @@ const splitTags = (value: string) =>
         .filter(Boolean);
 
 type TokenPropertyInputProps = {
-    mode: 'context' | 'tags';
+    mode: 'context' | 'participants' | 'tags';
     value: string;
     onChange: (next: string) => void;
     onPersist: (kind: 'mention' | 'hashtag', value: string) => Promise<string[]>;
@@ -144,24 +145,23 @@ function TokenPropertyInput({
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const isTags = mode === 'tags';
+    const isParticipants = mode === 'participants';
+    const isMultiToken = isTags || isParticipants;
     const char = isTags ? '#' : '@';
 
     const selectedTokens = useMemo(() => {
-        if (isTags) {
+        if (isMultiToken) {
             return splitTags(value);
         }
 
         const normalized = normalizeTokenValue(value);
         return normalized ? [normalized] : [];
-    }, [isTags, value]);
+    }, [isMultiToken, value]);
 
     const currentQuery = normalizeTokenValue(query);
 
     const filteredOptions = useMemo(() => {
-        const selected =
-            isTags
-                ? new Set(selectedTokens.map((item) => item.toLowerCase()))
-                : new Set(selectedTokens.map((item) => item.toLowerCase()));
+        const selected = new Set(selectedTokens.map((item) => item.toLowerCase()));
         const queryLower = currentQuery.toLowerCase();
 
         return options
@@ -169,7 +169,7 @@ function TokenPropertyInput({
                 option.toLowerCase().includes(queryLower),
             )
             .filter((option) => !selected.has(option.toLowerCase()));
-    }, [currentQuery, isTags, options, selectedTokens]);
+    }, [currentQuery, options, selectedTokens]);
 
     const canCreate =
         isValidTokenValue(currentQuery) &&
@@ -178,7 +178,7 @@ function TokenPropertyInput({
         );
 
     const applyValue = (token: string) => {
-        if (!isTags) {
+        if (!isMultiToken) {
             onChange(token);
             setQuery('');
             setOpen(false);
@@ -208,7 +208,7 @@ function TokenPropertyInput({
     const handleBlur = () => {
         if (currentQuery && isValidTokenValue(currentQuery)) {
             void persistAndApply(currentQuery);
-        } else if (isTags) {
+        } else if (isMultiToken) {
             onChange(selectedTokens.join(', '));
         }
 
@@ -219,7 +219,7 @@ function TokenPropertyInput({
     };
 
     const removeToken = (token: string) => {
-        if (!isTags) {
+        if (!isMultiToken) {
             onChange('');
             return;
         }
@@ -303,7 +303,7 @@ function TokenPropertyInput({
                                 event.key === 'Backspace' &&
                                 query === '' &&
                                 selectedTokens.length > 0 &&
-                                isTags
+                                isMultiToken
                             ) {
                                 removeToken(selectedTokens[selectedTokens.length - 1]);
                                 return;
@@ -655,10 +655,13 @@ export function DocumentProperties({
 
     const valueFieldMode = (
         key: string,
-    ): 'default' | 'context' | 'tags' | 'icon' => {
+    ): 'default' | 'context' | 'participants' | 'tags' | 'icon' => {
         const normalized = key.trim().toLowerCase();
         if (normalized === 'context') {
             return 'context';
+        }
+        if (normalized === 'participants') {
+            return 'participants';
         }
         if (normalized === 'tags') {
             return 'tags';
@@ -1053,7 +1056,9 @@ export function DocumentProperties({
                                             onPersist={persistWorkspaceToken}
                                             options={
                                                 fieldMode ===
-                                                'context'
+                                                'context' ||
+                                                fieldMode ===
+                                                'participants'
                                                     ? mentionOptions
                                                     : hashtagOptions
                                             }
@@ -1061,6 +1066,9 @@ export function DocumentProperties({
                                                 fieldMode ===
                                                 'context'
                                                     ? '@mention'
+                                                    : fieldMode ===
+                                                    'participants'
+                                                        ? '@participant1, @participant2'
                                                     : '#tag1, #tag2'
                                             }
                                             onKeyDown={(event) => {
@@ -1383,7 +1391,9 @@ export function DocumentProperties({
                                             onPersist={persistWorkspaceToken}
                                             options={
                                                 fieldMode ===
-                                                'context'
+                                                'context' ||
+                                                fieldMode ===
+                                                'participants'
                                                     ? mentionOptions
                                                     : hashtagOptions
                                             }
@@ -1465,6 +1475,9 @@ export function DocumentProperties({
                                                 fieldMode ===
                                                 'context'
                                                     ? '@mention'
+                                                    : fieldMode ===
+                                                    'participants'
+                                                        ? '@participant1, @participant2'
                                                     : '#tag1, #tag2'
                                             }
                                             className="h-10 rounded-md border border-border/60 bg-background px-2 text-left text-sm shadow-none focus:bg-white focus-visible:ring-0 md:h-8 md:rounded-none md:border-0 md:border-r md:border-muted-foreground/45 md:[border-right-style:dashed] md:bg-transparent md:text-xs"
