@@ -58,12 +58,12 @@ const BLOCK_NODE_OPTIONS = [
 ] as const;
 
 const HEADING_OPTIONS = [
-    { value: 'heading-1', label: 'H1', icon: Heading1 },
-    { value: 'heading-2', label: 'H2', icon: Heading2 },
-    { value: 'heading-3', label: 'H3', icon: Heading3 },
-    { value: 'heading-4', label: 'H4', icon: Heading4 },
-    { value: 'heading-5', label: 'H5', icon: Heading5 },
-    { value: 'heading-6', label: 'H6', icon: Heading6 },
+    { value: 'heading-1', label: 'Heading 1', icon: Heading1 },
+    { value: 'heading-2', label: 'Heading 2', icon: Heading2 },
+    { value: 'heading-3', label: 'Heading 3', icon: Heading3 },
+    { value: 'heading-4', label: 'Heading 4', icon: Heading4 },
+    { value: 'heading-5', label: 'Heading 5', icon: Heading5 },
+    { value: 'heading-6', label: 'Heading 6', icon: Heading6 },
 ] as const;
 
 const BLOCK_MARK_OPTIONS = [
@@ -539,7 +539,7 @@ export function BlockNodeToolbar({
                                             className="gap-2"
                                         >
                                             <Icon className="size-3.5" />
-                                            <span>{option.label}</span>
+                                            <span className="text-xs text-muted-foreground">{option.label}</span>
                                         </DropdownMenuItem>
                                     );
                                 })}
