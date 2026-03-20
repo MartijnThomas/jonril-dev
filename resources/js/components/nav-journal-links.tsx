@@ -70,12 +70,6 @@ export function NavJournalLinks() {
         };
     };
     const { isCurrentUrl } = useCurrentUrl();
-    const workspaceSlug =
-        typeof pageProps.currentWorkspace?.slug === 'string' &&
-        pageProps.currentWorkspace.slug.trim() !== ''
-            ? pageProps.currentWorkspace.slug.trim()
-            : null;
-    const journalBase = workspaceSlug ? `/w/${workspaceSlug}/journal` : '/journal';
     const today = new Date();
     const isoYear = getISOWeekYear(today);
     const isoWeek = String(getISOWeek(today)).padStart(2, '0');
@@ -118,25 +112,25 @@ export function NavJournalLinks() {
     const items = [
         {
             title: t('journal_nav.daily', 'Daily'),
-            href: `${journalBase}/daily/${format(today, 'yyyy-MM-dd')}`,
+            href: `/journal/${format(today, 'yyyy-MM-dd')}`,
             icon: DailyIcon,
             iconClassName: dailyColorClass,
         },
         {
             title: t('journal_nav.weekly', 'Weekly'),
-            href: `${journalBase}/weekly/${isoYear}-W${isoWeek}`,
+            href: `/journal/${isoYear}-W${isoWeek}`,
             icon: WeeklyIcon,
             iconClassName: weeklyColorClass,
         },
         {
             title: t('journal_nav.monthly', 'Monthly'),
-            href: `${journalBase}/monthly/${format(today, 'yyyy-MM')}`,
+            href: `/journal/${format(today, 'yyyy-MM')}`,
             icon: MonthlyIcon,
             iconClassName: monthlyColorClass,
         },
         {
             title: t('journal_nav.yearly', 'Yearly'),
-            href: `${journalBase}/yearly/${format(today, 'yyyy')}`,
+            href: `/journal/${format(today, 'yyyy')}`,
             icon: YearlyIcon,
             iconClassName: yearlyColorClass,
         },

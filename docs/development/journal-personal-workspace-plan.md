@@ -323,7 +323,12 @@ Acceptance criteria:
   - browser back returns to journal without broken state
 
 Status (2026-03-20):
-- Not started yet.
+- Implemented:
+  - Journal sidebar entry links now target canonical non-scoped `/journal/{period}` URLs.
+  - Header/FAB journal entry links now target canonical `/journal/{period}` daily URLs.
+  - Journal previous/next navigation in the note header now navigates via `/journal/{period}`.
+- Pending:
+  - Add browser tests for journal navigation/context behavior across workspace switching.
 
 
 ### Step ?: Some remarks

@@ -3,7 +3,6 @@ import { format } from 'date-fns';
 import { Calendar, CalendarDays } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { getLucideIconComponent } from '@/components/icon-picker';
-import { byPeriod } from '@/routes/journal/show';
 import { cn } from '@/lib/utils';
 
 function DailyCalendarBadge({ className, dayNumber }: { className?: string; dayNumber: string }) {
@@ -20,7 +19,6 @@ function DailyCalendarBadge({ className, dayNumber }: { className?: string; dayN
 export function AppFab({ className }: { className?: string }) {
     const page = usePage();
     const pageProps = page.props as {
-        currentWorkspace?: { slug?: string | null };
         auth?: {
             user?: {
                 settings?: {
@@ -32,13 +30,10 @@ export function AppFab({ className }: { className?: string }) {
         };
     };
 
-    const workspaceSlug = (pageProps.currentWorkspace?.slug ?? '').trim();
     const today = format(new Date(), 'yyyy-MM-dd');
     const dayNumber = format(new Date(), 'd');
 
-    const dailyNoteHref = workspaceSlug !== ''
-        ? byPeriod.url({ workspace: workspaceSlug, period: `daily/${today}` })
-        : `/journal/daily/${today}`;
+    const dailyNoteHref = `/journal/${today}`;
 
     const dailyIconName = pageProps.auth?.user?.settings?.editor?.journal_icons?.daily ?? null;
 

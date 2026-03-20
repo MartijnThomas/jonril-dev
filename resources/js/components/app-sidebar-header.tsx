@@ -21,6 +21,7 @@ function SaveStatusIcon({ status }: { status: EditorSaveStatus | null }) {
 
     useEffect(() => {
         if (prevStatusRef.current === 'saving' && status === 'ready') {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setShowSaved(true);
             const t = setTimeout(() => setShowSaved(false), 2000);
             return () => clearTimeout(t);
@@ -220,7 +221,6 @@ export function AppSidebarHeader({
         pageProps.noteType === 'journal' &&
         Boolean(pageProps.journalGranularity) &&
         Boolean(pageProps.journalPeriod);
-    const workspaceSlug = pageProps.currentWorkspace?.slug?.trim() ?? '';
 
     const navigateJournal = (direction: -1 | 1) => {
         if (
@@ -249,10 +249,7 @@ export function AppSidebarHeader({
             return;
         }
 
-        const path =
-            workspaceSlug !== ''
-                ? `/w/${workspaceSlug}/journal/${pageProps.journalGranularity}/${nextPeriod}`
-                : `/journal/${pageProps.journalGranularity}/${nextPeriod}`;
+        const path = `/journal/${nextPeriod}`;
 
         router.get(path, {}, { preserveState: false, preserveScroll: true });
     };

@@ -59,14 +59,7 @@ const activeItemStyles =
 export function AppHeader({ breadcrumbs = [] }: Props) {
     const page = usePage();
     const { auth } = page.props;
-    const workspaceSlug =
-        ((page.props as { currentWorkspace?: { slug?: string | null } })
-            .currentWorkspace?.slug ?? ''
-        ).trim();
-    const dailyNoteHref =
-        workspaceSlug !== ''
-            ? `/w/${workspaceSlug}/journal/daily/${format(new Date(), 'yyyy-MM-dd')}`
-            : `/journal/daily/${format(new Date(), 'yyyy-MM-dd')}`;
+    const dailyNoteHref = `/journal/${format(new Date(), 'yyyy-MM-dd')}`;
     const mainNavItems: NavItem[] = [
         {
             title: 'Daily note',
