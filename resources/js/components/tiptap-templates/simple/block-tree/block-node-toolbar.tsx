@@ -574,8 +574,8 @@ export function BlockNodeToolbar({
                                             variant={currentMarks.highlight ? 'default' : 'ghost'}
                                             className={
                                                 currentMarks.highlight
-                                                    ? 'h-8 rounded-md border border-border/80 bg-background px-2 text-foreground shadow-xs hover:border-border hover:bg-accent/40 hover:text-foreground'
-                                                    : 'h-8 rounded-md border border-transparent px-2 text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground'
+                                                    ? 'h-7 rounded-lg border border-border/70 bg-background px-1.5 text-foreground shadow-none hover:border-border hover:bg-accent/35 hover:text-foreground'
+                                                    : 'h-7 rounded-lg border border-transparent px-1.5 text-muted-foreground shadow-none hover:border-border/50 hover:bg-background/60 hover:text-foreground'
                                             }
                                             onPointerDown={(event) => {
                                                 const target = event.target as HTMLElement | null;
@@ -596,21 +596,21 @@ export function BlockNodeToolbar({
                                             title="Toggle default highlight or pick color"
                                             disabled={!canHighlight}
                                         >
-                                            <Highlighter className="size-4" />
+                                            <Highlighter className="size-3.5" />
                                             <span
                                                 data-highlight-picker="true"
-                                                className="ml-1 inline-flex items-center gap-1 border-l border-border/60 pl-1.5"
+                                                className="ml-1 inline-flex items-center gap-0.5 border-l border-border/50 pl-1"
                                             >
                                                 <span
                                                     aria-hidden
-                                                    className="inline-block size-2.5 rounded-full border border-border/50"
+                                                    className="inline-block size-2 rounded-full border border-border/50"
                                                     style={{
                                                         backgroundColor:
                                                             currentHighlightColor ??
                                                             DEFAULT_HIGHLIGHT_COLOR,
                                                     }}
                                                 />
-                                                <ChevronDown className="size-3 text-muted-foreground" />
+                                                <ChevronDown className="size-2.5 text-muted-foreground" />
                                             </span>
                                             <span className="sr-only">Toggle default highlight or pick color</span>
                                         </Button>
