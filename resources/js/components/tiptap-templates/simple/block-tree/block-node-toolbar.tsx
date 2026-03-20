@@ -3,7 +3,6 @@ import type { Editor } from '@tiptap/react';
 import {
     AtSign,
     Bold,
-    ChevronDown,
     Code2,
     Hash,
     Heading1,
@@ -44,8 +43,6 @@ import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -248,10 +245,6 @@ export function BlockNodeToolbar({
 
     const handleApplyHighlightColor = (color: string) => {
         editor.chain().focus().setHighlight({ color }).run();
-    };
-
-    const handleRemoveHighlight = () => {
-        editor.chain().focus().unsetHighlight().run();
     };
 
     const handleIndent = () => {
@@ -572,76 +565,79 @@ export function BlockNodeToolbar({
                             })}
 
                             <div className="flex items-center">
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={currentMarks.highlight ? 'default' : 'ghost'}
-                                    className={
-                                        currentMarks.highlight
-                                            ? `${activeSquareButtonHoverClass} rounded-r-none border-r-0`
-                                            : `${inactiveSquareButtonClass} rounded-r-none border-r-0`
-                                    }
-                                    onClick={handleToggleDefaultHighlight}
-                                    aria-pressed={currentMarks.highlight}
-                                    aria-label="Toggle default highlight"
-                                    title="Toggle default highlight"
-                                    disabled={!canHighlight}
-                                >
-                                    <Highlighter className="size-4" />
-                                    <span className="sr-only">Toggle default highlight</span>
-                                </Button>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant={currentMarks.highlight ? 'default' : 'ghost'}
-                                            className={
-                                                currentMarks.highlight
-                                                    ? `${activeSquareButtonHoverClass} rounded-l-none px-1.5`
-                                                    : `${inactiveSquareButtonClass} rounded-l-none px-1.5`
-                                            }
-                                            aria-label="Pick highlight color"
-                                            title="Pick highlight color"
-                                            disabled={!canHighlight}
-                                        >
-                                            <ChevronDown className="size-3.5" />
-                                            <span className="sr-only">Pick highlight color</span>
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start">
-                                        {HIGHLIGHT_COLOR_OPTIONS.map((option) => {
-                                            const isActiveColor =
-                                                currentHighlightColor === option.value;
+                                <div className="relative">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={currentMarks.highlight ? 'default' : 'ghost'}
+                                        className={
+                                            currentMarks.highlight
+                                                ? `${activeSquareButtonHoverClass} pr-8`
+                                                : `${inactiveSquareButtonClass} pr-8`
+                                        }
+                                        onClick={handleToggleDefaultHighlight}
+                                        aria-pressed={currentMarks.highlight}
+                                        aria-label="Toggle default highlight"
+                                        title="Toggle default highlight"
+                                        disabled={!canHighlight}
+                                    >
+                                        <Highlighter className="size-4" />
+                                        <span className="sr-only">Toggle default highlight</span>
+                                    </Button>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <button
+                                                type="button"
+                                                className="absolute inset-y-0 right-0 z-10 flex w-6 items-center justify-center rounded-r-md border-l border-border/60 bg-transparent hover:bg-accent/40"
+                                                aria-label="Pick highlight color"
+                                                title="Pick highlight color"
+                                                disabled={!canHighlight}
+                                            >
+                                                <span
+                                                    aria-hidden
+                                                    className="inline-block size-3 rounded-[3px] border border-border/60"
+                                                    style={{
+                                                        backgroundColor:
+                                                            currentHighlightColor ??
+                                                            DEFAULT_HIGHLIGHT_COLOR,
+                                                    }}
+                                                />
+                                                <span className="sr-only">Pick highlight color</span>
+                                            </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start" className="px-2 py-1.5">
+                                            <div className="flex items-center gap-1.5">
+                                                {HIGHLIGHT_COLOR_OPTIONS.map((option) => {
+                                                    const isActiveColor =
+                                                        currentHighlightColor === option.value;
 
-                                            return (
-                                                <DropdownMenuItem
-                                                    key={option.value}
-                                                    onSelect={() =>
-                                                        handleApplyHighlightColor(option.value)
-                                                    }
-                                                    className="gap-2"
-                                                >
-                                                    <span
-                                                        aria-hidden
-                                                        className="inline-block size-3 rounded-sm border border-border/60"
-                                                        style={{ backgroundColor: option.value }}
-                                                    />
-                                                    <span>{option.label}</span>
-                                                    {isActiveColor ? (
-                                                        <span className="ml-auto text-xs text-muted-foreground">
-                                                            active
-                                                        </span>
-                                                    ) : null}
-                                                </DropdownMenuItem>
-                                            );
-                                        })}
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onSelect={handleRemoveHighlight}>
-                                            Clear highlight
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                                                    return (
+                                                        <button
+                                                            key={option.value}
+                                                            type="button"
+                                                            onClick={() =>
+                                                                handleApplyHighlightColor(option.value)
+                                                            }
+                                                            className={`inline-flex size-5 items-center justify-center rounded-[4px] border ${
+                                                                isActiveColor
+                                                                    ? 'border-foreground/70'
+                                                                    : 'border-border/60'
+                                                            }`}
+                                                            aria-label={option.label}
+                                                            title={option.label}
+                                                        >
+                                                            <span
+                                                                aria-hidden
+                                                                className="inline-block size-3 rounded-[3px] border border-black/10"
+                                                                style={{ backgroundColor: option.value }}
+                                                            />
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
                             </div>
 
                             <Button
