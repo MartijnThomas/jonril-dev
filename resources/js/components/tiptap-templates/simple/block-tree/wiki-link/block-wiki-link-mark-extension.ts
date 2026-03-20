@@ -129,6 +129,12 @@ export const BlockWikiLinkMark = Mark.create<{
     },
 
     addProseMirrorPlugins() {
+        const hrefWithBlockId = (href: string, blockId: string): string => {
+            const base = href.split('#')[0] ?? href;
+
+            return `${base}#${encodeURIComponent(blockId)}`;
+        };
+
         const buildNotesByTargetPath = () => {
             const editableQueryPathForNote = (
                 note: BlockWikiLinkNote,
@@ -675,11 +681,15 @@ export const BlockWikiLinkMark = Mark.create<{
 
                         const expectedHref =
                             targetBlockId !== ''
-                                ? fallbackBlockWikiHrefFromTargetPath(
-                                      targetPath,
-                                      resolved.id,
-                                      targetBlockId,
-                                  )
+                                ? (
+                                    resolved.href
+                                        ? hrefWithBlockId(resolved.href, targetBlockId)
+                                        : fallbackBlockWikiHrefFromTargetPath(
+                                            targetPath,
+                                            resolved.id,
+                                            targetBlockId,
+                                        )
+                                )
                                 : resolved.href ||
                                   fallbackBlockWikiHrefFromTargetPath(
                                       targetPath,
@@ -741,11 +751,18 @@ export const BlockWikiLinkMark = Mark.create<{
                             const targetBlockId = matchedHeading?.id ?? null;
                             const href =
                                 targetBlockId
-                                    ? fallbackBlockWikiHrefFromTargetPath(
-                                          pending.targetPath,
-                                          resolved?.id,
-                                          targetBlockId,
-                                      )
+                                    ? (
+                                        resolved?.href
+                                            ? hrefWithBlockId(
+                                                resolved.href,
+                                                targetBlockId,
+                                            )
+                                            : fallbackBlockWikiHrefFromTargetPath(
+                                                pending.targetPath,
+                                                resolved?.id,
+                                                targetBlockId,
+                                            )
+                                    )
                                     : resolved?.href ||
                                       fallbackBlockWikiHrefFromTargetPath(
                                           pending.targetPath,
