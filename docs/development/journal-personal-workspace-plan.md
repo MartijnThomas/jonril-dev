@@ -144,3 +144,87 @@ ALTER TABLE note_links
 3. Update wiki-link resolver to search across workspaces for journal/meeting note contexts.
 4. Update backlink queries to include cross-workspace sources filtered by current user.
 5. Add `linked_note_id` to notes for meeting note subjects.
+
+---
+
+## Recommended Rollout Order
+
+To reduce risk, implement this in small, reversible slices:
+
+1. **Path 1 first (workspace-agnostic journal routing)**  
+   Keep all data in personal workspace, change only routing/context behaviour.
+2. **Cross-workspace linking second (Path 2a + 2b)**  
+   Add link/backlink cross-workspace awareness after journal context is stable.
+3. **Meeting-note subject linking last (Path 2c + 2d)**  
+   Depends on cross-workspace primitives and explicit workspace-switch UX.
+
+This order gives visible UX improvement quickly without schema-heavy changes first.
+
+---
+
+## First Steps (Implementation Sprint 1)
+
+### Step 1: Add personal workspace resolver and tests
+
+Create a single source of truth for "personal workspace for current user".
+
+- Add a helper/service (for example `App\Support\Workspaces\PersonalWorkspaceResolver`).
+- Behaviour:
+  - returns `currentWorkspace()` fallback if no `is_personal` yet
+  - once `is_personal` exists, returns `is_personal = true` workspace
+- Add tests for:
+  - user with one workspace
+  - user with multiple workspaces + one personal workspace
+  - fallback behaviour when personal flag is missing
+
+### Step 2: Introduce workspace-agnostic journal routes
+
+Add route aliases without `/w/{workspace}`:
+
+- `/journal/{granularity}/{period}`
+- `/journal/{period}`
+
+Controller behaviour:
+
+- resolve journal note via personal workspace resolver
+- do **not** mutate active workspace in user settings
+
+Keep existing `/w/{workspace}/journal/...` routes for backward compatibility during transition.
+
+### Step 3: Prevent workspace context switch on journal pages
+
+In `HandleInertiaRequests`:
+
+- detect journal routes (`journal.*`)
+- keep `currentWorkspace` based on last active workspace, not journal note workspace
+
+Acceptance criteria:
+
+- Opening a journal note never changes sidebar workspace context.
+- Returning from a shared-workspace note back to journal keeps expected context.
+
+### Step 4: Frontend journal entry point + switcher behaviour
+
+- Update sidebar journal links to use workspace-agnostic `/journal/...` routes.
+- Keep notes tree and workspace switcher state unchanged while inside journal routes.
+- Add browser tests for:
+  - open journal from workspace A, context stays A
+  - navigate to workspace B note, context switches to B
+  - browser back returns to journal without broken state
+
+---
+
+## PR Breakdown (Suggested)
+
+1. **PR A:** personal resolver + tests, no route changes.
+2. **PR B:** new `/journal/...` routes + controller wiring + middleware context guard.
+3. **PR C:** sidebar/frontend route updates + browser tests.
+4. **PR D:** cross-workspace link/backlink schema + query updates.
+
+---
+
+## Rollback Strategy
+
+- Keep old `/w/{workspace}/journal/...` routes active until PR C is stable in production.
+- Feature-flag cross-workspace backlink queries separately from route changes.
+- If issues occur, route generation can be reverted to workspace-scoped URLs without data migration rollback.
