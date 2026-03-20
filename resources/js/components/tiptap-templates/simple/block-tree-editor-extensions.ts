@@ -272,7 +272,7 @@ export function createBlockTreeEditorExtensions(
         Strike,
         Underline,
         Highlight.configure({
-            multicolor: false,
+            multicolor: true,
         }),
         UndoRedo,
         BlockHeadingCollapseExtension,

@@ -1153,7 +1153,8 @@
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor .md-highlight,
 .simple-editor-content .tiptap.ProseMirror.simple-editor mark {
-    @apply bg-green-400/10 text-green-600 dark:bg-green-400/20 dark:text-green-300;
+    color: inherit;
+    background-color: transparent;
 }
 
 .md-task-due-token {
