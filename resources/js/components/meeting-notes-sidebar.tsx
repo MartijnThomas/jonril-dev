@@ -1,9 +1,9 @@
 import { Link } from '@inertiajs/react';
-import { cn } from '@/lib/utils';
 import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import { X, CalendarDays } from 'lucide-react';
 import { TASK_STATUS_ICONS, TASK_STATUS_ORDER } from '@/lib/task-status-icons';
+import { cn } from '@/lib/utils';
 
 export type TaskCounts = {
     total?: number;

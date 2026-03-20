@@ -4,6 +4,11 @@ import { Heading } from '@tiptap/extension-heading';
 import { Paragraph } from '@tiptap/extension-paragraph';
 import { Plugin, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import {
+    findDateGhostSuffix,
+    findDateHelperBeforeCursor,
+    resolveDateKeyword,
+} from '@/components/tiptap-templates/simple/block-tree/block-tree-date-helpers';
 import { findBlockInlineTokenRanges } from '@/components/tiptap-templates/simple/block-tree/block-tree-inline-tokens';
 import {
     formatLocalizedDate,
@@ -26,11 +31,6 @@ import {
     toggleParagraphTaskAtPos,
     syncTaskParagraphStatusesFromText,
 } from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
-import {
-    findDateGhostSuffix,
-    findDateHelperBeforeCursor,
-    resolveDateKeyword,
-} from '@/components/tiptap-templates/simple/block-tree/block-tree-date-helpers';
 import { findCompleteRawWikiLinks } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 import type { CreateBlockTreeEditorExtensionsOptions } from '@/components/tiptap-templates/simple/block-tree-editor-extension-options';
 

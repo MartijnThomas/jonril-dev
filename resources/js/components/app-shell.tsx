@@ -2,11 +2,11 @@ import { usePage } from '@inertiajs/react';
 import { Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { SidebarProvider } from '@/components/ui/sidebar';
 import type { EditorVersion } from '@/contexts/editor-version-context';
 import { EditorVersionContext } from '@/contexts/editor-version-context';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSessionGuard } from '@/hooks/use-session-guard';
-import { SidebarProvider } from '@/components/ui/sidebar';
 
 type Props = {
     children: ReactNode;

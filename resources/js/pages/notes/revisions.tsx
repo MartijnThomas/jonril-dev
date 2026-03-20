@@ -14,8 +14,8 @@ import {
     resolveLongDateFormat,
     resolveTimeFormat,
 } from '@/lib/user-date-time-format';
-import type { BreadcrumbItem } from '@/types';
 import type { AppLanguage } from '@/lib/user-date-time-format';
+import type { BreadcrumbItem } from '@/types';
 
 type Revision = {
     id: string;

@@ -1,7 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
 import { format, isValid, parseISO } from 'date-fns';
-import { enUS, nl } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
+import { enUS, nl } from 'date-fns/locale';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NoteLocationCombobox } from '@/components/note-location-combobox';

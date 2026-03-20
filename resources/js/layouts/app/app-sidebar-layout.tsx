@@ -1,16 +1,16 @@
 import { usePage } from '@inertiajs/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { AppCommandPalette } from '@/components/app-command-palette';
-import { AppFab } from '@/components/app-fab';
 import { AppContent } from '@/components/app-content';
+import { AppFab } from '@/components/app-fab';
 import { AppRightSidebar } from '@/components/app-right-sidebar';
 import { AppShell } from '@/components/app-shell';
 import { AppSidebar } from '@/components/app-sidebar';
 import { AppSidebarHeader } from '@/components/app-sidebar-header';
 import { AppStatusBar } from '@/components/app-status-bar';
 import { useSidebar } from '@/components/ui/sidebar';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { AppLayoutProps } from '@/types';
 
 const EDITOR_MIN_WIDTH = 760;

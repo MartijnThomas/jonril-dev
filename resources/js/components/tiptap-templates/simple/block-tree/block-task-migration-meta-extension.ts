@@ -1,8 +1,8 @@
 import { router } from '@inertiajs/react';
-import { show, showScoped } from '@/actions/App/Http/Controllers/NotesController';
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { show, showScoped } from '@/actions/App/Http/Controllers/NotesController';
 
 type LinkableNote = {
     id: string;
