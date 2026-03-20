@@ -10,15 +10,14 @@ import type {
 } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 import {
     buildProgressiveJournalSuggestions,
+    displayPathFromNote,
     displayTitleFromTargetPath,
     deriveTargetPathFromNote,
-    editableJournalPathFromTargetPath,
     fallbackBlockWikiHrefFromTargetPath,
     findCompleteRawWikiLinks,
     normalizeHeadingText,
-    normalizeJournalTargetPath,
-    normalizeNoteTargetPath,
     parseWikiLinkQuery,
+    resolveTargetPathFromQuery,
 } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 
 export const blockWikiLinkSuggestionPluginKey = new PluginKey(
@@ -108,9 +107,10 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                     const normalized = normalizeQuery(rawPath);
                     const existingTargetPaths = new Set<string>();
                     const existingItems: BlockWikiLinkSuggestionItem[] = [];
-                    const resolvedTargetPath =
-                        normalizeJournalTargetPath(rawPath) ||
-                        normalizeNoteTargetPath(rawPath);
+                    const resolvedTargetPath = resolveTargetPathFromQuery(
+                        rawPath,
+                        this.options.notes,
+                    );
                     const noteForHeadingQuery = resolvedTargetPath
                         ? this.options.notes.find(
                               (note) =>
@@ -122,10 +122,7 @@ export const BlockWikiLinkSuggestion = Extension.create<{
 
                     this.options.notes.forEach((note) => {
                         const targetPath = deriveTargetPathFromNote(note);
-                        const subtitle =
-                            note.path ||
-                            editableJournalPathFromTargetPath(targetPath) ||
-                            targetPath;
+                        const subtitle = displayPathFromNote(note, targetPath);
 
                         if (
                             normalized &&
@@ -164,9 +161,10 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                         const headings = Array.isArray(noteForHeadingQuery.headings)
                             ? noteForHeadingQuery.headings
                             : [];
-                        const displayPath =
-                            editableJournalPathFromTargetPath(resolvedTargetPath) ||
-                            resolvedTargetPath;
+                        const displayPath = displayPathFromNote(
+                            noteForHeadingQuery,
+                            resolvedTargetPath,
+                        );
                         const headingItems = headings
                             .filter(
                                 (heading) =>
@@ -207,13 +205,10 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                               )
                             : [];
 
-                    const normalizedJournal = normalizeJournalTargetPath(rawPath);
-                    const trimmedRawPath = rawPath.trim().replace(/^\/+|\/+$/g, '');
-                    const isJournalScopedInput = trimmedRawPath.startsWith('journal/');
-                    const normalizedNote = isJournalScopedInput
-                        ? ''
-                        : normalizeNoteTargetPath(rawPath);
-                    const targetPath = normalizedJournal || normalizedNote;
+                    const targetPath = resolveTargetPathFromQuery(
+                        rawPath,
+                        this.options.notes,
+                    );
 
                     const createItem =
                         targetPath &&

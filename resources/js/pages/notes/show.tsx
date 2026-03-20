@@ -16,6 +16,7 @@ type Props = {
         id: string;
         title: string;
         path?: string;
+        editablePath?: string;
         href?: string;
         headings?: { id: string; title: string; level: number | null }[];
     }[];

@@ -772,7 +772,7 @@ class NotesController extends Controller
         $allNotes = Note::query()
             ->where('workspace_id', $workspaceId)
             ->orderBy('created_at')
-            ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity']);
+            ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity', 'journal_date']);
         $allNotesPathById = [];
         $allNotesById = $allNotes->keyBy('id');
         $resolveAllNotesPath = fn (string $id) => $this->resolveNotePath($id, $allNotesById, $allNotesPathById);
@@ -932,6 +932,17 @@ class NotesController extends Controller
                     'path' => $linkableNote->parent_id
                         ? $resolveAllNotesPath($linkableNote->parent_id)
                         : null,
+                    'editablePath' => $linkableNote->type === Note::TYPE_JOURNAL
+                        ? (
+                            $linkableNote->journalSearchPath($this->userLanguage())
+                            ?: ($linkableNote->title ?? 'Untitled')
+                        )
+                        : trim(implode(' / ', array_filter([
+                            $linkableNote->parent_id
+                                ? $resolveAllNotesPath($linkableNote->parent_id)
+                                : null,
+                            $linkableNote->title ?? 'Untitled',
+                        ], fn ($segment) => is_string($segment) && trim($segment) !== ''))),
                     'href' => $this->noteSlugService->urlFor($linkableNote),
                     'headings' => $this->extractLinkableHeadings($linkableNote),
                 ])

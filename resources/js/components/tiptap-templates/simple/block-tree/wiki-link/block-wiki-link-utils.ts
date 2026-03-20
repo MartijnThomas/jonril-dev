@@ -2,6 +2,7 @@ export type BlockWikiLinkNote = {
     id: string;
     title: string;
     path?: string;
+    editablePath?: string;
     href?: string;
     headings?: {
         id: string;
@@ -133,6 +134,79 @@ export function deriveTargetPathFromNote(note: BlockWikiLinkNote): string {
     }
 
     return note.id;
+}
+
+function toPathDisplay(value: string): string {
+    return value.trim().replace(/\s+/g, ' ');
+}
+
+function normalizePathLike(value: string): string {
+    return value
+        .toLowerCase()
+        .split(/[/>]+/g)
+        .flatMap((segment) => segment.split('/'))
+        .map((segment) => slugifySegment(segment))
+        .filter((segment) => segment.length > 0)
+        .join('/');
+}
+
+export function displayPathFromNote(
+    note: BlockWikiLinkNote,
+    targetPath: string,
+): string {
+    const editablePath = toPathDisplay(note.editablePath ?? '');
+    if (editablePath !== '') {
+        return editablePath;
+    }
+
+    const resolvedPath = toPathDisplay(note.path ?? '');
+    const resolvedTitle = toPathDisplay(note.title);
+
+    if (resolvedPath !== '') {
+        return `${resolvedPath} / ${resolvedTitle}`;
+    }
+
+    return (
+        editableJournalPathFromTargetPath(targetPath) ||
+        targetPath
+    );
+}
+
+export function resolveTargetPathFromQuery(
+    rawPath: string,
+    notes: BlockWikiLinkNote[],
+): string | null {
+    const normalizedJournal = normalizeJournalTargetPath(rawPath);
+    if (normalizedJournal) {
+        return normalizedJournal;
+    }
+
+    const trimmedRawPath = rawPath.trim().replace(/^\/+|\/+$/g, '');
+    if (trimmedRawPath === '') {
+        return null;
+    }
+
+    const normalizedPathQuery = normalizePathLike(rawPath);
+    if (normalizedPathQuery === '') {
+        return null;
+    }
+
+    for (const note of notes) {
+        const targetPath = deriveTargetPathFromNote(note);
+        const displayPath = displayPathFromNote(note, targetPath);
+        if (normalizePathLike(displayPath) === normalizedPathQuery) {
+            return targetPath;
+        }
+    }
+
+    if (!trimmedRawPath.startsWith('journal/')) {
+        const normalizedNote = normalizeNoteTargetPath(rawPath);
+        if (normalizedNote !== '') {
+            return normalizedNote;
+        }
+    }
+
+    return null;
 }
 
 export function slugifySegment(value: string): string {
@@ -530,9 +604,7 @@ export function buildBlockWikiLinkSuggestions(
     const normalized = normalizeQuery(rawPath);
     const existingTargetPaths = new Set<string>();
     const existingItems: BlockWikiLinkSuggestionItem[] = [];
-    const resolvedTargetPath =
-        normalizeJournalTargetPath(rawPath) ||
-        normalizeNoteTargetPath(rawPath);
+    const resolvedTargetPath = resolveTargetPathFromQuery(rawPath, notes);
     const noteForHeadingQuery = resolvedTargetPath
         ? notes.find(
             (note) =>
@@ -544,10 +616,7 @@ export function buildBlockWikiLinkSuggestions(
 
     notes.forEach((note) => {
         const targetPath = deriveTargetPathFromNote(note);
-        const subtitle =
-            note.path ||
-            editableJournalPathFromTargetPath(targetPath) ||
-            targetPath;
+        const subtitle = displayPathFromNote(note, targetPath);
 
         if (
             normalized &&
@@ -587,9 +656,10 @@ export function buildBlockWikiLinkSuggestions(
         const headings = Array.isArray(noteForHeadingQuery.headings)
             ? noteForHeadingQuery.headings
             : [];
-        const displayPath =
-            editableJournalPathFromTargetPath(resolvedTargetPath) ||
-            resolvedTargetPath;
+        const displayPath = displayPathFromNote(
+            noteForHeadingQuery,
+            resolvedTargetPath,
+        );
         const headingItems = headings
             .filter(
                 (heading) =>
@@ -630,13 +700,7 @@ export function buildBlockWikiLinkSuggestions(
             )
             : [];
 
-    const normalizedJournal = normalizeJournalTargetPath(rawPath);
-    const trimmedRawPath = rawPath.trim().replace(/^\/+|\/+$/g, '');
-    const isJournalScopedInput = trimmedRawPath.startsWith('journal/');
-    const normalizedNote = isJournalScopedInput
-        ? ''
-        : normalizeNoteTargetPath(rawPath);
-    const targetPath = normalizedJournal || normalizedNote;
+    const targetPath = resolveTargetPathFromQuery(rawPath, notes);
 
     const createItem =
         targetPath &&

@@ -14,6 +14,7 @@ export type SimpleEditorProps = {
         id: string;
         title: string;
         path?: string;
+        editablePath?: string;
         href?: string;
         headings?: {
             id: string;
