@@ -2394,7 +2394,7 @@ test('toggling a daily task updates persisted checked state reflected on daily n
 
     $this
         ->actingAs($user)
-        ->get('/journal/daily/2026-03-07')
+        ->get('/journal/2026-03-07')
         ->assertInertia(fn (Assert $page) => $page
             ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
                 ->has('relatedTasks', 1)

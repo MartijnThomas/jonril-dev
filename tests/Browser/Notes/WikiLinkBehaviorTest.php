@@ -461,6 +461,8 @@ it('supports quote block flow for indent enter enter text and backspace dedent',
     expect($step5['text'] ?? '')->toContain('Nested text');
 
     placeCursorAtStartOfParagraphContaining($page, 'Nested text');
+    $page->keys('.tiptap.ProseMirror.simple-editor', 'Home');
+    $page->wait(0.1);
     $page->keys('.tiptap.ProseMirror.simple-editor', 'Backspace');
     $page->wait(0.15);
 

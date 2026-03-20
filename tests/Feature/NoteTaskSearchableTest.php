@@ -31,6 +31,7 @@ test('note task searchable payload contains scout fields', function (): void {
         'mentions' => ['lea'],
         'workspace_slug' => 'workspace',
         'block_id' => null,
+        'section_heading' => null,
         'href' => '/w/workspace/notes/note-1',
         'note_href' => '/w/workspace/notes/note-1',
         'note_display_title' => 'Daily',

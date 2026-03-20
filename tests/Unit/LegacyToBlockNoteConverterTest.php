@@ -2,6 +2,9 @@
 
 use App\Models\Note;
 use App\Support\Notes\LegacyToBlockNoteConverter;
+use Tests\TestCase;
+
+uses(TestCase::class);
 
 it('converts a legacy document fixture with mixed nodes into block document nodes', function () {
     $converter = new LegacyToBlockNoteConverter;

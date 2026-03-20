@@ -52,9 +52,13 @@ test('resolver falls back to current workspace when personal workspace flag is m
         $user->id => ['role' => 'owner'],
     ]);
 
-    $originalWorkspace?->forceFill([
-        'is_personal' => false,
-    ])->save();
+    if ($originalWorkspace) {
+        Workspace::query()
+            ->whereKey($originalWorkspace->id)
+            ->update([
+                'is_personal' => false,
+            ]);
+    }
 
     $user->forceFill([
         'settings' => [
