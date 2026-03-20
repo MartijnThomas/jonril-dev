@@ -44,6 +44,7 @@ import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -54,6 +55,9 @@ const BLOCK_NODE_OPTIONS = [
     { value: 'ordered', label: 'Ordered list item', icon: ListOrdered },
     { value: 'quote', label: 'Block quote', icon: Quote },
     { value: 'code-block', label: 'Code block', icon: SquareCode },
+] as const;
+
+const HEADING_OPTIONS = [
     { value: 'heading-1', label: 'H1', icon: Heading1 },
     { value: 'heading-2', label: 'H2', icon: Heading2 },
     { value: 'heading-3', label: 'H3', icon: Heading3 },
@@ -462,11 +466,15 @@ export function BlockNodeToolbar({
     const currentBlock = getCurrentBlockNode(editor);
     const isParagraphBlock = currentBlock?.type === 'paragraph';
     const squareButtonBaseClass =
-        'size-8 rounded-md p-0 [&>svg]:size-4';
-    const activeSquareButtonClass = `${squareButtonBaseClass} border border-border/80 bg-background text-foreground shadow-xs`;
+        'size-7 rounded-lg p-0 [&>svg]:size-3.5';
+    const activeSquareButtonClass = `${squareButtonBaseClass} border border-violet-200 bg-violet-100 text-violet-600 shadow-none`;
     const activeSquareButtonHoverClass =
-        `${activeSquareButtonClass} hover:border-border hover:bg-accent/40 hover:text-foreground`;
-    const inactiveSquareButtonClass = `${squareButtonBaseClass} border border-transparent text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground`;
+        `${activeSquareButtonClass} hover:bg-muted`;
+    const inactiveSquareButtonClass = `${squareButtonBaseClass} border border-transparent text-muted-foreground hover:bg-muted hover:text-foreground`;
+    const currentHeadingOption = HEADING_OPTIONS.find((option) => option.value === currentValue) ?? null;
+    const HeadingIcon = currentHeadingOption?.icon ?? Heading1;
+    const headingButtonLabel = currentHeadingOption?.label ?? 'Headings';
+    const isHeadingActive = currentHeadingOption !== null;
 
     const hasMeetingToggle = hasMeetingNotes && !showMeetingNotes;
 
@@ -500,6 +508,43 @@ export function BlockNodeToolbar({
                                 </Button>
                             );
                         })}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={
+                                        isHeadingActive
+                                            ? `${activeSquareButtonHoverClass} w-auto gap-1 px-2`
+                                            : `${inactiveSquareButtonClass} w-auto gap-1 px-2`
+                                    }
+                                    aria-pressed={isHeadingActive}
+                                    aria-label="Headings"
+                                    title="Headings"
+                                >
+                                    <HeadingIcon className="size-3.5" />
+                                    <ChevronDown className="size-3 text-muted-foreground" />
+                                    <span className="sr-only">{headingButtonLabel}</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                {HEADING_OPTIONS.map((option) => {
+                                    const Icon = option.icon;
+
+                                    return (
+                                        <DropdownMenuItem
+                                            key={option.value}
+                                            onSelect={() => handleValueChange(option.value)}
+                                            className="gap-2"
+                                        >
+                                            <Icon className="size-3.5" />
+                                            <span>{option.label}</span>
+                                        </DropdownMenuItem>
+                                    );
+                                })}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         </div>
 
                         <div className="h-6 w-px bg-border/60" />
@@ -547,7 +592,7 @@ export function BlockNodeToolbar({
                                         key={option.value}
                                         type="button"
                                         size="sm"
-                                        variant={isActive ? 'default' : 'ghost'}
+                                        variant="ghost"
                                         className={
                                             isActive
                                                 ? activeSquareButtonHoverClass
@@ -658,7 +703,7 @@ export function BlockNodeToolbar({
                             <Button
                                 type="button"
                                 size="sm"
-                                variant={editor.isActive('link') ? 'default' : 'ghost'}
+                                variant="ghost"
                                 className={
                                     editor.isActive('link')
                                         ? activeSquareButtonHoverClass
