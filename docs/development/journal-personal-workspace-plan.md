@@ -251,6 +251,14 @@ Status (2026-03-20):
 - For non-personal workspace journal paths, redirect to personal journal route (or 404, pick one and keep consistent).
 - Add tests proving no journal note can be created in non-personal workspaces.
 
+Status (2026-03-20):
+- Implemented:
+  - Journal show flows now resolve against personal workspace.
+  - Scoped journal URLs (`/w/{workspace}/journal/...`) redirect to the personal workspace URL when `{workspace}` is non-personal.
+  - Feature tests added for both scoped journal route variants.
+- Pending:
+  - Explicitly enforce "no journal creation in non-personal workspaces" in all remaining journal creation paths.
+
 ### Step 4: Introduce workspace-agnostic journal routes
 
 Add route aliases without `/w/{workspace}`:

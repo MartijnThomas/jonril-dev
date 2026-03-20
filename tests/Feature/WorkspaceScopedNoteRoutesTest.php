@@ -126,6 +126,56 @@ test('workspace scoped simplified journal period url resolves for workspace', fu
         ->where('journalPeriod', '2026-03'));
 });
 
+test('workspace scoped journal url redirects to personal workspace when scoped workspace is non-personal', function () {
+    $user = User::factory()->create();
+    $personalWorkspace = $user->currentWorkspace();
+
+    $otherWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+    ]);
+    $otherWorkspace->users()->syncWithoutDetaching([
+        $user->id => ['role' => 'owner'],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('journal.show', [
+            'workspace' => $otherWorkspace->slug,
+            'granularity' => 'daily',
+            'period' => '2026-03-10',
+        ], absolute: false))
+        ->assertRedirect(route('journal.show', [
+            'workspace' => $personalWorkspace?->slug,
+            'granularity' => 'daily',
+            'period' => '2026-03-10',
+        ], absolute: false));
+});
+
+test('workspace scoped simplified journal period url redirects to personal workspace when scoped workspace is non-personal', function () {
+    $user = User::factory()->create();
+    $personalWorkspace = $user->currentWorkspace();
+
+    $otherWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+    ]);
+    $otherWorkspace->users()->syncWithoutDetaching([
+        $user->id => ['role' => 'owner'],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('journal.show.by-period', [
+            'workspace' => $otherWorkspace->slug,
+            'period' => '2026-03',
+        ], absolute: false))
+        ->assertRedirect(route('journal.show.by-period', [
+            'workspace' => $personalWorkspace?->slug,
+            'period' => '2026-03',
+        ], absolute: false));
+});
+
 test('workspace scoped note url returns 403 for non member workspace', function () {
     $owner = User::factory()->create();
     $outsider = User::factory()->create();

@@ -15,6 +15,7 @@ use App\Support\Notes\NoteRelatedPanelBuilder;
 use App\Support\Notes\NoteRevisionRecorder;
 use App\Support\Notes\NoteSlugService;
 use App\Support\Notes\NoteTitleExtractor;
+use App\Support\Workspaces\PersonalWorkspaceResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,6 +35,7 @@ class NotesController extends Controller
         private readonly JournalNoteService $journalNoteService,
         private readonly NoteRelatedPanelBuilder $noteRelatedPanelBuilder,
         private readonly LegacyToBlockNoteConverter $legacyToBlockNoteConverter,
+        private readonly PersonalWorkspaceResolver $personalWorkspaceResolver,
     ) {}
 
     public function start(Request $request)
@@ -251,7 +253,7 @@ class NotesController extends Controller
     {
         return $this->showJournalForWorkspace(
             request: $request,
-            workspace: $this->currentWorkspace(),
+            workspace: $this->personalWorkspace(),
             granularity: $granularity,
             period: $period,
         );
@@ -261,9 +263,18 @@ class NotesController extends Controller
     {
         $this->assertWorkspaceMembership($workspace);
 
+        $personalWorkspace = $this->personalWorkspace();
+        if ($workspace->id !== $personalWorkspace->id) {
+            return redirect()->route('journal.show', [
+                'workspace' => $personalWorkspace->slug,
+                'granularity' => $granularity,
+                'period' => $period,
+            ]);
+        }
+
         return $this->showJournalForWorkspace(
             request: $request,
-            workspace: $workspace,
+            workspace: $personalWorkspace,
             granularity: $granularity,
             period: $period,
         );
@@ -276,7 +287,7 @@ class NotesController extends Controller
 
         return $this->showJournalForWorkspace(
             request: $request,
-            workspace: $this->currentWorkspace(),
+            workspace: $this->personalWorkspace(),
             granularity: $granularity,
             period: $period,
         );
@@ -288,9 +299,17 @@ class NotesController extends Controller
         $granularity = $this->resolveJournalGranularityFromPeriod($period);
         abort_if($granularity === null, 404);
 
+        $personalWorkspace = $this->personalWorkspace();
+        if ($workspace->id !== $personalWorkspace->id) {
+            return redirect()->route('journal.show.by-period', [
+                'workspace' => $personalWorkspace->slug,
+                'period' => $period,
+            ]);
+        }
+
         return $this->showJournalForWorkspace(
             request: $request,
-            workspace: $workspace,
+            workspace: $personalWorkspace,
             granularity: $granularity,
             period: $period,
         );
@@ -1811,6 +1830,21 @@ class NotesController extends Controller
         }
 
         $workspace = $user->currentWorkspace();
+        if (! $workspace) {
+            abort(403, 'No workspace available.');
+        }
+
+        return $workspace;
+    }
+
+    private function personalWorkspace(): Workspace
+    {
+        $user = Auth::user();
+        if (! $user) {
+            abort(403, 'No workspace available.');
+        }
+
+        $workspace = $this->personalWorkspaceResolver->resolveFor($user);
         if (! $workspace) {
             abort(403, 'No workspace available.');
         }
