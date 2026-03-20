@@ -299,7 +299,12 @@ In `HandleInertiaRequests`:
 - ensure right sidebar events on journal pages are always resolved from the personal workspace
 
 Status (2026-03-20):
-- Not started yet.
+- Implemented:
+  - Middleware now keeps `currentWorkspace` as the user's active workspace on `journal.*` routes.
+  - Shared props now include `personalWorkspace` summary for journal-context consumers.
+  - Right sidebar calendar now fetches events/sync from personal workspace while on journal pages.
+- Pending:
+  - Add dedicated backend feature tests for sidebar events endpoint behavior in journal context.
 
 Acceptance criteria:
 
@@ -319,6 +324,11 @@ Acceptance criteria:
 Status (2026-03-20):
 - Not started yet.
 
+
+### Step ?: Some remarks
+- should a user be able to attach a note from a different workspace to his/her event? And should other users be able to do this with the same note?
+
+-- should users be able to connect notes outside of the personal notes, wiki-link to notes outside personal workspace.
 ---
 
 ## PR Breakdown (Suggested)

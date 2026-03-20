@@ -6,6 +6,7 @@ use App\Models\Note;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Notes\NoteSlugService;
+use App\Support\Workspaces\PersonalWorkspaceResolver;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
@@ -17,6 +18,7 @@ class HandleInertiaRequests extends Middleware
 {
     public function __construct(
         private readonly NoteSlugService $noteSlugService,
+        private readonly PersonalWorkspaceResolver $personalWorkspaceResolver,
     ) {}
 
     /**
@@ -59,6 +61,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'workspaces' => fn () => $this->workspaceSummary($request),
             'currentWorkspace' => fn () => $this->currentWorkspaceSummary($request),
+            'personalWorkspace' => fn () => $this->personalWorkspaceSummary($request),
             'notesTree' => fn () => $this->buildNotesTree($request),
             'sidebarOpen' => $this->sidebarDefaultOpenState($request, 'left'),
             'rightSidebarOpen' => $this->sidebarDefaultOpenState($request, 'right'),
@@ -349,6 +352,10 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
+        if ($request->routeIs('journal.*')) {
+            return $user->currentWorkspace();
+        }
+
         $routeWorkspace = $request->route('workspace');
         if ($routeWorkspace instanceof Workspace) {
             $isMember = $user->workspaces()
@@ -364,6 +371,47 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $user->currentWorkspace();
+    }
+
+    /**
+     * @return array{
+     *   id: string,
+     *   name: string,
+     *   slug: string,
+     *   color: string,
+     *   timeblock_color: string|null,
+     *   icon: string,
+     *   role: string,
+     *   is_migrated_source: bool
+     * }|null
+     */
+    private function personalWorkspaceSummary(Request $request): ?array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+
+        $workspace = $this->personalWorkspaceResolver->resolveFor($user);
+        if (! $workspace) {
+            return null;
+        }
+
+        $membership = $user->workspaces()
+            ->where('workspaces.id', $workspace->id)
+            ->select('workspace_user.role')
+            ->first();
+
+        return [
+            'id' => $workspace->id,
+            'name' => $workspace->name,
+            'slug' => $workspace->slug,
+            'color' => $workspace->color,
+            'timeblock_color' => $workspace->timeblock_color,
+            'icon' => $workspace->icon,
+            'role' => (string) ($membership?->pivot->role ?? 'member'),
+            'is_migrated_source' => $workspace->isMigratedSource(),
+        ];
     }
 
     /**

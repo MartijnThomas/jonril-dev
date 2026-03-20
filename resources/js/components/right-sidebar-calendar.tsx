@@ -55,6 +55,9 @@ type JournalPageProps = {
         color?: string | null;
         timeblock_color?: string | null;
     };
+    personalWorkspace?: {
+        slug?: string | null;
+    } | null;
 };
 
 const CALENDAR_SELECTED_DAY_CLASS: Record<string, string> = {
@@ -187,6 +190,12 @@ export function RightSidebarCalendar() {
     const pageProps = usePage().props as JournalPageProps;
     const prefetchTimeoutRef = useRef<number | null>(null);
     const workspaceSlug = pageProps.currentWorkspace?.slug?.trim() ?? '';
+    const personalWorkspaceSlug = pageProps.personalWorkspace?.slug?.trim() ?? '';
+    const journalView = pageProps.noteType === 'journal';
+    const eventsWorkspaceSlug =
+        journalView && personalWorkspaceSlug !== ''
+            ? personalWorkspaceSlug
+            : workspaceSlug;
     const language = pageProps.auth?.user?.settings?.language === 'en' ? 'en' : 'nl';
     const workspaceColor = pageProps.currentWorkspace?.color ?? 'slate';
     const selectedDayClass =
@@ -232,43 +241,47 @@ export function RightSidebarCalendar() {
 
     const fetchEvents = useCallback(
         (dateParam: string | null) => {
-            if (workspaceSlug === '') {
+            if (eventsWorkspaceSlug === '') {
                 return;
             }
 
-            const url = dateParam
-                ? `/w/${workspaceSlug}/events?date=${dateParam}`
-                : `/w/${workspaceSlug}/events`;
+            function requestEvents(nextDateParam: string | null): void {
+                const url = nextDateParam
+                    ? `/w/${eventsWorkspaceSlug}/events?date=${nextDateParam}`
+                    : `/w/${eventsWorkspaceSlug}/events`;
 
-            void fetch(url, {
-                credentials: 'same-origin',
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            })
-                .then((r) => r.json())
-                .then((data: { date: string; events: SidebarEvent[]; syncing?: boolean }) => {
-                    setEvents(data.events ?? []);
-                    setEventsDate(data.date ?? null);
-
-                    if (data.syncing) {
-                        setIsSyncing(true);
-                        // Poll once after 3 s to pick up the freshly-synced events.
-                        if (syncPollRef.current !== null) {
-                            window.clearTimeout(syncPollRef.current);
-                        }
-                        syncPollRef.current = window.setTimeout(() => {
-                            syncPollRef.current = null;
-                            setIsSyncing(false);
-                            fetchEvents(dateParam);
-                        }, 3000);
-                    } else {
-                        setIsSyncing(false);
-                    }
+                void fetch(url, {
+                    credentials: 'same-origin',
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 })
-                .catch(() => {
-                    // Keep existing events on error.
-                });
+                    .then((r) => r.json())
+                    .then((data: { date: string; events: SidebarEvent[]; syncing?: boolean }) => {
+                        setEvents(data.events ?? []);
+                        setEventsDate(data.date ?? null);
+
+                        if (data.syncing) {
+                            setIsSyncing(true);
+                            // Poll once after 3 s to pick up the freshly-synced events.
+                            if (syncPollRef.current !== null) {
+                                window.clearTimeout(syncPollRef.current);
+                            }
+                            syncPollRef.current = window.setTimeout(() => {
+                                syncPollRef.current = null;
+                                setIsSyncing(false);
+                                requestEvents(nextDateParam);
+                            }, 3000);
+                        } else {
+                            setIsSyncing(false);
+                        }
+                    })
+                    .catch(() => {
+                        // Keep existing events on error.
+                    });
+            }
+
+            requestEvents(dateParam);
         },
-        [workspaceSlug],
+        [eventsWorkspaceSlug],
     );
 
     // Fetch when the anchor date changes (e.g. navigating between daily notes).
@@ -307,10 +320,7 @@ export function RightSidebarCalendar() {
             return;
         }
 
-        const path =
-            workspaceSlug !== ''
-                ? `/w/${workspaceSlug}/journal/${granularity}/${normalizedPeriod}`
-                : `/journal/${granularity}/${normalizedPeriod}`;
+        const path = `/journal/${normalizedPeriod}`;
 
         router.get(path, {}, { preserveScroll: true, preserveState: false });
     };
@@ -328,10 +338,7 @@ export function RightSidebarCalendar() {
             return;
         }
 
-        const path =
-            workspaceSlug !== ''
-                ? `/w/${workspaceSlug}/journal/${granularity}/${normalizedPeriod}`
-                : `/journal/${granularity}/${normalizedPeriod}`;
+        const path = `/journal/${normalizedPeriod}`;
 
         if (typeof (router as unknown as { prefetch?: unknown }).prefetch !== 'function') {
             return;
@@ -381,7 +388,7 @@ export function RightSidebarCalendar() {
     }, []);
 
     const refreshEvents = () => {
-        if (isRefreshing || workspaceSlug === '') {
+        if (isRefreshing || eventsWorkspaceSlug === '') {
             return;
         }
 
@@ -394,7 +401,7 @@ export function RightSidebarCalendar() {
             .slice(1)
             .join('=');
 
-        void fetch(`/w/${workspaceSlug}/calendar/refresh`, {
+        void fetch(`/w/${eventsWorkspaceSlug}/calendar/refresh`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -648,7 +655,7 @@ export function RightSidebarCalendar() {
                 dateLongFormat={pageProps.auth?.user?.settings?.date_long_format ?? null}
                 timeFormat={pageProps.auth?.user?.settings?.time_format ?? null}
                 timezone={pageProps.auth?.user?.settings?.timezone ?? null}
-                onRefresh={workspaceSlug !== '' ? refreshEvents : undefined}
+                onRefresh={eventsWorkspaceSlug !== '' ? refreshEvents : undefined}
                 isRefreshing={isRefreshing || isSyncing}
             />
         </section>

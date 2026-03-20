@@ -31,6 +31,16 @@ declare module '@inertiajs/core' {
                     journal: number;
                 };
             } | null;
+            personalWorkspace: {
+                id: string;
+                name: string;
+                slug: string;
+                color: string;
+                timeblock_color?: string | null;
+                icon: string;
+                role: string;
+                is_migrated_source?: boolean;
+            } | null;
             notesTree: SidebarNoteTreeItem[];
             noteSearchIndex: Array<{
                 id: string;

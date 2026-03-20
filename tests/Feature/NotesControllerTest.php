@@ -2006,6 +2006,36 @@ test('daily journal note uses english title and breadcrumbs when user language i
         );
 });
 
+test('journal page keeps active workspace context and exposes personal workspace summary', function () {
+    $user = User::factory()->create();
+    $personalWorkspace = $user->currentWorkspace();
+
+    $activeWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+    ]);
+    $activeWorkspace->users()->syncWithoutDetaching([
+        $user->id => ['role' => 'owner'],
+    ]);
+
+    $user->forceFill([
+        'settings' => [
+            ...(is_array($user->settings) ? $user->settings : []),
+            'workspace_id' => $activeWorkspace->id,
+        ],
+    ])->save();
+
+    $this
+        ->actingAs($user->fresh())
+        ->get('/journal/2026-03-07')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('currentWorkspace.id', $activeWorkspace->id)
+            ->where('currentWorkspace.slug', $activeWorkspace->slug)
+            ->where('personalWorkspace.id', $personalWorkspace?->id)
+            ->where('personalWorkspace.slug', $personalWorkspace?->slug),
+        );
+});
+
 test('show includes meeting children with workspace-scoped hrefs', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
