@@ -430,7 +430,7 @@ class NotesController extends Controller
 
     public function showRevisions(string $noteId): \Inertia\Response
     {
-        $note = $this->currentWorkspace()->notes()->where('id', $noteId)->firstOrFail();
+        $note = $this->resolveRevisionNote($noteId);
 
         $revisions = $note->revisions()
             ->orderByDesc('created_at')
@@ -441,7 +441,7 @@ class NotesController extends Controller
 
     public function showRevision(string $noteId, string $revisionId): \Inertia\Response
     {
-        $note = $this->currentWorkspace()->notes()->where('id', $noteId)->firstOrFail();
+        $note = $this->resolveRevisionNote($noteId);
         $revision = $note->revisions()->findOrFail($revisionId);
 
         $revisions = $note->revisions()
@@ -494,9 +494,8 @@ class NotesController extends Controller
 
     public function restoreRevision(string $noteId, string $revisionId)
     {
-        $this->assertWorkspaceWritable($this->currentWorkspace());
-
-        $note = $this->currentWorkspace()->notes()->where('id', $noteId)->firstOrFail();
+        $note = $this->resolveRevisionNote($noteId);
+        $this->assertWorkspaceWritable($note->workspace);
         $revision = $note->revisions()->findOrFail($revisionId);
 
         // Save current state as a new revision before restoring.
@@ -513,6 +512,31 @@ class NotesController extends Controller
         $note->save();
 
         return redirect($this->noteSlugService->urlFor($note));
+    }
+
+    private function resolveRevisionNote(string $noteId): Note
+    {
+        $user = Auth::user();
+        if (! $user) {
+            abort(403, 'No workspace available.');
+        }
+
+        $note = Note::query()
+            ->with('workspace')
+            ->where('id', $noteId)
+            ->firstOrFail();
+
+        $workspace = $note->workspace;
+        if (! $workspace) {
+            abort(404);
+        }
+
+        $isMember = $user->workspaces()
+            ->where('workspaces.id', $workspace->id)
+            ->exists();
+        abort_unless($isMember, 403);
+
+        return $note;
     }
 
     public function rename(Request $request, string $noteId)

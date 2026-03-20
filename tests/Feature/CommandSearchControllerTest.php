@@ -98,6 +98,51 @@ test('command search returns note results and excludes journal by default', func
         ->not->toContain($slugOnly->id);
 });
 
+test('command search filters note types with regular, journal, and meeting toggles', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $slug = $workspace?->slug;
+
+    $regular = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Cross-type target regular',
+    ]);
+
+    $journal = $user->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'title' => 'Cross-type target journal',
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-20',
+    ]);
+
+    $meeting = $user->notes()->create([
+        'type' => Note::TYPE_MEETING,
+        'title' => 'Cross-type target meeting',
+    ]);
+
+    $regularOnly = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=cross-type&include_regular=1&include_journal=0&include_meeting=0")
+        ->assertOk();
+
+    $regularOnlyIds = collect($regularOnly->json('items'))->pluck('id')->all();
+    expect($regularOnlyIds)
+        ->toContain($regular->id)
+        ->not->toContain($journal->id)
+        ->not->toContain($meeting->id);
+
+    $meetingOnly = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=cross-type&include_regular=0&include_journal=0&include_meeting=1")
+        ->assertOk();
+
+    $meetingOnlyIds = collect($meetingOnly->json('items'))->pluck('id')->all();
+    expect($meetingOnlyIds)
+        ->toContain($meeting->id)
+        ->not->toContain($regular->id)
+        ->not->toContain($journal->id);
+});
+
 test('command search can find notes by property terms', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
@@ -312,6 +357,48 @@ test('command search tasks only include tasks matching task content', function (
     expect($taskIds)
         ->toContain((string) $matchingTask->id)
         ->not->toContain((string) $nonMatchingTask->id);
+});
+
+test('command search task results respect note type filters', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+    $slug = $workspace?->slug;
+
+    $regularNote = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Regular parent',
+    ]);
+    $meetingNote = $user->notes()->create([
+        'type' => Note::TYPE_MEETING,
+        'title' => 'Meeting parent',
+    ]);
+
+    $regularTask = NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $regularNote->id,
+        'block_id' => 'task-regular-scope',
+        'note_title' => $regularNote->display_title,
+        'content_text' => 'Scope toggle task target',
+        'checked' => false,
+    ]);
+    $meetingTask = NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $meetingNote->id,
+        'block_id' => 'task-meeting-scope',
+        'note_title' => $meetingNote->display_title,
+        'content_text' => 'Scope toggle task target',
+        'checked' => false,
+    ]);
+
+    $meetingOnly = $this
+        ->actingAs($user)
+        ->getJson("/w/{$slug}/search/command?mode=notes&q=scope%20toggle&include_tasks=1&include_regular=0&include_journal=0&include_meeting=1")
+        ->assertOk();
+
+    $meetingTaskIds = collect($meetingOnly->json('tasks'))->pluck('id')->all();
+    expect($meetingTaskIds)
+        ->toContain((string) $meetingTask->id)
+        ->not->toContain((string) $regularTask->id);
 });
 
 test('command search excludes migrated workspaces', function () {

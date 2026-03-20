@@ -3205,6 +3205,44 @@ test('user can view note revisions history page', function () {
         );
 });
 
+test('user can view note revisions history even when preferred workspace differs', function () {
+    $user = User::factory()->create();
+    $noteWorkspace = $user->currentWorkspace();
+
+    $otherWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+    ]);
+
+    $user->forceFill([
+        'settings' => array_merge(
+            is_array($user->settings) ? $user->settings : [],
+            ['workspace_id' => $otherWorkspace->id],
+        ),
+    ])->save();
+
+    $note = $noteWorkspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'History target',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $note->revisions()->create([
+        'user_id' => $user->id,
+        'title' => 'History target',
+        'content' => ['type' => 'doc', 'content' => []],
+        'properties' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('notes.revisions', $note->id))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('notes/revisions')
+            ->where('noteId', $note->id)
+            ->has('revisions', 1)
+        );
+});
+
 test('user can view a specific note revision', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();

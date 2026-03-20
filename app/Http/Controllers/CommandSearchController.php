@@ -58,7 +58,9 @@ class CommandSearchController extends Controller
             'q' => ['nullable', 'string', 'max:160'],
             'mode' => ['nullable', Rule::in(['notes', 'headings'])],
             'include_notes' => ['nullable', 'boolean'],
+            'include_regular' => ['nullable', 'boolean'],
             'include_journal' => ['nullable', 'boolean'],
+            'include_meeting' => ['nullable', 'boolean'],
             'include_headings' => ['nullable', 'boolean'],
             'include_tasks' => ['nullable', 'boolean'],
             'task_statuses' => ['nullable', 'array'],
@@ -69,7 +71,9 @@ class CommandSearchController extends Controller
         $mode = $data['mode'] ?? 'notes';
         $query = trim((string) ($data['q'] ?? ''));
         $includeNotes = (bool) ($data['include_notes'] ?? true);
+        $includeRegular = (bool) ($data['include_regular'] ?? true);
         $includeJournal = (bool) ($data['include_journal'] ?? false);
+        $includeMeeting = (bool) ($data['include_meeting'] ?? true);
         $includeHeadings = (bool) ($data['include_headings'] ?? false);
         $includeTasks = (bool) ($data['include_tasks'] ?? false);
         $taskStatuses = collect($data['task_statuses'] ?? ['open', 'in_progress', 'assigned', 'starred', 'deferred'])
@@ -88,7 +92,9 @@ class CommandSearchController extends Controller
                 'items' => $this->searchHeadings(
                     workspaceIds: $workspaceIds,
                     query: $query,
+                    includeRegular: $includeRegular,
                     includeJournal: $includeJournal,
+                    includeMeeting: $includeMeeting,
                     limit: $limit,
                 ),
             ]);
@@ -100,7 +106,9 @@ class CommandSearchController extends Controller
                 workspaceIds: $workspaceIds,
                 query: $query,
                 includeNotes: $includeNotes,
+                includeRegular: $includeRegular,
                 includeJournal: $includeJournal,
+                includeMeeting: $includeMeeting,
                 includeHeadings: $includeHeadings,
                 limit: $limit,
             ),
@@ -109,7 +117,9 @@ class CommandSearchController extends Controller
                 query: $query,
                 includeTasks: $includeTasks,
                 taskStatuses: $taskStatuses,
+                includeRegular: $includeRegular,
                 includeJournal: $includeJournal,
+                includeMeeting: $includeMeeting,
                 limit: $limit,
             ),
         ]);
@@ -147,7 +157,9 @@ class CommandSearchController extends Controller
         array $workspaceIds,
         string $query,
         bool $includeNotes,
+        bool $includeRegular,
         bool $includeJournal,
+        bool $includeMeeting,
         bool $includeHeadings,
         int $limit,
     ): array {
@@ -163,7 +175,9 @@ class CommandSearchController extends Controller
                 query: $query,
                 workspaceIds: $workspaceIds,
                 includeNotes: $includeNotes,
+                includeRegular: $includeRegular,
                 includeJournal: $includeJournal,
+                includeMeeting: $includeMeeting,
                 includeHeadings: $includeHeadings,
                 limit: $limit,
                 userLocale: $this->userLocaleForSearch(),
@@ -173,7 +187,15 @@ class CommandSearchController extends Controller
         $notes = Note::search($query)
             ->query(fn (Builder $queryBuilder) => $queryBuilder
                 ->whereIn('workspace_id', $workspaceIds)
-                ->when(! $includeJournal, fn (Builder $innerQueryBuilder) => $this->applyNoteTypeConstraint($innerQueryBuilder, false))
+                ->when(
+                    ! $this->includesAllNoteTypes($includeRegular, $includeJournal, $includeMeeting),
+                    fn (Builder $innerQueryBuilder) => $this->applyNoteTypeConstraint(
+                        noteQuery: $innerQueryBuilder,
+                        includeRegular: $includeRegular,
+                        includeJournal: $includeJournal,
+                        includeMeeting: $includeMeeting,
+                    ),
+                )
             )
             ->take($limit)
             ->get([
@@ -224,12 +246,19 @@ class CommandSearchController extends Controller
     private function searchHeadings(
         array $workspaceIds,
         string $query,
+        bool $includeRegular,
         bool $includeJournal,
+        bool $includeMeeting,
         int $limit,
     ): array {
         $headings = NoteHeading::query()
             ->whereIn('workspace_id', $workspaceIds)
-            ->whereHas('note', fn (Builder $noteQuery) => $this->applyNoteTypeConstraint($noteQuery, $includeJournal))
+            ->whereHas('note', fn (Builder $noteQuery) => $this->applyNoteTypeConstraint(
+                noteQuery: $noteQuery,
+                includeRegular: $includeRegular,
+                includeJournal: $includeJournal,
+                includeMeeting: $includeMeeting,
+            ))
             ->when($query !== '', function (Builder $builder) use ($query): void {
                 $builder->where(function (Builder $inner) use ($query): void {
                     $inner->where('text', 'like', "%{$query}%")
@@ -292,7 +321,9 @@ class CommandSearchController extends Controller
         string $query,
         bool $includeTasks,
         array $taskStatuses,
+        bool $includeRegular,
         bool $includeJournal,
+        bool $includeMeeting,
         int $limit,
     ): array {
         if (! $includeTasks || $query === '') {
@@ -307,13 +338,23 @@ class CommandSearchController extends Controller
                 query: $query,
                 workspaceIds: $workspaceIds,
                 taskStatuses: $taskStatuses,
+                includeRegular: $includeRegular,
                 includeJournal: $includeJournal,
+                includeMeeting: $includeMeeting,
                 limit: $limit,
                 userLocale: $this->userLocaleForSearch(),
             );
         }
 
-        $tasks = $this->searchTasksViaDatabase($query, $workspaceIds, $taskStatuses, $includeJournal, $limit);
+        $tasks = $this->searchTasksViaDatabase(
+            query: $query,
+            workspaceIds: $workspaceIds,
+            taskStatuses: $taskStatuses,
+            includeRegular: $includeRegular,
+            includeJournal: $includeJournal,
+            includeMeeting: $includeMeeting,
+            limit: $limit,
+        );
 
         if ($tasks->isEmpty()) {
             return [];
@@ -381,15 +422,37 @@ class CommandSearchController extends Controller
             ->all();
     }
 
-    private function applyNoteTypeConstraint(Builder $noteQuery, bool $includeJournal): void
-    {
-        if ($includeJournal) {
+    private function applyNoteTypeConstraint(
+        Builder $noteQuery,
+        bool $includeRegular,
+        bool $includeJournal,
+        bool $includeMeeting,
+    ): void {
+        if ($this->includesAllNoteTypes($includeRegular, $includeJournal, $includeMeeting)) {
             return;
         }
 
-        $noteQuery->where(function (Builder $inner): void {
-            $inner->whereNull('type')
-                ->orWhere('type', '!=', Note::TYPE_JOURNAL);
+        $noteQuery->where(function (Builder $typed) use ($includeRegular, $includeJournal, $includeMeeting): void {
+            if (! $includeRegular && ! $includeJournal && ! $includeMeeting) {
+                $typed->whereRaw('1 = 0');
+
+                return;
+            }
+
+            if ($includeRegular) {
+                $typed->orWhere(function (Builder $regular): void {
+                    $regular->whereNull('type')
+                        ->orWhereNotIn('type', [Note::TYPE_JOURNAL, Note::TYPE_MEETING]);
+                });
+            }
+
+            if ($includeJournal) {
+                $typed->orWhere('type', Note::TYPE_JOURNAL);
+            }
+
+            if ($includeMeeting) {
+                $typed->orWhere('type', Note::TYPE_MEETING);
+            }
         });
     }
 
@@ -401,7 +464,9 @@ class CommandSearchController extends Controller
         string $query,
         array $workspaceIds,
         bool $includeNotes,
+        bool $includeRegular,
         bool $includeJournal,
+        bool $includeMeeting,
         bool $includeHeadings,
         int $limit,
         string $userLocale,
@@ -441,7 +506,12 @@ class CommandSearchController extends Controller
                 'icon_bg',
             ],
             'showMatchesPosition' => true,
-            'filter' => $this->buildNoteFilterExpression($workspaceIds, $includeJournal),
+            'filter' => $this->buildNoteFilterExpression(
+                workspaceIds: $workspaceIds,
+                includeRegular: $includeRegular,
+                includeJournal: $includeJournal,
+                includeMeeting: $includeMeeting,
+            ),
             'attributesToSearchOn' => array_values(array_filter([
                 $includeNotes ? 'title' : null,
                 $includeNotes ? 'path_titles' : null,
@@ -553,7 +623,9 @@ class CommandSearchController extends Controller
         string $query,
         array $workspaceIds,
         array $taskStatuses,
+        bool $includeRegular,
         bool $includeJournal,
+        bool $includeMeeting,
         int $limit,
         string $userLocale,
     ): array {
@@ -590,6 +662,9 @@ class CommandSearchController extends Controller
             'filter' => $this->taskFilterExpression(
                 workspaceIds: $workspaceIds,
                 taskStatuses: $taskStatuses,
+                includeRegular: $includeRegular,
+                includeJournal: $includeJournal,
+                includeMeeting: $includeMeeting,
             ),
         ];
 
@@ -600,7 +675,13 @@ class CommandSearchController extends Controller
             : ($response['hits'] ?? []);
 
         return collect($hits)
-            ->map(fn (array $hit): ?array => $this->taskItemFromSearchHit($hit, $includeJournal, $userLocale))
+            ->map(fn (array $hit): ?array => $this->taskItemFromSearchHit(
+                hit: $hit,
+                includeRegular: $includeRegular,
+                includeJournal: $includeJournal,
+                includeMeeting: $includeMeeting,
+                userLocale: $userLocale,
+            ))
             ->filter()
             ->values()
             ->all();
@@ -614,7 +695,9 @@ class CommandSearchController extends Controller
         string $query,
         array $workspaceIds,
         array $taskStatuses,
+        bool $includeRegular,
         bool $includeJournal,
+        bool $includeMeeting,
         int $limit,
     ): \Illuminate\Support\Collection {
         return NoteTask::query()
@@ -625,12 +708,15 @@ class CommandSearchController extends Controller
             ->where(function (Builder $builder) use ($taskStatuses): void {
                 $this->applyTaskStatusConstraint($builder, $taskStatuses);
             })
-            ->when(! $includeJournal, fn (Builder $builder) => $builder->whereHas('note', function (Builder $noteQuery): void {
-                $noteQuery->where(function (Builder $inner): void {
-                    $inner->whereNull('type')
-                        ->orWhere('type', '!=', Note::TYPE_JOURNAL);
-                });
-            }))
+            ->when(
+                ! $this->includesAllNoteTypes($includeRegular, $includeJournal, $includeMeeting),
+                fn (Builder $builder) => $builder->whereHas('note', fn (Builder $noteQuery) => $this->applyNoteTypeConstraint(
+                    noteQuery: $noteQuery,
+                    includeRegular: $includeRegular,
+                    includeJournal: $includeJournal,
+                    includeMeeting: $includeMeeting,
+                )),
+            )
             ->limit($limit)
             ->get([
                 'id',
@@ -920,10 +1006,15 @@ class CommandSearchController extends Controller
         return "/w/{$workspaceSlug}/notes/{$id}";
     }
 
-    private function taskItemFromSearchHit(array $hit, bool $includeJournal, string $userLocale): ?array
-    {
+    private function taskItemFromSearchHit(
+        array $hit,
+        bool $includeRegular,
+        bool $includeJournal,
+        bool $includeMeeting,
+        string $userLocale,
+    ): ?array {
         $noteType = is_string($hit['note_type'] ?? null) ? (string) $hit['note_type'] : null;
-        if (! $includeJournal && $noteType === Note::TYPE_JOURNAL) {
+        if (! $this->noteTypeIncluded($noteType, $includeRegular, $includeJournal, $includeMeeting)) {
             return null;
         }
 
@@ -984,14 +1075,19 @@ class CommandSearchController extends Controller
     /**
      * @param  array<int, string>  $workspaceIds
      */
-    private function buildNoteFilterExpression(array $workspaceIds, bool $includeJournal): string
-    {
+    private function buildNoteFilterExpression(
+        array $workspaceIds,
+        bool $includeRegular,
+        bool $includeJournal,
+        bool $includeMeeting,
+    ): string {
         $clauses = [
             $this->inExpression('workspace_id', $workspaceIds),
         ];
 
-        if (! $includeJournal) {
-            $clauses[] = '(type != '.$this->quoted(Note::TYPE_JOURNAL).' OR type IS NULL)';
+        $noteTypeClause = $this->noteTypeFilterExpression($includeRegular, $includeJournal, $includeMeeting);
+        if ($noteTypeClause !== null) {
+            $clauses[] = $noteTypeClause;
         }
 
         return implode(' AND ', $clauses);
@@ -1000,8 +1096,13 @@ class CommandSearchController extends Controller
     /**
      * @param  array<int, string>  $workspaceIds
      */
-    private function taskFilterExpression(array $workspaceIds, array $taskStatuses): string
-    {
+    private function taskFilterExpression(
+        array $workspaceIds,
+        array $taskStatuses,
+        bool $includeRegular,
+        bool $includeJournal,
+        bool $includeMeeting,
+    ): string {
         $clauses = [
             $this->inExpression('workspace_id', $workspaceIds),
         ];
@@ -1010,8 +1111,88 @@ class CommandSearchController extends Controller
         if ($mappedStatuses !== []) {
             $clauses[] = $this->inExpression('search_status', $mappedStatuses);
         }
+        $noteTypeClause = $this->taskNoteTypeFilterExpression($includeRegular, $includeJournal, $includeMeeting);
+        if ($noteTypeClause !== null) {
+            $clauses[] = $noteTypeClause;
+        }
 
         return implode(' AND ', $clauses);
+    }
+
+    private function includesAllNoteTypes(bool $includeRegular, bool $includeJournal, bool $includeMeeting): bool
+    {
+        return $includeRegular && $includeJournal && $includeMeeting;
+    }
+
+    private function noteTypeIncluded(
+        ?string $noteType,
+        bool $includeRegular,
+        bool $includeJournal,
+        bool $includeMeeting,
+    ): bool {
+        if ($noteType === Note::TYPE_JOURNAL) {
+            return $includeJournal;
+        }
+
+        if ($noteType === Note::TYPE_MEETING) {
+            return $includeMeeting;
+        }
+
+        return $includeRegular;
+    }
+
+    private function noteTypeFilterExpression(bool $includeRegular, bool $includeJournal, bool $includeMeeting): ?string
+    {
+        if ($this->includesAllNoteTypes($includeRegular, $includeJournal, $includeMeeting)) {
+            return null;
+        }
+
+        $parts = [];
+
+        if ($includeRegular) {
+            $parts[] = '(type IS NULL OR (type != '.$this->quoted(Note::TYPE_JOURNAL).' AND type != '.$this->quoted(Note::TYPE_MEETING).'))';
+        }
+
+        if ($includeJournal) {
+            $parts[] = 'type = '.$this->quoted(Note::TYPE_JOURNAL);
+        }
+
+        if ($includeMeeting) {
+            $parts[] = 'type = '.$this->quoted(Note::TYPE_MEETING);
+        }
+
+        if ($parts === []) {
+            return 'type IS NULL AND type IS NOT NULL';
+        }
+
+        return '('.implode(' OR ', $parts).')';
+    }
+
+    private function taskNoteTypeFilterExpression(bool $includeRegular, bool $includeJournal, bool $includeMeeting): ?string
+    {
+        if ($this->includesAllNoteTypes($includeRegular, $includeJournal, $includeMeeting)) {
+            return null;
+        }
+
+        $parts = [];
+
+        if ($includeRegular) {
+            $parts[] = '(note_type IS NULL OR (note_type != '.$this->quoted(Note::TYPE_JOURNAL).' AND note_type != '.$this->quoted(Note::TYPE_MEETING).'))';
+        }
+
+        if ($includeJournal) {
+            $parts[] = 'note_type = '.$this->quoted(Note::TYPE_JOURNAL);
+        }
+
+        if ($includeMeeting) {
+            $parts[] = 'note_type = '.$this->quoted(Note::TYPE_MEETING);
+        }
+
+        if ($parts === []) {
+            return 'note_type IS NULL AND note_type IS NOT NULL';
+        }
+
+        return '('.implode(' OR ', $parts).')';
     }
 
     /**

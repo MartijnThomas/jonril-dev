@@ -6,9 +6,9 @@ import {
     Command as CommandIcon,
     FileText,
     Heading,
+    Users,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { clear, destroy, rename } from '@/actions/App/Http/Controllers/NotesController';
 import { getColorTextClass } from '@/components/color-swatch-picker';
 import { getLucideIconComponent } from '@/components/icon-picker';
 import {
@@ -24,6 +24,7 @@ import { useI18n } from '@/lib/i18n';
 import { TASK_STATUS_ICONS } from '@/lib/task-status-icons';
 import type { TaskStatus } from '@/lib/task-status-icons';
 import { cn } from '@/lib/utils';
+import { clear, destroy, rename } from '@/routes/notes';
 
 type NoteSearchItem = {
     id: string;
@@ -142,7 +143,11 @@ export function AppCommandPalette() {
     };
     const { t } = useI18n();
     const [open, setOpen] = useState(false);
-    const [includeJournal, setIncludeJournal] = useState(true);
+    const [noteTypeFilters, setNoteTypeFilters] = useState({
+        regular: true,
+        journal: true,
+        meeting: true,
+    });
     const [searchTargets, setSearchTargets] = useState({
         notes: true,
         headings: true,
@@ -524,7 +529,11 @@ export function AppCommandPalette() {
     );
 
     const renderNoteIcon = (item: Pick<NoteSearchItem, 'type' | 'icon' | 'icon_color'>) => {
-        const fallback = item.type === 'journal' ? CalendarDays : FileText;
+        const fallback = item.type === 'journal'
+            ? CalendarDays
+            : item.type === 'meeting'
+                ? Users
+                : FileText;
         const IconComponent = getLucideIconComponent(item.icon ?? null, fallback);
         const colorClass = getColorTextClass(item.icon_color ?? 'default');
 
@@ -874,6 +883,13 @@ export function AppCommandPalette() {
         });
     };
 
+    const toggleNoteTypeFilter = (type: 'regular' | 'journal' | 'meeting') => {
+        setNoteTypeFilters((current) => ({
+            ...current,
+            [type]: !current[type],
+        }));
+    };
+
     const scopePillClass = (active: boolean) =>
         cn(
             'inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition-colors',
@@ -907,7 +923,9 @@ export function AppCommandPalette() {
                     const params = new URLSearchParams({
                         mode: 'notes',
                         include_notes: shouldSearchNotes ? '1' : '0',
-                        include_journal: includeJournal ? '1' : '0',
+                        include_regular: noteTypeFilters.regular ? '1' : '0',
+                        include_journal: noteTypeFilters.journal ? '1' : '0',
+                        include_meeting: noteTypeFilters.meeting ? '1' : '0',
                         include_headings: shouldSearchHeadings ? '1' : '0',
                         include_tasks: shouldSearchTasks ? '1' : '0',
                         limit: '40',
@@ -973,9 +991,11 @@ export function AppCommandPalette() {
         };
     }, [
         open,
-        includeJournal,
         effectiveQuery,
         isCommandMode,
+        noteTypeFilters.journal,
+        noteTypeFilters.meeting,
+        noteTypeFilters.regular,
         shouldSearchHeadings,
         shouldSearchNotes,
         shouldSearchTasks,
@@ -1060,14 +1080,6 @@ export function AppCommandPalette() {
                             >
                                 Tasks
                             </button>
-                            <button
-                                type="button"
-                                className={scopePillClass(includeJournal)}
-                                onClick={() => setIncludeJournal((value) => !value)}
-                                aria-pressed={includeJournal}
-                            >
-                                Journals
-                            </button>
                         </div>
                         <button
                             type="button"
@@ -1086,6 +1098,35 @@ export function AppCommandPalette() {
                     </div>
                     {showMoreFilters && (
                         <div className="border-t px-3 pb-3 pt-2">
+                            <div className="mb-2 text-xs text-muted-foreground">
+                                Notes: regular, journal, meeting
+                            </div>
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    className={scopePillClassSmall(noteTypeFilters.regular)}
+                                    onClick={() => toggleNoteTypeFilter('regular')}
+                                    aria-pressed={noteTypeFilters.regular}
+                                >
+                                    Regular
+                                </button>
+                                <button
+                                    type="button"
+                                    className={scopePillClassSmall(noteTypeFilters.journal)}
+                                    onClick={() => toggleNoteTypeFilter('journal')}
+                                    aria-pressed={noteTypeFilters.journal}
+                                >
+                                    Journal
+                                </button>
+                                <button
+                                    type="button"
+                                    className={scopePillClassSmall(noteTypeFilters.meeting)}
+                                    onClick={() => toggleNoteTypeFilter('meeting')}
+                                    aria-pressed={noteTypeFilters.meeting}
+                                >
+                                    Meeting
+                                </button>
+                            </div>
                             <div className="mb-2 text-xs text-muted-foreground">
                                 Tasks: open, in progress, assigned, starred, deferred (default)
                             </div>

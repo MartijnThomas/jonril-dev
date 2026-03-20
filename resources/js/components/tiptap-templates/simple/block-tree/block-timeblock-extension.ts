@@ -331,61 +331,48 @@ export const BlockTimeblockExtension = Extension.create<BlockTimeblockOptions>({
                     }
 
                     const { tr } = newState;
-                    if (!newState.selection.empty) {
-                        return null;
-                    }
+                    let changed = false;
 
-                    const { from } = newState.selection;
-                    const $from = newState.doc.resolve(from);
-                    if ($from.parent.type.name !== 'paragraph') {
-                        return null;
-                    }
+                    newState.doc.descendants((node, pos) => {
+                        if (node.type.name !== 'paragraph') {
+                            return true;
+                        }
 
-                    const node = $from.parent;
-                    const nodePos = from - $from.parentOffset - 1;
-                    if (nodePos < 0) {
-                        return null;
-                    }
+                        const blockStyle = String(node.attrs?.blockStyle ?? '');
+                        if (blockStyle !== 'bullet' && blockStyle !== 'task') {
+                            return true;
+                        }
 
-                    const blockStyle = String(node.attrs?.blockStyle ?? '');
-                    if (blockStyle !== 'bullet' && blockStyle !== 'task') {
-                        return null;
-                    }
+                        const rawText = node.textContent;
+                        const prefixMatch = TASK_STATUS_PREFIX_REGEX.exec(rawText);
+                        const textPrefixLength = prefixMatch ? prefixMatch[0].length : 0;
+                        const textAfterPrefix = rawText.slice(textPrefixLength);
 
-                    const rawText = node.textContent;
-                    const prefixMatch = TASK_STATUS_PREFIX_REGEX.exec(rawText);
-                    const textPrefixLength = prefixMatch ? prefixMatch[0].length : 0;
-                    const textAfterPrefix = rawText.slice(textPrefixLength);
+                        const match = SINGLE_TIME_PREFIX_REGEX.exec(textAfterPrefix);
+                        if (!match?.groups) {
+                            return true;
+                        }
 
-                    const match = SINGLE_TIME_PREFIX_REGEX.exec(textAfterPrefix);
-                    if (!match?.groups) {
-                        return null;
-                    }
+                        const hour = Number(match.groups.hour);
+                        const minute = Number(match.groups.minute);
+                        const end = computeEndTime(hour, minute, options.defaultDurationMinutes);
+                        if (!end) {
+                            return true;
+                        }
 
-                    const localStart = (match.groups.leading ?? '').length;
-                    const typedPrefixLength = localStart + match[0].length;
-                    const absolutePrefixEnd = textPrefixLength + typedPrefixLength;
+                        const token = `${padTime(hour)}:${padTime(minute)}`;
+                        const replacement = `${token} - ${padTime(end.endHour)}:${padTime(end.endMinute)}`;
+                        const localStart = (match.groups.leading ?? '').length;
+                        const from = pos + 1 + textPrefixLength + localStart;
+                        const to = from + token.length;
 
-                    // Only auto-complete while caret is at/inside the parsed time prefix.
-                    if ($from.parentOffset > absolutePrefixEnd + 1) {
-                        return null;
-                    }
+                        tr.insertText(replacement, from, to);
+                        changed = true;
 
-                    const hour = Number(match.groups.hour);
-                    const minute = Number(match.groups.minute);
-                    const end = computeEndTime(hour, minute, options.defaultDurationMinutes);
-                    if (!end) {
-                        return null;
-                    }
+                        return true;
+                    });
 
-                    const token = `${padTime(hour)}:${padTime(minute)}`;
-                    const replacement = `${token}-${padTime(end.endHour)}:${padTime(end.endMinute)}`;
-                    const replaceFrom = nodePos + 1 + textPrefixLength + localStart;
-                    const replaceTo = replaceFrom + token.length;
-
-                    tr.insertText(replacement, replaceFrom, replaceTo);
-
-                    return tr;
+                    return changed ? tr : null;
                 },
                 props: {
                     decorations(state) {
