@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/react';
 import {
     AtSign,
     Bold,
+    ChevronDown,
     Code2,
     Hash,
     Heading1,
@@ -572,8 +573,8 @@ export function BlockNodeToolbar({
                                         variant={currentMarks.highlight ? 'default' : 'ghost'}
                                         className={
                                             currentMarks.highlight
-                                                ? `${activeSquareButtonHoverClass} pr-8`
-                                                : `${inactiveSquareButtonClass} pr-8`
+                                                ? `${activeSquareButtonHoverClass} pr-9`
+                                                : `${inactiveSquareButtonClass} pr-9`
                                         }
                                         onClick={handleToggleDefaultHighlight}
                                         aria-pressed={currentMarks.highlight}
@@ -588,20 +589,21 @@ export function BlockNodeToolbar({
                                         <DropdownMenuTrigger asChild>
                                             <button
                                                 type="button"
-                                                className="absolute inset-y-0 right-0 z-10 flex w-6 items-center justify-center rounded-r-md border-l border-border/60 bg-transparent hover:bg-accent/40"
+                                                className="absolute inset-y-0 right-0 z-10 inline-flex w-7 items-center justify-center gap-1 rounded-r-md border-l border-border/60 bg-transparent pr-1 hover:bg-accent/40"
                                                 aria-label="Pick highlight color"
                                                 title="Pick highlight color"
                                                 disabled={!canHighlight}
                                             >
                                                 <span
                                                     aria-hidden
-                                                    className="inline-block size-3 rounded-[3px] border border-border/60"
+                                                    className="inline-block size-2.5 rounded-full border border-border/50"
                                                     style={{
                                                         backgroundColor:
                                                             currentHighlightColor ??
                                                             DEFAULT_HIGHLIGHT_COLOR,
                                                     }}
                                                 />
+                                                <ChevronDown className="size-3 text-muted-foreground" />
                                                 <span className="sr-only">Pick highlight color</span>
                                             </button>
                                         </DropdownMenuTrigger>
@@ -618,7 +620,7 @@ export function BlockNodeToolbar({
                                                             onClick={() =>
                                                                 handleApplyHighlightColor(option.value)
                                                             }
-                                                            className={`inline-flex size-5 items-center justify-center rounded-[4px] border ${
+                                                            className={`inline-flex size-5 items-center justify-center rounded-full border ${
                                                                 isActiveColor
                                                                     ? 'border-foreground/70'
                                                                     : 'border-border/60'
@@ -628,7 +630,7 @@ export function BlockNodeToolbar({
                                                         >
                                                             <span
                                                                 aria-hidden
-                                                                className="inline-block size-3 rounded-[3px] border border-black/10"
+                                                                className="inline-block size-3 rounded-full border border-black/10"
                                                                 style={{ backgroundColor: option.value }}
                                                             />
                                                         </button>
