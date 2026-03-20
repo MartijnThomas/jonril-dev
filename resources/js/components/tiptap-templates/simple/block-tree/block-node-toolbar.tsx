@@ -571,11 +571,11 @@ export function BlockNodeToolbar({
                                         <Button
                                             type="button"
                                             size="sm"
-                                            variant={currentMarks.highlight ? 'default' : 'ghost'}
+                                            variant="ghost"
                                             className={
                                                 currentMarks.highlight
-                                                    ? 'h-7 gap-0.5 rounded-lg border border-border/70 bg-background px-1.5 text-foreground shadow-none hover:border-border hover:bg-accent/35 hover:text-foreground'
-                                                    : 'h-7 gap-0.5 rounded-lg border border-transparent px-1.5 text-muted-foreground shadow-none hover:border-border/50 hover:bg-background/60 hover:text-foreground'
+                                                    ? 'h-7 gap-0.5 rounded-lg border border-violet-200 bg-violet-100 px-1.5 text-foreground shadow-none hover:bg-muted'
+                                                    : 'h-7 gap-0.5 rounded-lg border border-transparent px-1.5 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground'
                                             }
                                             onPointerDown={(event) => {
                                                 const target = event.target as HTMLElement | null;
@@ -596,7 +596,13 @@ export function BlockNodeToolbar({
                                             title="Toggle default highlight or pick color"
                                             disabled={!canHighlight}
                                         >
-                                            <Highlighter className="size-3.5" />
+                                            <Highlighter
+                                                className={
+                                                    currentMarks.highlight
+                                                        ? 'size-3.5 text-violet-600'
+                                                        : 'size-3.5'
+                                                }
+                                            />
                                             <span
                                                 data-highlight-picker="true"
                                                 className="inline-flex items-center gap-0.5"
