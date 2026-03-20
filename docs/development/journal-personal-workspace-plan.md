@@ -237,6 +237,14 @@ Create a single source of truth for "personal workspace for current user".
   - user with multiple workspaces + one personal workspace
   - fallback behaviour when personal flag is missing
 
+Status (2026-03-20):
+- Implemented:
+  - Added `App\Support\Workspaces\PersonalWorkspaceResolver`.
+  - Resolver returns the user's `is_personal = true` workspace when present.
+  - Resolver falls back to `currentWorkspace()` when no personal flag exists yet.
+  - Added feature tests for all three resolver scenarios.
+  - Updated `journal.landing` and `notes.landing` to resolve target workspace via the resolver.
+
 ### Step 3: Restrict journals to personal workspace
 
 - In journal creation/show flows, resolve via personal workspace resolver.

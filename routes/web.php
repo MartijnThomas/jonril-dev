@@ -10,6 +10,7 @@ use App\Http\Controllers\TaskSearchController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceSuggestionController;
 use App\Http\Controllers\WorkspaceSwitchController;
+use App\Support\Workspaces\PersonalWorkspaceResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -84,7 +85,10 @@ Route::get('/ping', fn () => response()->noContent())->middleware('auth')->name(
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('journal', function (Request $request) {
-        $workspace = $request->user()?->currentWorkspace();
+        $user = $request->user();
+        $workspace = $user
+            ? app(PersonalWorkspaceResolver::class)->resolveFor($user)
+            : null;
         abort_if(! $workspace, 403, 'No workspace available.');
 
         if ($workspace->isMigratedSource()) {
@@ -100,7 +104,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('journal.landing');
 
     Route::get('notes', function (Request $request) {
-        $workspace = $request->user()?->currentWorkspace();
+        $user = $request->user();
+        $workspace = $user
+            ? app(PersonalWorkspaceResolver::class)->resolveFor($user)
+            : null;
         abort_if(! $workspace, 403, 'No workspace available.');
 
         if ($workspace->isMigratedSource()) {
