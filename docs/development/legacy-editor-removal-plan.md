@@ -1,5 +1,12 @@
 # Legacy Editor Removal Plan
 
+## Status Snapshot (March 20, 2026)
+
+- This plan is still relevant.
+- Legacy support remains in runtime/controller/test surface.
+- Workspace settings now hide editor-mode switch + migrate action for workspaces already in block mode, but legacy-only flows still exist for legacy workspaces.
+- New workspace creation still defaults to `legacy`, so Phase 1 is not complete yet.
+
 ## Goal
 
 Track all code paths, UX touchpoints, migrations, and cleanup work required to fully remove legacy editor support after block mode rollout is complete.
@@ -15,10 +22,10 @@ Track all code paths, UX touchpoints, migrations, and cleanup work required to f
 
 ### Workspace settings / UX
 
-- Advanced settings contains:
-  - editor mode selector (`legacy` / `block`)
-  - migrate-to-block action
-  - migrated-workspace messaging and reactivation controls
+- Advanced settings:
+  - for legacy workspaces: editor mode selector (`legacy` / `block`) and migrate-to-block action are still present
+  - for block workspaces: editor mode selector and migrate action are hidden
+  - migrated-workspace messaging/reactivation controls still exist where applicable
 
 ### Backend
 
@@ -39,7 +46,8 @@ Track all code paths, UX touchpoints, migrations, and cleanup work required to f
 
 - [ ] Remove all UI options that let users choose `legacy` mode.
 - [ ] Ensure all newly created workspaces are `block` mode only.
-- [ ] Keep read-only display for existing legacy workspaces during transition.
+- [x] Hide legacy migration controls for block workspaces and keep migration UI scoped to legacy workspaces.
+- [ ] Decide legacy-workspace runtime policy during transition (editable vs read-only) and enforce consistently.
 
 ### Phase 2: Complete Legacy Workspace Migration
 
@@ -74,3 +82,13 @@ Track all code paths, UX touchpoints, migrations, and cleanup work required to f
 ## Next Update
 
 Update this document whenever a legacy-related endpoint, UI action, command, or schema element is removed.
+
+## Recommended Next Step
+
+Finish **Phase 1** first:
+
+1. Default new workspaces to `block` in backend (`WorkspaceController@store`) and UI forms.
+2. Remove legacy option from workspace creation/edit flows.
+3. Add/adjust feature tests to lock block-only creation behavior.
+
+This reduces new legacy surface area before touching runtime branch removals in later phases.

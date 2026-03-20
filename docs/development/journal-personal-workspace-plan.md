@@ -1,5 +1,13 @@
 # Journal Notes & Personal Workspace Plan
 
+## Status Snapshot (March 20, 2026)
+
+- `Step 1` through `Step 6` are implemented and covered by feature/browser tests.
+- Journal routing and journal context behavior are stable on canonical `/journal/{period}` routes.
+- Personal workspace lifecycle guardrails are in place (non-deletable, non-transferable, clear supported).
+- Calendar settings/actions are now personal-workspace-only.
+- The remaining relevant work is in **Improvement Path 2** (cross-workspace linking/backlinks behavior) and in open product decisions listed below.
+
 ## Current State
 
 - Every note (including journal notes) belongs to a workspace via `workspace_id`.
@@ -340,18 +348,39 @@ Status (2026-03-20):
 
 
 ### Step ?: Some remarks
-- should a user be able to attach a note from a different workspace to his/her event? And should other users be able to do this with the same note?
-
--- should users be able to connect notes outside of the personal notes, wiki-link to notes outside personal workspace.
+- Open decisions:
+  - Should a user be able to attach a note from a different workspace to their event?
+  - If yes, should multiple users be able to attach their own personal meeting notes to the same shared note?
+  - Should wiki-links from personal journals/meetings resolve to notes outside personal workspace (within memberships)?
 ---
+
+## What Is Still Relevant
+
+1. Improvement Path 2a: Cross-workspace wiki-link resolution for journal/meeting contexts.
+2. Improvement Path 2b: Cross-workspace backlinks filtered to current user privacy boundary.
+3. Improvement Path 2c/2d: Meeting-note subject linking and explicit workspace-switch behavior when following cross-workspace links.
+4. Product decision finalization for event attachment + cross-workspace link boundaries.
 
 ## PR Breakdown (Suggested)
 
 1. **PR A:** personal workspace lifecycle guardrails (delete/transfer/erase) + tests. (completed)
 2. **PR B:** personal workspace resolver + journal restriction to personal workspace. (completed)
-3. **PR C:** new `/journal/...` routes + controller wiring + middleware context guard.
-4. **PR D:** sidebar/frontend route updates + browser tests.
+3. **PR C:** new `/journal/...` routes + controller wiring + middleware context guard. (completed)
+4. **PR D:** sidebar/frontend route updates + browser tests. (completed)
 5. **PR E:** cross-workspace link/backlink schema + query updates.
+
+## Recommended Next Slice
+
+Implement **PR E, part 1 (Path 2a only)**:
+
+1. Add cross-workspace wiki-link resolution for journal/meeting note contexts, restricted to workspaces the current user can access.
+2. Keep non-journal/non-meeting wiki-link resolution unchanged for now (workspace-local).
+3. Add feature tests for:
+   - personal journal wiki-link resolves to shared workspace note
+   - no resolution outside user memberships
+   - stable fallback behavior when multiple matches exist.
+
+This is the highest-value next step because it unlocks the main cross-workspace use case while keeping risk bounded before backlink/query model expansion.
 
 ---
 
