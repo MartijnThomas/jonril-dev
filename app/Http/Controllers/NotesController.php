@@ -770,13 +770,33 @@ class NotesController extends Controller
             return array_reverse($trail);
         };
 
-        $allNotes = Note::query()
+        $crossWorkspaceWikiScope = in_array($note->type, [Note::TYPE_JOURNAL, Note::TYPE_MEETING], true);
+        $linkableWorkspaceIds = [$workspaceId];
+        if ($crossWorkspaceWikiScope) {
+            $linkableWorkspaceIds = Auth::user()?->workspaces()
+                ->pluck('workspaces.id')
+                ->filter(fn ($id) => is_string($id) && trim($id) !== '')
+                ->values()
+                ->all() ?: [$workspaceId];
+        }
+
+        $workspaceNotes = Note::query()
             ->where('workspace_id', $workspaceId)
             ->orderBy('created_at')
             ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity', 'journal_date']);
-        $allNotesPathById = [];
-        $allNotesById = $allNotes->keyBy('id');
-        $resolveAllNotesPath = fn (string $id) => $this->resolveNotePath($id, $allNotesById, $allNotesPathById);
+
+        $linkableNotes = Note::query()
+            ->whereIn('workspace_id', $linkableWorkspaceIds)
+            ->orderBy('created_at')
+            ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity', 'journal_date']);
+        $linkableNotesPathById = [];
+        $linkableNotesById = $linkableNotes->keyBy('id');
+        $resolveLinkablePath = fn (string $id) => $this->resolveNotePath($id, $linkableNotesById, $linkableNotesPathById);
+
+        $workspaceMetaById = Workspace::query()
+            ->whereIn('id', $linkableWorkspaceIds)
+            ->get(['id', 'name', 'slug'])
+            ->keyBy('id');
 
         $noteTrail = $buildTrail($note->id);
         if ($noteTrail === []) {
@@ -929,30 +949,53 @@ class NotesController extends Controller
                 'historyUrl' => route('notes.revisions', ['noteId' => $note->id]),
             ],
             'properties' => $note->properties ?? [],
-            'linkableNotes' => $allNotes
-                ->map(fn (Note $linkableNote) => [
-                    'id' => $linkableNote->id,
-                    'title' => $linkableNote->title ?? 'Untitled',
-                    'path' => $linkableNote->parent_id
-                        ? $resolveAllNotesPath($linkableNote->parent_id)
-                        : null,
-                    'editablePath' => $linkableNote->type === Note::TYPE_JOURNAL
+            'linkableNotes' => $linkableNotes
+                ->map(function (Note $linkableNote) use ($crossWorkspaceWikiScope, $workspaceId, $workspaceMetaById, $resolveLinkablePath): array {
+                    $workspacePrefix = null;
+                    if ($crossWorkspaceWikiScope && $linkableNote->workspace_id !== $workspaceId) {
+                        $workspaceEntry = $workspaceMetaById->get($linkableNote->workspace_id);
+                        $workspacePrefix = trim((string) ($workspaceEntry?->name ?: $workspaceEntry?->slug ?: ''));
+                    }
+
+                    $parentPath = $linkableNote->parent_id
+                        ? $resolveLinkablePath($linkableNote->parent_id)
+                        : null;
+                    $displayPath = trim(implode(' / ', array_values(array_filter([
+                        $parentPath,
+                    ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
+
+                    $editableBasePath = $linkableNote->type === Note::TYPE_JOURNAL
                         ? (
                             $linkableNote->journalSearchPath($this->userLanguage())
                             ?: ($linkableNote->title ?? 'Untitled')
                         )
-                        : trim(implode(' / ', array_filter([
-                            $linkableNote->parent_id
-                                ? $resolveAllNotesPath($linkableNote->parent_id)
-                                : null,
+                        : trim(implode(' / ', array_values(array_filter([
+                            $parentPath,
                             $linkableNote->title ?? 'Untitled',
-                        ], fn ($segment) => is_string($segment) && trim($segment) !== ''))),
-                    'href' => $this->noteSlugService->urlFor($linkableNote),
-                    'headings' => $this->extractLinkableHeadings($linkableNote),
-                ])
+                        ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
+
+                    $editablePath = trim(implode(' / ', array_values(array_filter([
+                        $editableBasePath,
+                    ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
+
+                    return [
+                        'id' => $linkableNote->id,
+                        'title' => $linkableNote->title ?? 'Untitled',
+                        'path' => $displayPath !== '' ? $displayPath : null,
+                        'editablePath' => $editablePath,
+                        'workspaceName' => $workspacePrefix !== '' ? $workspacePrefix : null,
+                        'isCrossWorkspace' => $workspacePrefix !== null && $workspacePrefix !== '',
+                        'href' => $this->noteSlugService->urlFor($linkableNote),
+                        'headings' => $this->extractLinkableHeadings($linkableNote),
+                    ];
+                })
                 ->values(),
-            'moveParentOptions' => (function () use ($allNotes, $resolveAllNotesPath, $note): \Illuminate\Support\Collection {
-                $childrenByParent = $allNotes
+            'moveParentOptions' => (function () use ($workspaceNotes, $note): \Illuminate\Support\Collection {
+                $workspaceNotesPathById = [];
+                $workspaceNotesById = $workspaceNotes->keyBy('id');
+                $resolveWorkspacePath = fn (string $id) => $this->resolveNotePath($id, $workspaceNotesById, $workspaceNotesPathById);
+
+                $childrenByParent = $workspaceNotes
                     ->filter(fn (Note $candidate) => $candidate->parent_id !== null)
                     ->groupBy('parent_id');
                 $excludedMoveTargetIds = [$note->id => true];
@@ -971,13 +1014,13 @@ class NotesController extends Controller
                     }
                 }
 
-                return $allNotes
+                return $workspaceNotes
                     ->filter(fn (Note $candidate) => ! isset($excludedMoveTargetIds[$candidate->id]))
                     ->filter(fn (Note $candidate) => $candidate->type === Note::TYPE_NOTE)
                     ->map(fn (Note $candidate) => [
                         'id' => $candidate->id,
                         'title' => $candidate->display_title,
-                        'path' => $candidate->parent_id ? $resolveAllNotesPath($candidate->parent_id) : null,
+                        'path' => $candidate->parent_id ? $resolveWorkspacePath($candidate->parent_id) : null,
                     ])
                     ->sortBy(fn (array $candidate) => strtolower((string) $candidate['path'].' '.$candidate['title']))
                     ->values();

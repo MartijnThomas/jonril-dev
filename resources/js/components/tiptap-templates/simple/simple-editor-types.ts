@@ -16,6 +16,8 @@ export type SimpleEditorProps = {
         title: string;
         path?: string;
         editablePath?: string;
+        workspaceName?: string | null;
+        isCrossWorkspace?: boolean;
         href?: string;
         headings?: {
             id: string;

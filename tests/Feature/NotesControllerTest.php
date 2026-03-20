@@ -167,6 +167,93 @@ test('show includes linkable note headings metadata for wiki-link heading sugges
         );
 });
 
+test('journal page linkable notes include member workspaces and exclude non-member workspaces', function () {
+    $user = User::factory()->create();
+    $personalWorkspace = $user->currentWorkspace();
+
+    $sharedWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+        'name' => 'Shared Team',
+    ]);
+
+    $memberNote = $sharedWorkspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Shared Target',
+    ]);
+
+    $outsiderUser = User::factory()->create();
+    $outsiderWorkspace = $outsiderUser->currentWorkspace();
+    $outsiderNote = $outsiderWorkspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Outsider Target',
+    ]);
+
+    $personalWorkspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'title' => 'Friday 7 March 2026',
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-07',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/2026-03-07')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('linkableNotes', function ($linkableNotes) use ($memberNote, $outsiderNote): bool {
+                $items = collect($linkableNotes);
+                $member = $items->first(fn (array $item) => ($item['id'] ?? null) === $memberNote->id);
+                if (! is_array($member)) {
+                    return false;
+                }
+
+                if (($member['workspaceName'] ?? null) !== 'Shared Team') {
+                    return false;
+                }
+
+                if (($member['isCrossWorkspace'] ?? null) !== true) {
+                    return false;
+                }
+
+                return $items->every(
+                    fn (array $item) => ($item['id'] ?? null) !== $outsiderNote->id,
+                );
+            }),
+        );
+});
+
+test('regular note linkable notes remain scoped to active workspace', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $localSource = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Local Source',
+    ]);
+
+    $sharedWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+        'name' => 'Shared Team',
+    ]);
+
+    $sharedNote = $sharedWorkspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Shared Target',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $localSource->id))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('linkableNotes', function ($linkableNotes) use ($sharedNote): bool {
+                return collect($linkableNotes)->every(
+                    fn (array $item) => ($item['id'] ?? null) !== $sharedNote->id,
+                );
+            }),
+        );
+});
+
 test('show includes the workspace editor mode', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();

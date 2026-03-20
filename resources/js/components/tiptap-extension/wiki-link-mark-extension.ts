@@ -77,6 +77,84 @@ export const WikiLinkMark = Mark.create({
     },
 
     addProseMirrorPlugins() {
+        const workspaceSlugFromPathname = (pathname: string): string | null => {
+            const match = pathname.match(/^\/w\/([^/]+)\//);
+            if (!match) {
+                return null;
+            }
+
+            const slug = decodeURIComponent(match[1] ?? '').trim();
+
+            return slug !== '' ? slug : null;
+        };
+
+        const workspaceSlugFromHref = (href: string): string | null => {
+            const match = href.match(/\/w\/([^/]+)\//);
+            if (!match) {
+                return null;
+            }
+
+            const slug = decodeURIComponent(match[1] ?? '').trim();
+
+            return slug !== '' ? slug : null;
+        };
+
+        const workspaceSlugFromInertiaPage = (): string | null => {
+            if (typeof document === 'undefined') {
+                return null;
+            }
+
+            const appElement = document.getElementById('app');
+            const payload = appElement?.getAttribute('data-page');
+            if (!payload) {
+                return null;
+            }
+
+            try {
+                const page = JSON.parse(payload) as {
+                    props?: {
+                        currentWorkspace?: {
+                            slug?: string | null;
+                        } | null;
+                    } | null;
+                };
+                const slug = page?.props?.currentWorkspace?.slug;
+
+                return typeof slug === 'string' && slug.trim() !== '' ? slug.trim() : null;
+            } catch {
+                return null;
+            }
+        };
+
+        const activeWorkspaceSlug = (): string | null => {
+            if (typeof window === 'undefined') {
+                return null;
+            }
+
+            return workspaceSlugFromPathname(window.location.pathname) ?? workspaceSlugFromInertiaPage();
+        };
+
+        const syncCrossWorkspaceWikiLinkClasses = (root: ParentNode): void => {
+            const activeSlug = activeWorkspaceSlug();
+            if (!activeSlug) {
+                return;
+            }
+
+            const links = root.querySelectorAll<HTMLElement>('[data-wikilink="true"]');
+            links.forEach((link) => {
+                const href = (link.getAttribute('data-href') ?? '').trim();
+                const targetSlug = workspaceSlugFromHref(href);
+                const isCrossWorkspace = targetSlug !== null && targetSlug !== activeSlug;
+
+                link.classList.toggle('md-wikilink-cross-workspace', isCrossWorkspace);
+                if (isCrossWorkspace) {
+                    link.setAttribute('data-cross-workspace', 'true');
+                } else {
+                    link.removeAttribute('data-cross-workspace');
+                }
+            });
+        };
+
         const findWikiLinkRange = (state: any, from: number) => {
             const markType = state.schema.marks.wikiLink;
             if (!markType) {
@@ -138,6 +216,15 @@ export const WikiLinkMark = Mark.create({
 
         return [
             new Plugin({
+                view: (view) => {
+                    syncCrossWorkspaceWikiLinkClasses(view.dom);
+
+                    return {
+                        update: (updatedView) => {
+                            syncCrossWorkspaceWikiLinkClasses(updatedView.dom);
+                        },
+                    };
+                },
                 props: {
                     handleKeyDown: (view, event) => {
                         const { state } = view;

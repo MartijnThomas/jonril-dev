@@ -3,6 +3,8 @@ export type BlockWikiLinkNote = {
     title: string;
     path?: string;
     editablePath?: string;
+    workspaceName?: string | null;
+    isCrossWorkspace?: boolean;
     href?: string;
     headings?: {
         id: string;
@@ -19,6 +21,8 @@ export type BlockWikiLinkSuggestionItem = {
     noteId?: string | null;
     href?: string | null;
     subtitle?: string;
+    workspaceName?: string | null;
+    isCrossWorkspace?: boolean;
     kind: 'note' | 'journal' | 'create' | 'heading';
     insertText: string;
 };
@@ -773,6 +777,8 @@ export function buildBlockWikiLinkSuggestions(
                 note.href ||
                 fallbackBlockWikiHrefFromTargetPath(targetPath, note.id),
             subtitle,
+            workspaceName: note.workspaceName ?? null,
+            isCrossWorkspace: Boolean(note.isCrossWorkspace),
             kind: targetPath.startsWith('journal/')
                 ? 'journal'
                 : 'note',
@@ -830,6 +836,8 @@ export function buildBlockWikiLinkSuggestions(
                     heading.id,
                 ),
                 subtitle: `${displayPath}# ${heading.title}`,
+                workspaceName: noteForHeadingQuery.workspaceName ?? null,
+                isCrossWorkspace: Boolean(noteForHeadingQuery.isCrossWorkspace),
                 kind: 'heading' as const,
                 insertText: `${wikiLinkInsertTextFromTargetPath(
                     resolvedTargetPath,

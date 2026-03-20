@@ -471,3 +471,82 @@ it('supports quote block flow for indent enter enter text and backspace dedent',
     expect($step6['indent'] ?? -1)->toBe(0);
     expect($step6['text'] ?? '')->toContain('Nested text');
 });
+
+it('applies cross-workspace wiki-link styling when link target is in another workspace', function () {
+    $user = User::factory()->create([
+        'password' => bcrypt('password'),
+    ]);
+
+    $personalWorkspace = $user->currentWorkspace();
+    expect($personalWorkspace)->toBeInstanceOf(Workspace::class);
+
+    $sharedWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+        'name' => 'Shared Team',
+    ]);
+
+    $target = Note::factory()->for($sharedWorkspace)->create([
+        'title' => 'Shared Cross Target',
+    ]);
+
+    $personalWorkspace->forceFill([
+        'editor_mode' => Workspace::EDITOR_MODE_BLOCK,
+    ])->save();
+
+    $personalWorkspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-20',
+        'title' => 'Vrijdag 20 maart 2026',
+    ]);
+
+    $page = browserLogin($user);
+
+    $page->navigate('/journal/2026-03-20')
+        ->assertPathIs('/journal/2026-03-20')
+        ->waitForText('Vrijdag 20 maart 2026')
+        ->assertNoJavaScriptErrors();
+
+    focusBlockEditorAtDocumentEnd($page);
+
+    $page->keys('.tiptap.ProseMirror.simple-editor', ['Enter', '[', '[', 'S', 'h', 'a', 'r', 'e', 'd'])
+        ->waitForText('Wiki links')
+        ->assertSee('Shared Cross Target');
+
+    $page->script(<<<'JS'
+(() => {
+    const target = document.activeElement ?? document.body;
+    const keydown = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+    const keyup = new KeyboardEvent('keyup', { key: 'Enter', bubbles: true });
+    target.dispatchEvent(keydown);
+    target.dispatchEvent(keyup);
+})();
+JS);
+
+    $page->wait(0.2)->assertNoJavaScriptErrors();
+
+    $result = $page->script(<<<'JS'
+(() => {
+    const editor = document.querySelector('.tiptap.ProseMirror.simple-editor');
+    const links = Array.from(editor?.querySelectorAll('[data-wikilink="true"]') ?? []);
+    const link = links.find((node) => (node.textContent ?? '').includes('Shared Cross Target')) ?? null;
+
+    return {
+        hasWikiLink: Boolean(link),
+        hasClass: link?.classList.contains('md-wikilink-cross-workspace') ?? false,
+        dataCrossWorkspace: link?.getAttribute('data-cross-workspace') ?? null,
+        editorHtml: editor?.innerHTML ?? null,
+    };
+})();
+JS);
+
+    $payload = is_array($result) && array_is_list($result) && isset($result[0]) && is_array($result[0])
+        ? $result[0]
+        : $result;
+
+    expect(is_array($payload))->toBeTrue();
+    expect($payload['hasWikiLink'] ?? false)->toBeTrue();
+    expect($payload['hasClass'] ?? false)->toBeTrue();
+    expect($payload['dataCrossWorkspace'] ?? null)->toBe('true');
+});
