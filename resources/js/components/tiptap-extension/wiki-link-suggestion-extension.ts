@@ -9,6 +9,7 @@ type WikiLinkNote = {
     id: string;
     title: string;
     path?: string;
+    isCrossWorkspace?: boolean;
     href?: string;
 };
 
@@ -108,6 +109,7 @@ export const WikiLinkSuggestion = Extension.create<{
                                                     fallbackWikiHref(
                                                         props.id,
                                                     ),
+                                                crossWorkspace: props.isCrossWorkspace ?? false,
                                             },
                                         },
                                     ],

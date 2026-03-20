@@ -164,6 +164,7 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                                                 ),
                                             targetPath: props.targetPath,
                                             targetBlockId: props.targetBlockId ?? null,
+                                            crossWorkspace: props.isCrossWorkspace ?? false,
                                         },
                                     },
                                 ],

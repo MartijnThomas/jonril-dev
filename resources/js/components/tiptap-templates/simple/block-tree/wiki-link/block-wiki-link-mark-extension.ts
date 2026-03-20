@@ -21,6 +21,7 @@ export type BlockWikiLinkAttributes = {
     href?: string | null;
     targetPath?: string | null;
     targetBlockId?: string | null;
+    crossWorkspace?: boolean | null;
 };
 
 declare module '@tiptap/core' {
@@ -81,6 +82,14 @@ export const BlockWikiLinkMark = Mark.create<{
                     'data-target-block-id': attributes.targetBlockId,
                 }),
             },
+            crossWorkspace: {
+                default: false,
+                parseHTML: (element: HTMLElement) =>
+                    element.getAttribute('data-cross-workspace') === 'true',
+                renderHTML: (attributes: BlockWikiLinkAttributes) => ({
+                    'data-cross-workspace': attributes.crossWorkspace ? 'true' : null,
+                }),
+            },
         };
     },
 
@@ -93,11 +102,13 @@ export const BlockWikiLinkMark = Mark.create<{
     },
 
     renderHTML({ HTMLAttributes }) {
+        const isCrossWorkspace = String(HTMLAttributes['data-cross-workspace'] ?? '') === 'true';
+
         return [
             'span',
             mergeAttributes(HTMLAttributes, {
                 'data-wikilink': 'true',
-                class: 'md-wikilink',
+                class: isCrossWorkspace ? 'md-wikilink md-wikilink-cross-workspace' : 'md-wikilink',
                 spellcheck: 'false',
             }),
             0,
@@ -118,106 +129,6 @@ export const BlockWikiLinkMark = Mark.create<{
     },
 
     addProseMirrorPlugins() {
-        const workspaceSlugFromPathname = (pathname: string): string | null => {
-            const match = pathname.match(/^\/w\/([^/]+)\//);
-            if (!match) {
-                return null;
-            }
-
-            const slug = decodeURIComponent(match[1] ?? '').trim();
-
-            return slug !== '' ? slug : null;
-        };
-
-        const workspaceSlugFromHref = (href: string): string | null => {
-            const match = href.match(/\/w\/([^/]+)\//);
-            if (!match) {
-                return null;
-            }
-
-            const slug = decodeURIComponent(match[1] ?? '').trim();
-
-            return slug !== '' ? slug : null;
-        };
-
-        const workspaceSlugFromInertiaPage = (): string | null => {
-            if (typeof document === 'undefined') {
-                return null;
-            }
-
-            const appElement = document.getElementById('app');
-            const payload = appElement?.getAttribute('data-page');
-            if (!payload) {
-                return null;
-            }
-
-            if (workspaceSlugFromInertiaPageCache.payload === payload) {
-                return workspaceSlugFromInertiaPageCache.slug;
-            }
-
-            try {
-                const page = JSON.parse(payload) as {
-                    props?: {
-                        currentWorkspace?: {
-                            slug?: string | null;
-                        } | null;
-                    } | null;
-                };
-                const slug = page?.props?.currentWorkspace?.slug;
-                const resolved = typeof slug === 'string' && slug.trim() !== '' ? slug.trim() : null;
-                workspaceSlugFromInertiaPageCache = {
-                    payload,
-                    slug: resolved,
-                };
-
-                return resolved;
-            } catch {
-                workspaceSlugFromInertiaPageCache = {
-                    payload,
-                    slug: null,
-                };
-
-                return null;
-            }
-        };
-
-        let workspaceSlugFromInertiaPageCache: {
-            payload: string | null;
-            slug: string | null;
-        } = {
-            payload: null,
-            slug: null,
-        };
-
-        const activeWorkspaceSlug = (): string | null => {
-            if (typeof window === 'undefined') {
-                return null;
-            }
-
-            return workspaceSlugFromPathname(window.location.pathname) ?? workspaceSlugFromInertiaPage();
-        };
-
-        const syncCrossWorkspaceWikiLinkClasses = (root: ParentNode): void => {
-            const activeSlug = activeWorkspaceSlug();
-            if (!activeSlug) {
-                return;
-            }
-
-            const links = root.querySelectorAll<HTMLElement>('[data-wikilink="true"]');
-            links.forEach((link) => {
-                const href = (link.getAttribute('data-href') ?? '').trim();
-                const targetSlug = workspaceSlugFromHref(href);
-                const isCrossWorkspace = targetSlug !== null && targetSlug !== activeSlug;
-
-                link.classList.toggle('md-wikilink-cross-workspace', isCrossWorkspace);
-                if (isCrossWorkspace) {
-                    link.setAttribute('data-cross-workspace', 'true');
-                } else {
-                    link.removeAttribute('data-cross-workspace');
-                }
-            });
-        };
-
         const buildNotesByTargetPath = () => {
             const editableQueryPathForNote = (
                 note: BlockWikiLinkNote,
@@ -253,6 +164,7 @@ export const BlockWikiLinkMark = Mark.create<{
                     title: string;
                     targetPath: string;
                     editablePath: string;
+                    isCrossWorkspace: boolean;
                     headings: {
                         id: string;
                         title: string;
@@ -268,6 +180,7 @@ export const BlockWikiLinkMark = Mark.create<{
                     title: string;
                     targetPath: string;
                     editablePath: string;
+                    isCrossWorkspace: boolean;
                     headings: {
                         id: string;
                         title: string;
@@ -288,6 +201,7 @@ export const BlockWikiLinkMark = Mark.create<{
                     title: note.title,
                     targetPath,
                     editablePath: editableQueryPathForNote(note, targetPath),
+                    isCrossWorkspace: Boolean(note.isCrossWorkspace),
                     headings: Array.isArray(note.headings) ? note.headings : [],
                 };
 
@@ -486,15 +400,6 @@ export const BlockWikiLinkMark = Mark.create<{
 
         return [
             new Plugin({
-                view: (view) => {
-                    syncCrossWorkspaceWikiLinkClasses(view.dom);
-
-                    return {
-                        update: (updatedView) => {
-                            syncCrossWorkspaceWikiLinkClasses(updatedView.dom);
-                        },
-                    };
-                },
                 props: {
                     handleKeyDown: (view, event) => {
                         const { state } = view;
@@ -759,6 +664,7 @@ export const BlockWikiLinkMark = Mark.create<{
                                         href: expectedJournalHref,
                                         targetPath,
                                         targetBlockId: targetBlockId || null,
+                                        crossWorkspace: false,
                                     }),
                                 );
                                 changed = true;
@@ -801,6 +707,7 @@ export const BlockWikiLinkMark = Mark.create<{
                                 href: expectedHref,
                                 targetPath: resolved.targetPath,
                                 targetBlockId: targetBlockId || null,
+                                crossWorkspace: resolved.isCrossWorkspace,
                             }),
                         );
                         changed = true;
@@ -861,6 +768,7 @@ export const BlockWikiLinkMark = Mark.create<{
                                     href,
                                     targetPath: pending.targetPath,
                                     targetBlockId,
+                                    crossWorkspace: resolved?.isCrossWorkspace ?? false,
                                 }),
                             );
                             changed = true;

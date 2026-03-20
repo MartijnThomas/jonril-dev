@@ -287,6 +287,7 @@ export function BlockWikiLinkSuggestionMenu({
                                         ),
                                     targetPath: item.targetPath,
                                     targetBlockId: item.targetBlockId ?? null,
+                                    crossWorkspace: item.isCrossWorkspace ?? false,
                                 },
                             },
                         ],
