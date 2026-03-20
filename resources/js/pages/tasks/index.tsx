@@ -6,10 +6,13 @@ import {
 } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import {
+    ArrowRightToLine,
+    Ban,
     Bookmark,
     Check,
     ChevronDown,
     ChevronRight,
+    FileText,
     Home,
     Filter,
     Search,
@@ -25,6 +28,13 @@ import { TaskToggleCheckbox } from '@/components/task-toggle-checkbox';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import {
     Dialog,
     DialogContent,
@@ -51,9 +61,9 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import AppLayout from '@/layouts/app-layout';
 import { useTaskFilters } from '@/hooks/use-task-filters';
 import type { FilterPreset, Filters } from '@/hooks/use-task-filters';
+import AppLayout from '@/layouts/app-layout';
 import { useI18n } from '@/lib/i18n';
 import {
     formatLongDate,
@@ -374,6 +384,111 @@ export default function TasksIndex({
         });
     };
 
+    const openTaskInNote = (task: TaskItem) => {
+        if (!task.block_id) {
+            return;
+        }
+
+        const targetUrl = new URL(task.note.href, window.location.origin);
+        targetUrl.hash = task.block_id;
+
+        const currentUrl = new URL(window.location.href);
+        const targetPathWithHash = `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+
+        if (currentUrl.pathname === targetUrl.pathname) {
+            window.history.replaceState(window.history.state, '', targetPathWithHash);
+            const element = document.getElementById(task.block_id);
+            element?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            });
+
+            return;
+        }
+
+        router.get(
+            targetPathWithHash,
+            {},
+            {
+                preserveState: false,
+                preserveScroll: false,
+                replace: false,
+            },
+        );
+    };
+
+    const cancelTask = (task: TaskItem) => {
+        if (pendingTaskIds.includes(task.id)) {
+            return;
+        }
+
+        setPendingTaskIds((current) => [...current, task.id]);
+
+        router.patch(
+            '/tasks/cancel',
+            {
+                note_id: task.note.id,
+                block_id: task.block_id,
+                position: task.position,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onError: () => {
+                    toast.error(
+                        t(
+                            'tasks_index.toast_cancel_failed',
+                            'Failed to cancel task.',
+                        ),
+                    );
+                },
+                onFinish: () => {
+                    setPendingTaskIds((current) =>
+                        current.filter((id) => id !== task.id),
+                    );
+                },
+            },
+        );
+    };
+
+    const migrateTaskToToday = (task: TaskItem) => {
+        if (pendingTaskIds.includes(task.id)) {
+            return;
+        }
+
+        setPendingTaskIds((current) => [...current, task.id]);
+
+        router.post(
+            '/tasks/migrate',
+            {
+                source_note_id: task.note.id,
+                block_id: task.block_id,
+                position: task.position,
+                target_journal_granularity: 'daily',
+                target_journal_period: format(new Date(), 'yyyy-MM-dd'),
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onError: () => {
+                    toast.error(
+                        t(
+                            'tasks_index.toast_migrate_failed',
+                            'Failed to migrate task.',
+                        ),
+                    );
+                },
+                onFinish: () => {
+                    setPendingTaskIds((current) =>
+                        current.filter((id) => id !== task.id),
+                    );
+                },
+            },
+        );
+    };
+
     const labelText = (label: string) =>
         label
             .replace(/&laquo;/g, '«')
@@ -684,107 +799,143 @@ export default function TasksIndex({
         const isExpanded = expandedTaskIds.includes(task.id);
 
         return (
-            <div
-                key={key ?? task.id}
-                className={cn(
-                    'flex items-start gap-3 rounded-md px-2 py-2 transition-[background-color,padding,border-radius] duration-200 ease-out',
-                    hasChildren && isExpanded && 'bg-muted/40',
-                )}
-            >
-                <TaskToggleCheckbox
-                    className="mt-1.5"
-                    checked={task.checked}
-                    status={taskVisualStatus(task)}
-                    disabled={
-                        pendingTaskIds.includes(task.id) ||
-                        task.task_status === 'canceled' ||
-                        task.task_status === 'migrated'
-                    }
-                    ariaLabel={t(
-                        'tasks_index.toggle_task_aria',
-                        'Toggle task :task',
-                    ).replace(':task', task.content || String(task.id))}
-                    onCheckedChange={() => toggleTaskChecked(task)}
-                />
-                <div className="min-w-0 flex-1 pt-[1px]">
-                    <div className="flex items-start gap-2">
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
+            <ContextMenu key={key ?? task.id}>
+                <ContextMenuTrigger asChild>
+                    <div
+                        className={cn(
+                            'flex items-start gap-3 rounded-md px-2 py-2 transition-[background-color,padding,border-radius] duration-200 ease-out',
+                            hasChildren && isExpanded && 'bg-muted/40',
+                        )}
+                        onDoubleClick={() => openTaskInNote(task)}
+                    >
+                        <TaskToggleCheckbox
+                            className="mt-1.5"
+                            checked={task.checked}
+                            status={taskVisualStatus(task)}
+                            disabled={
+                                pendingTaskIds.includes(task.id) ||
+                                task.task_status === 'canceled' ||
+                                task.task_status === 'migrated'
+                            }
+                            ariaLabel={t(
+                                'tasks_index.toggle_task_aria',
+                                'Toggle task :task',
+                            ).replace(':task', task.content || String(task.id))}
+                            onCheckedChange={() => toggleTaskChecked(task)}
+                        />
+                        <div className="min-w-0 flex-1 pt-[1px]">
+                            <div className="flex items-start gap-2">
                                 <div className="min-w-0 flex-1">
-                                    <TaskInlineContent
-                                        fragments={
-                                            task.render_fragments.length > 0
-                                                ? task.render_fragments
-                                                : [
-                                              {
-                                                  type: 'text',
-                                                  text:
-                                                      task.content ||
-                                                      t(
-                                                          'tasks_index.untitled_task',
-                                                          'Untitled task',
-                                                      ),
-                                              },
-                                          ]
-                                }
-                                language={language}
-                                canceled={task.task_status === 'canceled'}
-                                className={cn(
-                                    'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
-                                    (task.task_status === 'canceled' ||
-                                        task.task_status === 'migrated' ||
-                                        task.checked) &&
-                                        'task-inline--faded',
-                                )}
-                                        priorityStyle="range"
-                                        hidePriorityTokens
-                                        hideStatusTokens
-                                    />
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                            <TaskInlineContent
+                                                fragments={
+                                                    task.render_fragments.length > 0
+                                                        ? task.render_fragments
+                                                        : [
+                                                              {
+                                                                  type: 'text',
+                                                                  text:
+                                                                      task.content ||
+                                                                      t(
+                                                                          'tasks_index.untitled_task',
+                                                                          'Untitled task',
+                                                                      ),
+                                                              },
+                                                          ]
+                                                }
+                                                language={language}
+                                                canceled={task.task_status === 'canceled'}
+                                                className={cn(
+                                                    'editor-ui-font text-base leading-[1.62] font-normal tracking-[-0.01em]',
+                                                    (task.task_status === 'canceled' ||
+                                                        task.task_status === 'migrated' ||
+                                                        task.checked) &&
+                                                        'task-inline--faded',
+                                                )}
+                                                priorityStyle="range"
+                                                hidePriorityTokens
+                                                hideStatusTokens
+                                            />
+                                        </div>
+                                        {hasChildren ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleExpandedTask(task.id)}
+                                                className="mt-[2px] inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                aria-label={
+                                                    isExpanded
+                                                        ? t(
+                                                              'tasks_index.collapse_children',
+                                                              'Collapse nested items',
+                                                          )
+                                                        : t(
+                                                              'tasks_index.expand_children',
+                                                              'Expand nested items',
+                                                          )
+                                                }
+                                            >
+                                                {isExpanded ? (
+                                                    <ChevronDown className="size-3.5" />
+                                                ) : (
+                                                    <ChevronRight className="size-3.5" />
+                                                )}
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                    {renderTaskMetadataAndPath(task, options)}
                                 </div>
-                                {hasChildren ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleExpandedTask(task.id)}
-                                        className="mt-[2px] inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-                                        aria-label={
-                                            isExpanded
-                                                ? t(
-                                                      'tasks_index.collapse_children',
-                                                      'Collapse nested items',
-                                                  )
-                                                : t(
-                                                      'tasks_index.expand_children',
-                                                      'Expand nested items',
-                                                  )
-                                        }
-                                    >
-                                        {isExpanded ? (
-                                            <ChevronDown className="size-3.5" />
-                                        ) : (
-                                            <ChevronRight className="size-3.5" />
-                                        )}
-                                    </button>
-                                ) : null}
                             </div>
-                            {renderTaskMetadataAndPath(task, options)}
+                            {hasChildren ? (
+                                <div
+                                    className={cn(
+                                        'grid transition-[grid-template-rows,opacity,margin] duration-200 ease-out',
+                                        isExpanded
+                                            ? 'mt-1 ml-2 grid-rows-[1fr] opacity-100'
+                                            : 'mt-0 ml-0 grid-rows-[0fr] opacity-0',
+                                    )}
+                                >
+                                    <div className="overflow-hidden">
+                                        {renderTaskChildren(task.children ?? [], 1)}
+                                    </div>
+                                </div>
+                            ) : null}
                         </div>
                     </div>
-                    {hasChildren ? (
-                        <div
-                            className={cn(
-                                'grid transition-[grid-template-rows,opacity,margin] duration-200 ease-out',
-                                isExpanded
-                                    ? 'mt-1 ml-2 grid-rows-[1fr] opacity-100'
-                                    : 'mt-0 ml-0 grid-rows-[0fr] opacity-0',
-                            )}
-                        >
-                            <div className="overflow-hidden">
-                                {renderTaskChildren(task.children ?? [], 1)}
-                            </div>
-                        </div>
-                    ) : null}
-                </div>
-            </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                    <ContextMenuItem
+                        onSelect={() => openTaskInNote(task)}
+                        disabled={!task.block_id}
+                    >
+                        <FileText />
+                        {t('tasks_index.go_to_task_in_note', 'Go to task in note')}
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                        onSelect={() => cancelTask(task)}
+                        disabled={
+                            task.task_status === 'canceled' ||
+                            task.task_status === 'migrated' ||
+                            pendingTaskIds.includes(task.id)
+                        }
+                    >
+                        <Ban />
+                        {t('tasks_index.cancel_task', 'Cancel task')}
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                        onSelect={() => migrateTaskToToday(task)}
+                        disabled={
+                            task.task_status === 'canceled' ||
+                            task.task_status === 'migrated' ||
+                            pendingTaskIds.includes(task.id)
+                        }
+                    >
+                        <ArrowRightToLine />
+                        {t('tasks_index.migrate_to_today', 'Migrate to today')}
+                    </ContextMenuItem>
+                </ContextMenuContent>
+            </ContextMenu>
         );
     };
 
