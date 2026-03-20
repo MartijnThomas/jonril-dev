@@ -10,32 +10,52 @@
 
 ---
 
-## Phase 1: Single Personal Workspace with Journal Notes
+## Target Workspace Model (Revised)
 
 ### Goal
 
-Each user has exactly one workspace — their **personal workspace**. No workspace switching needed. Journal notes live in this workspace.
+Keep **multiple workspaces** for collaboration, while enforcing that journals are a **personal-workspace-only** capability.
+
+### Rules
+
+- Each user has exactly one **personal workspace** (`is_personal = true`).
+- Users can create additional **collaboration workspaces** (`is_personal = false`).
+- Journal notes (`TYPE_JOURNAL`) are only allowed in the personal workspace.
+- Personal workspace:
+  - cannot be deleted
+  - ownership cannot be transferred
+  - can be "erased" (clear notes/content) but not removed
+- Non-personal workspaces:
+  - can be deleted by owner
+  - ownership transfer remains allowed
+  - do not support journal notes
 
 ### What Changes
 
 **Backend**
 
-- Remove the ability to create additional workspaces for regular users (gate `WorkspaceController@store`).
-- The workspace switcher is no longer relevant; hide it from the UI.
-- The personal workspace can be identified by a flag (`is_personal: bool`) on the `workspaces` table, set to `true` on auto-creation during registration.
-- No migration needed for existing data; users with multiple workspaces are unaffected at the model level.
+- Enforce `is_personal` as first-class workspace metadata.
+- Keep `WorkspaceController@store` enabled (users can still create additional workspaces).
+- Add authorization/business rules:
+  - block delete for `is_personal = true`
+  - block ownership transfer for `is_personal = true`
+  - block journal note creation/access outside personal workspace
+- Keep personal workspace auto-creation during registration.
 
 **Frontend**
 
-- Hide the `WorkspaceSwitcher` component from the sidebar when the user has only one workspace (or always, if multi-workspace support is dropped entirely).
-- Remove workspace-context labels from the UI (e.g., workspace name in breadcrumbs) when there is only one workspace.
-- The journal sidebar entry links directly to `/w/{personal-workspace-slug}/journal/...` — functionally identical to today, just without the switcher.
+- Keep workspace switcher (multi-workspace remains).
+- Journal entry points should always resolve to the personal workspace journal routes.
+- In workspace settings UI:
+  - show "Erase workspace" (or equivalent) for personal workspace
+  - hide/disable delete + transfer-owner for personal workspace
+  - keep delete + transfer-owner for non-personal workspaces
 
 ### What Stays the Same
 
-- All routes remain workspace-scoped internally (`/w/{slug}/...`). No route changes needed.
-- Journal notes remain stored as `TYPE_JOURNAL` notes on the workspace.
-- `JournalNoteService` is unchanged.
+- Notes still belong to workspaces.
+- Users can collaborate in shared workspaces.
+- Journal notes remain stored as `TYPE_JOURNAL` notes, but only in personal workspace.
 
 ---
 
@@ -140,10 +160,12 @@ ALTER TABLE note_links
 ### Migration Path
 
 1. Add `is_personal` flag to workspaces, backfill (first workspace per user = personal).
-2. Add `source_workspace_id` / `target_workspace_id` to link tables.
-3. Update wiki-link resolver to search across workspaces for journal/meeting note contexts.
-4. Update backlink queries to include cross-workspace sources filtered by current user.
-5. Add `linked_note_id` to notes for meeting note subjects.
+2. Add guardrails: prevent personal-workspace delete and ownership transfer.
+3. Restrict journal routes/services to personal workspace only.
+4. Add `source_workspace_id` / `target_workspace_id` to link tables.
+5. Update wiki-link resolver to search across workspaces for journal/meeting note contexts.
+6. Update backlink queries to include cross-workspace sources filtered by current user.
+7. Add `linked_note_id` to notes for meeting note subjects.
 
 ---
 
@@ -151,11 +173,13 @@ ALTER TABLE note_links
 
 To reduce risk, implement this in small, reversible slices:
 
-1. **Path 1 first (workspace-agnostic journal routing)**  
-   Keep all data in personal workspace, change only routing/context behaviour.
-2. **Cross-workspace linking second (Path 2a + 2b)**  
+1. **Personal-workspace guardrails first**  
+   Enforce non-deletable/non-transferable personal workspace and journal-only-on-personal rules.
+2. **Path 1 second (workspace-agnostic journal routing)**  
+   Keep journal behaviour personal while removing implicit context switches.
+3. **Cross-workspace linking third (Path 2a + 2b)**  
    Add link/backlink cross-workspace awareness after journal context is stable.
-3. **Meeting-note subject linking last (Path 2c + 2d)**  
+4. **Meeting-note subject linking last (Path 2c + 2d)**  
    Depends on cross-workspace primitives and explicit workspace-switch UX.
 
 This order gives visible UX improvement quickly without schema-heavy changes first.
@@ -164,7 +188,15 @@ This order gives visible UX improvement quickly without schema-heavy changes fir
 
 ## First Steps (Implementation Sprint 1)
 
-### Step 1: Add personal workspace resolver and tests
+### Step 1: Enforce personal workspace lifecycle rules
+
+- Add authorization/service checks:
+  - reject personal workspace delete
+  - reject personal workspace owner transfer
+  - allow erase action for personal workspace
+- Add feature tests for each rule.
+
+### Step 2: Add personal workspace resolver and tests
 
 Create a single source of truth for "personal workspace for current user".
 
@@ -177,7 +209,13 @@ Create a single source of truth for "personal workspace for current user".
   - user with multiple workspaces + one personal workspace
   - fallback behaviour when personal flag is missing
 
-### Step 2: Introduce workspace-agnostic journal routes
+### Step 3: Restrict journals to personal workspace
+
+- In journal creation/show flows, resolve via personal workspace resolver.
+- For non-personal workspace journal paths, redirect to personal journal route (or 404, pick one and keep consistent).
+- Add tests proving no journal note can be created in non-personal workspaces.
+
+### Step 4: Introduce workspace-agnostic journal routes
 
 Add route aliases without `/w/{workspace}`:
 
@@ -191,7 +229,7 @@ Controller behaviour:
 
 Keep existing `/w/{workspace}/journal/...` routes for backward compatibility during transition.
 
-### Step 3: Prevent workspace context switch on journal pages
+### Step 5: Prevent workspace context switch on journal pages
 
 In `HandleInertiaRequests`:
 
@@ -203,7 +241,7 @@ Acceptance criteria:
 - Opening a journal note never changes sidebar workspace context.
 - Returning from a shared-workspace note back to journal keeps expected context.
 
-### Step 4: Frontend journal entry point + switcher behaviour
+### Step 6: Frontend journal entry point + switcher behaviour
 
 - Update sidebar journal links to use workspace-agnostic `/journal/...` routes.
 - Keep notes tree and workspace switcher state unchanged while inside journal routes.
@@ -216,10 +254,11 @@ Acceptance criteria:
 
 ## PR Breakdown (Suggested)
 
-1. **PR A:** personal resolver + tests, no route changes.
-2. **PR B:** new `/journal/...` routes + controller wiring + middleware context guard.
-3. **PR C:** sidebar/frontend route updates + browser tests.
-4. **PR D:** cross-workspace link/backlink schema + query updates.
+1. **PR A:** personal workspace lifecycle guardrails (delete/transfer/erase) + tests.
+2. **PR B:** personal workspace resolver + journal restriction to personal workspace.
+3. **PR C:** new `/journal/...` routes + controller wiring + middleware context guard.
+4. **PR D:** sidebar/frontend route updates + browser tests.
+5. **PR E:** cross-workspace link/backlink schema + query updates.
 
 ---
 
