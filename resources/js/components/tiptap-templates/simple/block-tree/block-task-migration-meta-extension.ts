@@ -30,7 +30,11 @@ function fallbackNoteHref(noteId: string): string {
     return show.url(noteId);
 }
 
-function buildMigrationMetaDecorations(doc: any, notes: LinkableNote[]): DecorationSet {
+function buildMigrationMetaDecorations(
+    doc: any,
+    notes: LinkableNote[],
+    selectionPos: number | null = null,
+): DecorationSet {
     const decorations: Decoration[] = [];
     const noteById = new Map<string, LinkableNote>();
 
@@ -42,6 +46,15 @@ function buildMigrationMetaDecorations(doc: any, notes: LinkableNote[]): Decorat
 
     doc.descendants((node: any, pos: number) => {
         if (node.type?.name !== 'paragraph' || (node.attrs?.blockStyle ?? null) !== 'task') {
+            return;
+        }
+
+        const nodeFrom = pos;
+        const nodeTo = pos + node.nodeSize;
+        const isActiveTask =
+            typeof selectionPos === 'number' && selectionPos >= nodeFrom && selectionPos <= nodeTo;
+
+        if (!isActiveTask) {
             return;
         }
 
@@ -146,13 +159,21 @@ export const BlockTaskMigrationMetaExtension = Extension.create<{
             new Plugin({
                 state: {
                     init: (_, state) =>
-                        buildMigrationMetaDecorations(state.doc, this.options.notes),
+                        buildMigrationMetaDecorations(
+                            state.doc,
+                            this.options.notes,
+                            state.selection.from,
+                        ),
                     apply: (tr, decorationSet) => {
-                        if (!tr.docChanged) {
+                        if (!tr.docChanged && !tr.selectionSet) {
                             return decorationSet.map(tr.mapping, tr.doc);
                         }
 
-                        return buildMigrationMetaDecorations(tr.doc, this.options.notes);
+                        return buildMigrationMetaDecorations(
+                            tr.doc,
+                            this.options.notes,
+                            tr.selection.from,
+                        );
                     },
                 },
                 props: {

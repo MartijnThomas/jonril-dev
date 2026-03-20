@@ -815,32 +815,42 @@ export function BlockNodeToolbar({
                                 </PopoverTrigger>
                                 <PopoverContent align="start" className="w-[19rem] p-2.5">
                                     <div className="space-y-2">
-                                        <input
-                                            type="url"
-                                            value={linkInputValue}
-                                            onChange={(event) => setLinkInputValue(event.target.value)}
-                                            onKeyDown={(event) => {
-                                                if (event.key === 'Enter') {
-                                                    event.preventDefault();
-                                                    handleLinkAction();
-                                                }
-                                            }}
-                                            placeholder="Paste a link..."
-                                            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
-                                        />
-                                        <input
-                                            type="text"
-                                            value={linkTextValue}
-                                            onChange={(event) => setLinkTextValue(event.target.value)}
-                                            onKeyDown={(event) => {
-                                                if (event.key === 'Enter') {
-                                                    event.preventDefault();
-                                                    handleLinkAction();
-                                                }
-                                            }}
-                                            placeholder="Link text (optional)"
-                                            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
-                                        />
+                                        <div className="space-y-1">
+                                            <label className="block text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                                                Address
+                                            </label>
+                                            <input
+                                                type="url"
+                                                value={linkInputValue}
+                                                onChange={(event) => setLinkInputValue(event.target.value)}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === 'Enter') {
+                                                        event.preventDefault();
+                                                        handleLinkAction();
+                                                    }
+                                                }}
+                                                placeholder="https://example.com"
+                                                className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="block text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                                                Display text
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={linkTextValue}
+                                                onChange={(event) => setLinkTextValue(event.target.value)}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === 'Enter') {
+                                                        event.preventDefault();
+                                                        handleLinkAction();
+                                                    }
+                                                }}
+                                                placeholder="Visible title (optional)"
+                                                className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                                            />
+                                        </div>
                                         <div className="flex items-center justify-end gap-1.5">
                                             {(isLinkActive || linkInputValue.trim() !== '') ? (
                                                 <button

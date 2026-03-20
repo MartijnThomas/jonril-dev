@@ -173,6 +173,71 @@ function clearDropIndicators(view: EditorView): void {
     }
 }
 
+function clearMovingHighlight(view: EditorView): void {
+    view.dom.querySelectorAll('.bt-block-moving').forEach((node) => {
+        node.classList.remove('bt-block-moving');
+    });
+
+    const document = view.dom.ownerDocument;
+    const movingIndicator = document.querySelector('[data-bt-block-moving-indicator="true"]');
+    if (movingIndicator instanceof HTMLElement) {
+        movingIndicator.remove();
+    }
+}
+
+function applyMovingHighlight(view: EditorView, sourcePos: number): void {
+    clearMovingHighlight(view);
+
+    const sourceRange = getMovableBlockRange(view.state.doc, sourcePos);
+    if (!sourceRange) {
+        return;
+    }
+
+    const topLevelBlocks = getTopLevelBlocks(view.state.doc);
+    const movingRects: DOMRect[] = [];
+    topLevelBlocks.forEach((block) => {
+        if (block.pos < sourceRange.from || block.pos >= sourceRange.to) {
+            return;
+        }
+
+        const nodeDom = view.nodeDOM(block.pos);
+        if (nodeDom instanceof HTMLElement) {
+            nodeDom.classList.add('bt-block-moving');
+            movingRects.push(nodeDom.getBoundingClientRect());
+        }
+    });
+
+    if (movingRects.length === 0) {
+        return;
+    }
+
+    const top = Math.min(...movingRects.map((rect) => rect.top));
+    const bottom = Math.max(...movingRects.map((rect) => rect.bottom));
+    const left = Math.min(...movingRects.map((rect) => rect.left)) - 6;
+    const right = Math.max(...movingRects.map((rect) => rect.right)) + 6;
+
+    const document = view.dom.ownerDocument;
+    const movingIndicator = document.createElement('div');
+    movingIndicator.setAttribute('data-bt-block-moving-indicator', 'true');
+    movingIndicator.style.color = view.dom.ownerDocument.defaultView
+        ? view.dom.ownerDocument.defaultView.getComputedStyle(view.dom).color
+        : 'currentColor';
+    movingIndicator.style.position = 'fixed';
+    movingIndicator.style.top = `${Math.round(top)}px`;
+    movingIndicator.style.left = `${Math.round(Math.max(0, left))}px`;
+    movingIndicator.style.width = `${Math.max(16, Math.round(right - left))}px`;
+    movingIndicator.style.height = `${Math.max(10, Math.round(bottom - top))}px`;
+    movingIndicator.style.borderRadius = '8px';
+    movingIndicator.style.background =
+        'color-mix(in srgb, currentColor 5%, transparent)';
+    movingIndicator.style.boxShadow =
+        'inset 0 0 0 1px color-mix(in srgb, currentColor 12%, transparent)';
+    movingIndicator.style.pointerEvents = 'none';
+    movingIndicator.style.zIndex = '9997';
+
+    document.body.appendChild(movingIndicator);
+}
+
 function applyDropIndicator(
     view: EditorView,
     blockPos: number,
@@ -392,11 +457,11 @@ export const BlockDragHandleExtension = Extension.create({
                             event.preventDefault();
                             event.stopPropagation();
 
-                            let moved = false;
-                            let lastX = event.clientX;
-                            let lastY = event.clientY;
-                            let activeTargetPos: number | null = null;
-                            let activePlaceAfter = false;
+                                let moved = false;
+                                let lastX = event.clientX;
+                                let lastY = event.clientY;
+                                let activeTargetPos: number | null = null;
+                                let activePlaceAfter = false;
 
                             const onMouseMove = (moveEvent: MouseEvent) => {
                                 lastX = moveEvent.clientX;
@@ -410,6 +475,7 @@ export const BlockDragHandleExtension = Extension.create({
                                     ) >= 4
                                 ) {
                                     moved = true;
+                                    applyMovingHighlight(view, sourcePos);
                                 }
 
                                 if (!moved) {
@@ -447,6 +513,7 @@ export const BlockDragHandleExtension = Extension.create({
                                 window.removeEventListener('mouseup', onMouseUp, true);
 
                                 clearDropIndicators(view);
+                                clearMovingHighlight(view);
 
                                 if (!moved || activeTargetPos === null) {
                                     return;
