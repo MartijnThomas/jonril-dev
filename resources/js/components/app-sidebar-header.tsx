@@ -49,7 +49,7 @@ function MobileNotePath({ breadcrumbs }: { breadcrumbs: BreadcrumbItemType[] }) 
     if (parents.length === 0) return null;
     return (
         <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <span className="flex items-center gap-1 whitespace-nowrap text-[0.68rem] text-muted-foreground">
+            <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground md:text-[0.68rem]">
                 {parents.map((item, i) => (
                     <span key={i} className="flex items-center gap-1">
                         {i > 0 && <span className="opacity-40">/</span>}
@@ -256,7 +256,7 @@ export function AppSidebarHeader({
 
     const mobileTitle = breadcrumbs.at(-1)?.title ?? '';
     const showMobilePath = isMobile && breadcrumbs.length > 1;
-    const headerIconClassName = 'size-[18px]';
+    const headerIconClassName = 'size-5 md:size-[18px]';
     const openCommandPalette = () => {
         window.dispatchEvent(new Event('open-command-palette'));
     };
@@ -267,7 +267,7 @@ export function AppSidebarHeader({
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                     {isMobile ? (
                         <div className="flex min-w-0 flex-col gap-0.5">
-                            <span className="truncate text-sm font-medium text-foreground leading-tight">{mobileTitle}</span>
+                            <span className="truncate text-base leading-tight font-medium text-foreground md:text-sm">{mobileTitle}</span>
                             {showMobilePath && <MobileNotePath breadcrumbs={breadcrumbs} />}
                         </div>
                     ) : (
@@ -280,11 +280,11 @@ export function AppSidebarHeader({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                        className="h-8 gap-1.5 px-2 text-sm text-muted-foreground md:h-7 md:text-xs"
                         onClick={openCommandPalette}
                         aria-label="Open command palette"
                     >
-                        <Search className="size-3.5" />
+                        <Search className="size-4 md:size-3.5" />
                         <span className="hidden sm:inline">Search</span>
                         <span className="hidden lg:inline text-[10px] text-muted-foreground/80">⌘K</span>
                     </Button>
@@ -294,7 +294,7 @@ export function AppSidebarHeader({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7"
+                                className="h-8 w-8 md:h-7 md:w-7"
                                 onClick={() => navigateJournal(-1)}
                                 aria-label="Previous journal note"
                             >
@@ -304,7 +304,7 @@ export function AppSidebarHeader({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7"
+                                className="h-8 w-8 md:h-7 md:w-7"
                                 onClick={() => navigateJournal(1)}
                                 aria-label="Next journal note"
                             >

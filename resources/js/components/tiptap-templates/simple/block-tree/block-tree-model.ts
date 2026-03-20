@@ -757,11 +757,14 @@ export function getParagraphMarkerBounds(element: HTMLElement): {
 } {
     const rect = element.getBoundingClientRect();
     const paddingLeft = Number.parseFloat(window.getComputedStyle(element).paddingLeft || '0');
-    const markerWidth = 22;
+    const markerWidth = 18;
+    const markerGapToText = 6;
+    const right = rect.left + Math.max(0, paddingLeft - markerGapToText);
+    const left = Math.max(rect.left, right - markerWidth);
 
     return {
-        left: rect.left + Math.max(0, paddingLeft - markerWidth),
-        right: rect.left + paddingLeft,
+        left,
+        right,
     };
 }
 

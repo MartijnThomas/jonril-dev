@@ -266,6 +266,17 @@
         margin-top: 0.18rem;
     }
 
+    .bt-paragraph[data-block-style='paragraph'] + .bt-paragraph[data-block-style='bullet'],
+    .bt-paragraph[data-block-style='paragraph'] + .bt-paragraph[data-block-style='ordered'],
+    .bt-paragraph[data-block-style='paragraph'] + .bt-paragraph[data-block-style='task'],
+    .bt-paragraph[data-block-style='paragraph'] + .bt-paragraph[data-block-style='checklist'],
+    .bt-paragraph[data-block-style='quote'] + .bt-paragraph[data-block-style='bullet'],
+    .bt-paragraph[data-block-style='quote'] + .bt-paragraph[data-block-style='ordered'],
+    .bt-paragraph[data-block-style='quote'] + .bt-paragraph[data-block-style='task'],
+    .bt-paragraph[data-block-style='quote'] + .bt-paragraph[data-block-style='checklist'] {
+        margin-top: 0.38rem;
+    }
+
     .bt-paragraph[data-block-style='bullet'] + .bt-paragraph[data-block-style='bullet'],
     .bt-paragraph[data-block-style='ordered'] + .bt-paragraph[data-block-style='ordered'],
     .bt-paragraph[data-block-style='task'] + .bt-paragraph[data-block-style='task'],
@@ -555,6 +566,17 @@
     .bt-paragraph + .bt-heading,
     .bt-paragraph + .bt-paragraph {
         margin-top: 0.18rem;
+    }
+
+    .bt-paragraph[data-block-style='paragraph'] + .bt-paragraph[data-block-style='bullet'],
+    .bt-paragraph[data-block-style='paragraph'] + .bt-paragraph[data-block-style='ordered'],
+    .bt-paragraph[data-block-style='paragraph'] + .bt-paragraph[data-block-style='task'],
+    .bt-paragraph[data-block-style='paragraph'] + .bt-paragraph[data-block-style='checklist'],
+    .bt-paragraph[data-block-style='quote'] + .bt-paragraph[data-block-style='bullet'],
+    .bt-paragraph[data-block-style='quote'] + .bt-paragraph[data-block-style='ordered'],
+    .bt-paragraph[data-block-style='quote'] + .bt-paragraph[data-block-style='task'],
+    .bt-paragraph[data-block-style='quote'] + .bt-paragraph[data-block-style='checklist'] {
+        margin-top: 0.38rem;
     }
 
     .bt-paragraph[data-block-style='bullet'] + .bt-paragraph[data-block-style='bullet'],

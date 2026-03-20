@@ -492,6 +492,7 @@ function SimpleEditorComponent({
                     lang: language,
                     'aria-label': 'Main content area, start typing to enter text.',
                     'data-editor-mode': 'block',
+                    'data-note-id': id,
                     class: 'simple-editor',
                 },
             },

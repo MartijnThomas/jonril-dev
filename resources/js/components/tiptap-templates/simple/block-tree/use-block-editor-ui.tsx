@@ -53,6 +53,31 @@ export function useBlockEditorUi({
     meetingNotesCount = 0,
     onToggleMeetingNotes,
 }: UseBlockEditorUiOptions) {
+    const resolveSourceNoteId = useCallback((): string | null => {
+        const normalizedProp = noteId.trim();
+        if (normalizedProp !== '') {
+            return normalizedProp;
+        }
+
+        const domNoteId =
+            editor?.view?.dom?.getAttribute('data-note-id')?.trim() ?? '';
+        if (domNoteId !== '') {
+            return domNoteId;
+        }
+
+        if (typeof window !== 'undefined') {
+            const match = window.location.pathname.match(
+                /^\/(?:w\/[^/]+\/)?notes\/([0-9a-fA-F-]{36})(?:\/|$)/u,
+            );
+            const urlNoteId = match?.[1]?.trim() ?? '';
+            if (urlNoteId !== '') {
+                return urlNoteId;
+            }
+        }
+
+        return null;
+    }, [editor, noteId]);
+
     const [taskMigratePicker, setTaskMigratePicker] = useState<{
         open: boolean;
         blockId: string | null;
@@ -335,7 +360,9 @@ export function useBlockEditorUi({
                         });
                     }}
                     onQuickMigrate={(targetNoteId) => {
+                        const sourceNoteId = resolveSourceNoteId();
                         if (
+                            sourceNoteId === null ||
                             blockTaskActionsMenu.blockId === null &&
                             (blockTaskActionsMenu.pos ?? 0) <= 0
                         ) {
@@ -345,7 +372,7 @@ export function useBlockEditorUi({
                         router.post(
                             '/tasks/migrate',
                             {
-                                source_note_id: noteId,
+                                source_note_id: sourceNoteId,
                                 block_id: blockTaskActionsMenu.blockId,
                                 position: blockTaskActionsMenu.pos,
                                 target_note_id: targetNoteId,
@@ -416,6 +443,7 @@ export function useBlockEditorUi({
         linkableNotes,
         meetingNotesCount,
         noteId,
+        resolveSourceNoteId,
         onToggleMeetingNotes,
         showMeetingNotes,
         workspaceSuggestions,

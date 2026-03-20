@@ -21,7 +21,7 @@ const CONTENT_HORIZONTAL_BUFFER = 32;
 const VIEWPORT_SHRINK_THRESHOLD = 24;
 
 const edgeTabClass =
-    'absolute top-1/2 z-20 flex -translate-y-1/2 items-center justify-center rounded-sm border border-sidebar-border/60 bg-sidebar/60 text-muted-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-10 w-3.5';
+    'absolute top-1/2 z-20 flex -translate-y-1/2 items-center justify-center rounded-sm border border-sidebar-border/60 bg-sidebar/60 text-muted-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-12 w-5 md:h-11 md:w-4';
 
 function LeftSidebarEdgeToggle() {
     const { state, toggleSidebar } = useSidebar();
@@ -33,7 +33,7 @@ function LeftSidebarEdgeToggle() {
             className={`${edgeTabClass} left-0 rounded-l-none border-l-0`}
             aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-            {isCollapsed ? <ChevronRight className="size-3" /> : <ChevronLeft className="size-3" />}
+            {isCollapsed ? <ChevronRight className="size-4 md:size-3.5" /> : <ChevronLeft className="size-4 md:size-3.5" />}
         </button>
     );
 }
@@ -46,7 +46,7 @@ function RightSidebarEdgeToggle({ open, onToggle }: { open: boolean; onToggle: (
             className={`${edgeTabClass} right-0 rounded-r-none border-r-0`}
             aria-label={open ? 'Close right sidebar' : 'Open right sidebar'}
         >
-            {open ? <ChevronRight className="size-3" /> : <ChevronLeft className="size-3" />}
+            {open ? <ChevronRight className="size-4 md:size-3.5" /> : <ChevronLeft className="size-4 md:size-3.5" />}
         </button>
     );
 }

@@ -532,9 +532,9 @@ export function BlockNodeToolbar({
     const isParagraphBlock = currentBlock?.type === 'paragraph';
     const squareButtonBaseClass =
         'size-7 rounded-lg p-0 [&>svg]:size-3.5';
-    const subtleActiveSquareButtonClass = `${squareButtonBaseClass} border border-violet-200/70 bg-violet-50 text-violet-500 shadow-none`;
+    const subtleActiveSquareButtonClass = `${squareButtonBaseClass} border border-violet-200/70 bg-violet-50 text-violet-600 shadow-none dark:border-violet-400/40 dark:bg-violet-500/20 dark:text-violet-200`;
     const activeSquareButtonHoverClass =
-        `${subtleActiveSquareButtonClass} hover:bg-violet-100/70`;
+        `${subtleActiveSquareButtonClass} hover:bg-violet-100/70 dark:hover:bg-violet-500/30`;
     const inactiveSquareButtonClass = `${squareButtonBaseClass} border border-transparent text-muted-foreground hover:bg-muted hover:text-foreground`;
     const currentHeadingOption = HEADING_OPTIONS.find((option) => option.value === currentValue) ?? null;
     const HeadingIcon = currentHeadingOption?.icon ?? Heading1;
@@ -704,7 +704,7 @@ export function BlockNodeToolbar({
                                             variant="ghost"
                                             className={
                                                 currentMarks.highlight
-                                                    ? 'h-7 gap-0.5 rounded-lg border border-violet-200/70 bg-violet-50 px-1.5 text-foreground shadow-none hover:bg-violet-100/70'
+                                                    ? 'h-7 gap-0.5 rounded-lg border border-violet-200/70 bg-violet-50 px-1.5 text-foreground shadow-none hover:bg-violet-100/70 dark:border-violet-400/40 dark:bg-violet-500/20 dark:text-violet-100 dark:hover:bg-violet-500/30'
                                                     : 'h-7 gap-0.5 rounded-lg border border-transparent px-1.5 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground'
                                             }
                                             onPointerDown={(event) => {
@@ -729,7 +729,7 @@ export function BlockNodeToolbar({
                                             <Highlighter
                                                 className={
                                                     currentMarks.highlight
-                                                        ? 'size-3.5 text-violet-500'
+                                                        ? 'size-3.5 text-violet-600 dark:text-violet-200'
                                                         : 'size-3.5'
                                                 }
                                             />
