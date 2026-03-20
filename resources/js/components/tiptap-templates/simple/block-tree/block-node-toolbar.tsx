@@ -599,7 +599,7 @@ export function BlockNodeToolbar({
                                             <Highlighter className="size-3.5" />
                                             <span
                                                 data-highlight-picker="true"
-                                                className="ml-1 inline-flex items-center gap-0.5 border-l border-border/50 pl-1"
+                                                className="ml-1 inline-flex items-center gap-0.5 pl-1"
                                             >
                                                 <span
                                                     aria-hidden
