@@ -12,6 +12,7 @@ import {
     normalizeJournalTargetPath,
     normalizeNoteTargetPath,
     parseWikiLinkQuery,
+    wikiLinkInsertTextFromTargetPath,
     wikiLinkEditableQueryFromTarget,
 } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 
@@ -334,7 +335,12 @@ export const BlockWikiLinkMark = Mark.create<{
                               normalizeHeadingText(targetBlockId),
                       )?.title ?? null
                     : null;
-            const editablePath = resolved?.editablePath?.trim() || targetPath || currentText;
+            const editablePath = resolved
+                ? wikiLinkInsertTextFromTargetPath(
+                    resolved.targetPath,
+                    resolved.editablePath.trim(),
+                )
+                : targetPath || currentText;
             const replacement = `[[${wikiLinkEditableQueryFromTarget(editablePath, headingTitle)}]]`;
             const tr = view.state.tr.insertText(replacement, range.from, range.to);
             tr.setSelection(

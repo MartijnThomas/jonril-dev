@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import type { BlockWikiLinkSuggestionItem } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 import {
     Command,
@@ -22,6 +22,10 @@ export const BlockWikiLinkList = forwardRef<
         () => (items.length > 0 ? Math.min(selectedIndex, items.length - 1) : 0),
         [items.length, selectedIndex],
     );
+
+    useEffect(() => {
+        setSelectedIndex(0);
+    }, [items]);
 
     const selectItem = (index: number) => {
         const item = items[index];

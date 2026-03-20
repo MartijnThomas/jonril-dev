@@ -9,15 +9,9 @@ import type {
     BlockWikiLinkSuggestionItem,
 } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 import {
-    buildProgressiveJournalSuggestions,
-    displayPathFromNote,
-    displayTitleFromTargetPath,
-    deriveTargetPathFromNote,
+    buildBlockWikiLinkSuggestions,
     fallbackBlockWikiHrefFromTargetPath,
     findCompleteRawWikiLinks,
-    normalizeHeadingText,
-    parseWikiLinkQuery,
-    resolveTargetPathFromQuery,
 } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 
 export const blockWikiLinkSuggestionPluginKey = new PluginKey(
@@ -47,8 +41,6 @@ const updatePosition = (editor: any, element: HTMLElement, anchorFrom: number) =
         element.style.top = `${y}px`;
     });
 };
-
-const normalizeQuery = (value: string) => value.trim().toLowerCase();
 
 export const BlockWikiLinkSuggestion = Extension.create<{
     notes: BlockWikiLinkNote[];
@@ -102,145 +94,11 @@ export const BlockWikiLinkSuggestion = Extension.create<{
                             .slice(openIndex + 2, closeIndex)
                             .trim();
                     }
-
-                    const { rawPath, rawHeading } = parseWikiLinkQuery(effectiveQuery);
-                    const normalized = normalizeQuery(rawPath);
-                    const existingTargetPaths = new Set<string>();
-                    const existingItems: BlockWikiLinkSuggestionItem[] = [];
-                    const resolvedTargetPath = resolveTargetPathFromQuery(
-                        rawPath,
+                    return buildBlockWikiLinkSuggestions(
                         this.options.notes,
+                        effectiveQuery,
+                        this.options.language,
                     );
-                    const noteForHeadingQuery = resolvedTargetPath
-                        ? this.options.notes.find(
-                              (note) =>
-                                  deriveTargetPathFromNote(note).toLowerCase() ===
-                                  resolvedTargetPath.toLowerCase(),
-                          ) ?? null
-                        : null;
-                    const hasHeadingQuery = effectiveQuery.includes('#');
-
-                    this.options.notes.forEach((note) => {
-                        const targetPath = deriveTargetPathFromNote(note);
-                        const subtitle = displayPathFromNote(note, targetPath);
-
-                        if (
-                            normalized &&
-                            !note.title.toLowerCase().includes(normalized) &&
-                            !subtitle.toLowerCase().includes(normalized) &&
-                            !targetPath.toLowerCase().includes(normalized)
-                        ) {
-                            return;
-                        }
-
-                        const key = targetPath.toLowerCase();
-                        if (existingTargetPaths.has(key)) {
-                            return;
-                        }
-                        existingTargetPaths.add(key);
-
-                        existingItems.push({
-                            id: note.id,
-                            title: note.title,
-                            targetPath,
-                            targetBlockId: null,
-                            noteId: note.id,
-                            href:
-                                note.href ||
-                                    fallbackBlockWikiHrefFromTargetPath(targetPath, note.id),
-                            subtitle,
-                            kind: targetPath.startsWith('journal/')
-                                ? 'journal'
-                                : 'note',
-                            insertText: note.title,
-                        });
-                    });
-
-                    if (hasHeadingQuery && noteForHeadingQuery && resolvedTargetPath) {
-                        const headingQuery = normalizeHeadingText(rawHeading);
-                        const headings = Array.isArray(noteForHeadingQuery.headings)
-                            ? noteForHeadingQuery.headings
-                            : [];
-                        const displayPath = displayPathFromNote(
-                            noteForHeadingQuery,
-                            resolvedTargetPath,
-                        );
-                        const headingItems = headings
-                            .filter(
-                                (heading) =>
-                                    heading.id &&
-                                    heading.title &&
-                                    (
-                                        headingQuery === '' ||
-                                        normalizeHeadingText(heading.title).includes(
-                                            headingQuery,
-                                        )
-                                    ),
-                            )
-                            .map((heading) => ({
-                                id: `${noteForHeadingQuery.id}#${heading.id}`,
-                                title: heading.title,
-                                targetPath: resolvedTargetPath,
-                                targetBlockId: heading.id,
-                                noteId: noteForHeadingQuery.id,
-                                href: fallbackBlockWikiHrefFromTargetPath(
-                                    resolvedTargetPath,
-                                    noteForHeadingQuery.id,
-                                    heading.id,
-                                ),
-                                subtitle: `${displayPath}# ${heading.title}`,
-                                kind: 'heading' as const,
-                                insertText: `${noteForHeadingQuery.title} # ${heading.title}`,
-                            }));
-
-                        return headingItems.slice(0, 8);
-                    }
-
-                    const journalItems =
-                        rawPath.length >= 3
-                            ? buildProgressiveJournalSuggestions(
-                                  rawPath,
-                                  existingTargetPaths,
-                                  this.options.language,
-                              )
-                            : [];
-
-                    const targetPath = resolveTargetPathFromQuery(
-                        rawPath,
-                        this.options.notes,
-                    );
-
-                    const createItem =
-                        targetPath &&
-                        !existingTargetPaths.has(targetPath.toLowerCase())
-                            ? ({
-                                  id: `create:${targetPath}`,
-                                  title: displayTitleFromTargetPath(
-                                      targetPath,
-                                      this.options.language,
-                                  ),
-                                  targetPath,
-                                  targetBlockId: null,
-                                  noteId: null,
-                                  href: fallbackBlockWikiHrefFromTargetPath(targetPath),
-                                  subtitle: targetPath.startsWith('journal/')
-                                      ? 'Open or create journal target'
-                                      : 'Create unresolved target',
-                                  kind: targetPath.startsWith('journal/')
-                                      ? 'journal'
-                                      : 'create',
-                                  insertText: displayTitleFromTargetPath(
-                                      targetPath,
-                                      this.options.language,
-                                  ),
-                              } as BlockWikiLinkSuggestionItem)
-                            : null;
-
-                    return [
-                        ...existingItems,
-                        ...journalItems,
-                        ...(createItem ? [createItem] : []),
-                    ].slice(0, 8);
                 },
                 command: ({ editor, range, props }) => {
                     let replaceFrom = range.from;

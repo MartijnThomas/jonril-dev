@@ -294,6 +294,23 @@ export function editableJournalPathFromTargetPath(targetPath: string): string | 
     return `journal/${period}`;
 }
 
+export function wikiLinkInsertTextFromTargetPath(
+    targetPath: string,
+    fallback: string,
+): string {
+    const match = targetPath
+        .trim()
+        .match(/^journal\/(daily|weekly|monthly|yearly)\/(.+)$/i);
+
+    if (!match) {
+        return fallback;
+    }
+
+    const period = (match[2] ?? '').trim();
+
+    return period !== '' ? period : fallback;
+}
+
 function capitalizeFirst(value: string): string {
     if (value.length === 0) {
         return value;
@@ -531,7 +548,7 @@ export function buildProgressiveJournalSuggestions(
             targetPath,
             kind: 'journal',
             subtitle: targetPath,
-            insertText: title,
+            insertText: wikiLinkInsertTextFromTargetPath(targetPath, title),
             noteId: null,
             href: fallbackBlockWikiHrefFromTargetPath(targetPath),
         });
@@ -595,6 +612,60 @@ function normalizeQuery(value: string): string {
     return value.trim().toLowerCase();
 }
 
+function scoreSuggestionPathMatch(
+    rawPath: string,
+    note: BlockWikiLinkNote,
+    targetPath: string,
+): number {
+    const raw = rawPath.trim();
+    if (raw === '') {
+        return 0;
+    }
+
+    const normalizedRaw = normalizePathLike(raw);
+    if (normalizedRaw === '') {
+        return 0;
+    }
+
+    const displayPath = normalizePathLike(displayPathFromNote(note, targetPath));
+    const normalizedTargetPath = normalizePathLike(targetPath);
+    const normalizedTitle = slugifySegment(note.title);
+
+    if (displayPath === normalizedRaw) {
+        return 300;
+    }
+
+    if (normalizedTargetPath === normalizedRaw) {
+        return 260;
+    }
+
+    if (displayPath.startsWith(normalizedRaw)) {
+        return 220;
+    }
+
+    if (normalizedTargetPath.startsWith(normalizedRaw)) {
+        return 180;
+    }
+
+    if (displayPath.includes(normalizedRaw)) {
+        return 140;
+    }
+
+    if (normalizedTargetPath.includes(normalizedRaw)) {
+        return 110;
+    }
+
+    if (normalizedTitle === normalizedRaw) {
+        return 80;
+    }
+
+    if (normalizedTitle.includes(normalizedRaw)) {
+        return 40;
+    }
+
+    return 0;
+}
+
 export function buildBlockWikiLinkSuggestions(
     notes: BlockWikiLinkNote[],
     query: string,
@@ -603,7 +674,7 @@ export function buildBlockWikiLinkSuggestions(
     const { rawPath, rawHeading } = parseWikiLinkQuery(query);
     const normalized = normalizeQuery(rawPath);
     const existingTargetPaths = new Set<string>();
-    const existingItems: BlockWikiLinkSuggestionItem[] = [];
+    const existingItemsWithScore: Array<{ item: BlockWikiLinkSuggestionItem; score: number }> = [];
     const resolvedTargetPath = resolveTargetPathFromQuery(rawPath, notes);
     const noteForHeadingQuery = resolvedTargetPath
         ? notes.find(
@@ -634,7 +705,7 @@ export function buildBlockWikiLinkSuggestions(
 
         existingTargetPaths.add(key);
 
-        existingItems.push({
+        const item: BlockWikiLinkSuggestionItem = {
             id: note.id,
             title: note.title,
             targetPath,
@@ -647,9 +718,26 @@ export function buildBlockWikiLinkSuggestions(
             kind: targetPath.startsWith('journal/')
                 ? 'journal'
                 : 'note',
-            insertText: note.title,
+            insertText: targetPath.startsWith('journal/')
+                ? wikiLinkInsertTextFromTargetPath(targetPath, note.title)
+                : note.title,
+        };
+
+        existingItemsWithScore.push({
+            item,
+            score: scoreSuggestionPathMatch(rawPath, note, targetPath),
         });
     });
+
+    const existingItems = existingItemsWithScore
+        .sort((left, right) => {
+            if (right.score !== left.score) {
+                return right.score - left.score;
+            }
+
+            return left.item.title.localeCompare(right.item.title);
+        })
+        .map((entry) => entry.item);
 
     if (hasHeadingQuery && noteForHeadingQuery && resolvedTargetPath) {
         const headingQuery = normalizeHeadingText(rawHeading);
@@ -685,7 +773,10 @@ export function buildBlockWikiLinkSuggestions(
                 ),
                 subtitle: `${displayPath}# ${heading.title}`,
                 kind: 'heading' as const,
-                insertText: `${noteForHeadingQuery.title} # ${heading.title}`,
+                insertText: `${wikiLinkInsertTextFromTargetPath(
+                    resolvedTargetPath,
+                    noteForHeadingQuery.title,
+                )} # ${heading.title}`,
             }));
 
         return headingItems.slice(0, 8);
@@ -721,9 +812,9 @@ export function buildBlockWikiLinkSuggestions(
                 kind: targetPath.startsWith('journal/')
                     ? 'journal'
                     : 'create',
-                insertText: displayTitleFromTargetPath(
+                insertText: wikiLinkInsertTextFromTargetPath(
                     targetPath,
-                    language,
+                    displayTitleFromTargetPath(targetPath, language),
                 ),
             } as BlockWikiLinkSuggestionItem)
             : null;
