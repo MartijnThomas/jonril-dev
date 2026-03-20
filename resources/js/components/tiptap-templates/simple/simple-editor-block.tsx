@@ -84,10 +84,12 @@ function MeetingEventMeta({
     event,
     language,
     participants,
+    onAddParticipants,
 }: {
     event: MeetingEventData;
     language: 'nl' | 'en';
     participants: string[];
+    onAddParticipants: () => void;
 }) {
     const timeLabel = formatMeetingTimeRange(event.starts_at, event.ends_at, language);
     if (!timeLabel && !event.location && participants.length === 0) return null;
@@ -115,11 +117,33 @@ function MeetingEventMeta({
                     <span className="w-16 shrink-0 whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
                         {language === 'nl' ? 'Wie' : 'Who'}
                     </span>
-                    <span className="text-[0.82rem]">
-                        {participants.map((participant) => `@${participant}`).join(', ')}
+                    <span className="flex flex-wrap items-center gap-1">
+                        {participants.map((participant) => (
+                            <span
+                                key={participant}
+                                className="inline-flex items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                            >
+                                @{participant}
+                            </span>
+                        ))}
                     </span>
                 </div>
-            ) : null}
+            ) : (
+                <div className="flex items-baseline gap-3 text-muted-foreground">
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
+                            {language === 'nl' ? 'Wie' : 'Who'}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={onAddParticipants}
+                            className="rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground/80 hover:bg-muted hover:text-foreground"
+                        >
+                            {language === 'nl' ? 'Deelnemers toevoegen' : 'Add participants'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -728,6 +752,11 @@ function SimpleEditorComponent({
                                     event={meetingEvent}
                                     language={language}
                                     participants={meetingParticipants}
+                                    onAddParticipants={() => {
+                                        window.dispatchEvent(
+                                            new Event('note-properties-toggle-request'),
+                                        );
+                                    }}
                                 />
                             ) : null}
                             <EditorContent
