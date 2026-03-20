@@ -744,7 +744,7 @@ function createBlockEditingExtension(
                             const hasBulletMarker =
                                 marker === '-' && parentOffset === 1;
                             const hasTaskMarker =
-                                marker === '*' && parentOffset === 1;
+                                marker === '*' && parentOffset === 1 && attrs.blockStyle !== 'task';
                             const hasChecklistMarker =
                                 marker === '+' &&
                                 parentOffset === 1 &&

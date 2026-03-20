@@ -12,6 +12,7 @@ import {
     Check,
     ChevronDown,
     ChevronRight,
+    Ellipsis,
     FileText,
     Home,
     Filter,
@@ -20,7 +21,7 @@ import {
     Star,
     X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { TaskInlineContent } from '@/components/task-inline-content';
 import type { TaskRenderFragment } from '@/components/task-inline-content';
@@ -61,6 +62,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useTaskFilters } from '@/hooks/use-task-filters';
 import type { FilterPreset, Filters } from '@/hooks/use-task-filters';
 import AppLayout from '@/layouts/app-layout';
@@ -251,7 +253,12 @@ export default function TasksIndex({
     const [relativeNow, setRelativeNow] = useState<number>(() => Date.now());
     const [expandedTaskIds, setExpandedTaskIds] = useState<number[]>([]);
     const [searchInput, setSearchInput] = useState(filters.q ?? '');
+    const isMobile = useIsMobile();
+    const longPressTimerRef = useRef<number | null>(null);
+    const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
     const minSearchChars = 3;
+    const LONG_PRESS_DURATION_MS = 480;
+    const LONG_PRESS_MOVE_CANCEL_PX = 12;
 
     const favoriteFilterPresets = useMemo(
         () => filterPresets.filter((preset) => preset.favorite),
@@ -291,6 +298,83 @@ export default function TasksIndex({
 
         return () => window.clearTimeout(timer);
     }, [applyFilters, localFilters.q, minSearchChars, searchInput]);
+
+    const clearLongPressTimer = useCallback(() => {
+        if (longPressTimerRef.current !== null) {
+            window.clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+    }, []);
+
+    const handleTaskRowPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        if (!isMobile || event.pointerType !== 'touch') {
+            return;
+        }
+
+        const target = event.target as HTMLElement | null;
+        if (
+            target?.closest(
+                'button,a,input,textarea,select,[role="menuitem"],[data-no-long-press-context]',
+            )
+        ) {
+            return;
+        }
+
+        clearLongPressTimer();
+        longPressStartRef.current = { x: event.clientX, y: event.clientY };
+
+        const row = event.currentTarget;
+        longPressTimerRef.current = window.setTimeout(() => {
+            row.dispatchEvent(
+                new MouseEvent('contextmenu', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    button: 2,
+                    buttons: 2,
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                }),
+            );
+            clearLongPressTimer();
+            longPressStartRef.current = null;
+        }, LONG_PRESS_DURATION_MS);
+    }, [clearLongPressTimer, isMobile]);
+
+    const handleTaskRowPointerMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        if (!isMobile || event.pointerType !== 'touch') {
+            return;
+        }
+
+        const start = longPressStartRef.current;
+        if (!start) {
+            return;
+        }
+
+        if (
+            Math.abs(event.clientX - start.x) > LONG_PRESS_MOVE_CANCEL_PX ||
+            Math.abs(event.clientY - start.y) > LONG_PRESS_MOVE_CANCEL_PX
+        ) {
+            clearLongPressTimer();
+            longPressStartRef.current = null;
+        }
+    }, [clearLongPressTimer, isMobile]);
+
+    const handleTaskRowPointerEnd = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        if (!isMobile || event.pointerType !== 'touch') {
+            return;
+        }
+
+        clearLongPressTimer();
+        longPressStartRef.current = null;
+    }, [clearLongPressTimer, isMobile]);
+
+    useEffect(() => {
+        return () => {
+            clearLongPressTimer();
+        };
+    }, [clearLongPressTimer]);
+
     const updateTaskChecked = (
         task: TaskItem,
         checked: boolean,
@@ -807,6 +891,10 @@ export default function TasksIndex({
                             hasChildren && isExpanded && 'bg-muted/40',
                         )}
                         onDoubleClick={() => openTaskInNote(task)}
+                        onPointerDown={handleTaskRowPointerDown}
+                        onPointerMove={handleTaskRowPointerMove}
+                        onPointerUp={handleTaskRowPointerEnd}
+                        onPointerCancel={handleTaskRowPointerEnd}
                     >
                         <TaskToggleCheckbox
                             className="mt-1.5"
@@ -858,30 +946,78 @@ export default function TasksIndex({
                                                 hideStatusTokens
                                             />
                                         </div>
-                                        {hasChildren ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleExpandedTask(task.id)}
-                                                className="mt-[2px] inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-                                                aria-label={
-                                                    isExpanded
-                                                        ? t(
-                                                              'tasks_index.collapse_children',
-                                                              'Collapse nested items',
-                                                          )
-                                                        : t(
-                                                              'tasks_index.expand_children',
-                                                              'Expand nested items',
-                                                          )
-                                                }
-                                            >
-                                                {isExpanded ? (
-                                                    <ChevronDown className="size-3.5" />
-                                                ) : (
-                                                    <ChevronRight className="size-3.5" />
-                                                )}
-                                            </button>
-                                        ) : null}
+                                        <div className="mt-[2px] inline-flex shrink-0 items-center gap-1">
+                                            {isMobile ? (
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <button
+                                                            type="button"
+                                                            data-no-long-press-context
+                                                            className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                            aria-label={t('common.more_actions', 'More actions')}
+                                                        >
+                                                            <Ellipsis className="size-3.5" />
+                                                        </button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem
+                                                            onSelect={() => openTaskInNote(task)}
+                                                            disabled={!task.block_id}
+                                                        >
+                                                            <FileText />
+                                                            {t('tasks_index.go_to_task_in_note', 'Go to task in note')}
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                            onSelect={() => cancelTask(task)}
+                                                            disabled={
+                                                                task.task_status === 'canceled' ||
+                                                                task.task_status === 'migrated' ||
+                                                                pendingTaskIds.includes(task.id)
+                                                            }
+                                                        >
+                                                            <Ban />
+                                                            {t('tasks_index.cancel_task', 'Cancel task')}
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onSelect={() => migrateTaskToToday(task)}
+                                                            disabled={
+                                                                task.task_status === 'canceled' ||
+                                                                task.task_status === 'migrated' ||
+                                                                pendingTaskIds.includes(task.id)
+                                                            }
+                                                        >
+                                                            <ArrowRightToLine />
+                                                            {t('tasks_index.migrate_to_today', 'Migrate to today')}
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            ) : null}
+                                            {hasChildren ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleExpandedTask(task.id)}
+                                                    className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                    aria-label={
+                                                        isExpanded
+                                                            ? t(
+                                                                  'tasks_index.collapse_children',
+                                                                  'Collapse nested items',
+                                                              )
+                                                            : t(
+                                                                  'tasks_index.expand_children',
+                                                                  'Expand nested items',
+                                                              )
+                                                    }
+                                                >
+                                                    {isExpanded ? (
+                                                        <ChevronDown className="size-3.5" />
+                                                    ) : (
+                                                        <ChevronRight className="size-3.5" />
+                                                    )}
+                                                </button>
+                                            ) : null}
+                                        </div>
                                     </div>
                                     {renderTaskMetadataAndPath(task, options)}
                                 </div>

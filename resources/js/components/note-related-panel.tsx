@@ -1,7 +1,7 @@
 import { Link, router, usePage, useRemember } from '@inertiajs/react';
-import { ArrowRightToLine, Ban, FileText } from 'lucide-react';
+import { ArrowRightToLine, Ban, Ellipsis, FileText } from 'lucide-react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { TaskInlineContent } from '@/components/task-inline-content';
 import type { TaskRenderFragment } from '@/components/task-inline-content';
@@ -18,6 +18,13 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -152,6 +159,10 @@ export function NoteRelatedPanel({
     const [openBacklinkGroups, setOpenBacklinkGroups] = useState<
         Record<string, boolean>
     >({});
+    const longPressTimerRef = useRef<number | null>(null);
+    const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
+    const LONG_PRESS_DURATION_MS = 480;
+    const LONG_PRESS_MOVE_CANCEL_PX = 12;
 
     const relatedTitle = language === 'en' ? 'Related' : 'Gerelateerd';
     const relatedTasksTitle = language === 'en' ? 'Tasks' : 'Taken';
@@ -235,6 +246,82 @@ export function NoteRelatedPanel({
     const relatedItemsCount = taskItems.length + backlinks.length;
     const showTasksSection = taskItems.length > 0;
     const showBacklinksSection = backlinks.length > 0;
+
+    const clearLongPressTimer = useCallback(() => {
+        if (longPressTimerRef.current !== null) {
+            window.clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+    }, []);
+
+    const handleTaskRowPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        if (!isMobile || event.pointerType !== 'touch') {
+            return;
+        }
+
+        const target = event.target as HTMLElement | null;
+        if (
+            target?.closest(
+                'button,a,input,textarea,select,[role="menuitem"],[data-no-long-press-context]',
+            )
+        ) {
+            return;
+        }
+
+        clearLongPressTimer();
+        longPressStartRef.current = { x: event.clientX, y: event.clientY };
+        const row = event.currentTarget;
+
+        longPressTimerRef.current = window.setTimeout(() => {
+            row.dispatchEvent(
+                new MouseEvent('contextmenu', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    button: 2,
+                    buttons: 2,
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                }),
+            );
+            clearLongPressTimer();
+            longPressStartRef.current = null;
+        }, LONG_PRESS_DURATION_MS);
+    }, [clearLongPressTimer, isMobile]);
+
+    const handleTaskRowPointerMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        if (!isMobile || event.pointerType !== 'touch') {
+            return;
+        }
+
+        const start = longPressStartRef.current;
+        if (!start) {
+            return;
+        }
+
+        if (
+            Math.abs(event.clientX - start.x) > LONG_PRESS_MOVE_CANCEL_PX ||
+            Math.abs(event.clientY - start.y) > LONG_PRESS_MOVE_CANCEL_PX
+        ) {
+            clearLongPressTimer();
+            longPressStartRef.current = null;
+        }
+    }, [clearLongPressTimer, isMobile]);
+
+    const handleTaskRowPointerEnd = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        if (!isMobile || event.pointerType !== 'touch') {
+            return;
+        }
+
+        clearLongPressTimer();
+        longPressStartRef.current = null;
+    }, [clearLongPressTimer, isMobile]);
+
+    useEffect(() => {
+        return () => {
+            clearLongPressTimer();
+        };
+    }, [clearLongPressTimer]);
 
     if (!showTasksSection && !showBacklinksSection) {
         return null;
@@ -584,6 +671,10 @@ export function NoteRelatedPanel({
                                                                         onDoubleClick={() =>
                                                                             openTaskInNote(task)
                                                                         }
+                                                                        onPointerDown={handleTaskRowPointerDown}
+                                                                        onPointerMove={handleTaskRowPointerMove}
+                                                                        onPointerUp={handleTaskRowPointerEnd}
+                                                                        onPointerCancel={handleTaskRowPointerEnd}
                                                                     >
                                                                         <div className="flex items-start gap-4">
                                                                             <TaskToggleCheckbox
@@ -675,6 +766,54 @@ export function NoteRelatedPanel({
                                                                                     />
                                                                                 </p>
                                                                             </div>
+                                                                            {isMobile ? (
+                                                                                <DropdownMenu>
+                                                                                    <DropdownMenuTrigger asChild>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            data-no-long-press-context
+                                                                                            className="mt-[2px] inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                                                            aria-label={language === 'en' ? 'More actions' : 'Meer acties'}
+                                                                                        >
+                                                                                            <Ellipsis className="size-3.5" />
+                                                                                        </button>
+                                                                                    </DropdownMenuTrigger>
+                                                                                    <DropdownMenuContent align="end">
+                                                                                        <DropdownMenuItem
+                                                                                            onSelect={() => openTaskInNote(task)}
+                                                                                            disabled={!task.block_id}
+                                                                                        >
+                                                                                            <FileText />
+                                                                                            {language === 'en' ? 'Go to task in note' : 'Ga naar taak in notitie'}
+                                                                                        </DropdownMenuItem>
+                                                                                        <DropdownMenuSeparator />
+                                                                                        <DropdownMenuItem
+                                                                                            onSelect={() => cancelTask(task)}
+                                                                                            disabled={
+                                                                                                workspaceReadOnly ||
+                                                                                                task.task_status === 'canceled' ||
+                                                                                                task.task_status === 'migrated' ||
+                                                                                                pendingTaskIds.includes(task.id)
+                                                                                            }
+                                                                                        >
+                                                                                            <Ban />
+                                                                                            {language === 'en' ? 'Cancel task' : 'Taak annuleren'}
+                                                                                        </DropdownMenuItem>
+                                                                                        <DropdownMenuItem
+                                                                                            onSelect={() => migrateToCurrentNote(task)}
+                                                                                            disabled={
+                                                                                                workspaceReadOnly ||
+                                                                                                task.task_status === 'migrated' ||
+                                                                                                task.task_status === 'canceled' ||
+                                                                                                pendingTaskIds.includes(task.id)
+                                                                                            }
+                                                                                        >
+                                                                                            <ArrowRightToLine />
+                                                                                            {language === 'en' ? 'Migrate to this note' : 'Verplaatsen naar deze notitie'}
+                                                                                        </DropdownMenuItem>
+                                                                                    </DropdownMenuContent>
+                                                                                </DropdownMenu>
+                                                                            ) : null}
                                                                         </div>
                                                                     </article>
                                                                 </ContextMenuTrigger>
