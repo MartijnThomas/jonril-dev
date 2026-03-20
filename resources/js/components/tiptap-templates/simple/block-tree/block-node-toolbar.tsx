@@ -574,8 +574,8 @@ export function BlockNodeToolbar({
                                             variant={currentMarks.highlight ? 'default' : 'ghost'}
                                             className={
                                                 currentMarks.highlight
-                                                    ? 'h-7 rounded-lg border border-border/70 bg-background px-1.5 text-foreground shadow-none hover:border-border hover:bg-accent/35 hover:text-foreground'
-                                                    : 'h-7 rounded-lg border border-transparent px-1.5 text-muted-foreground shadow-none hover:border-border/50 hover:bg-background/60 hover:text-foreground'
+                                                    ? 'h-7 gap-0.5 rounded-lg border border-border/70 bg-background px-1.5 text-foreground shadow-none hover:border-border hover:bg-accent/35 hover:text-foreground'
+                                                    : 'h-7 gap-0.5 rounded-lg border border-transparent px-1.5 text-muted-foreground shadow-none hover:border-border/50 hover:bg-background/60 hover:text-foreground'
                                             }
                                             onPointerDown={(event) => {
                                                 const target = event.target as HTMLElement | null;
@@ -599,7 +599,7 @@ export function BlockNodeToolbar({
                                             <Highlighter className="size-3.5" />
                                             <span
                                                 data-highlight-picker="true"
-                                                className="ml-0.5 inline-flex items-center gap-0.5 pl-0.5"
+                                                className="inline-flex items-center gap-0.5"
                                             >
                                                 <span
                                                     aria-hidden
