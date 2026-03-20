@@ -246,7 +246,9 @@ function TokenPropertyInput({
                                 'inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs',
                                 isTags
                                     ? 'bg-blue-400/10 text-blue-600'
-                                    : 'bg-purple-400/10 text-purple-600',
+                                    : isParticipants
+                                        ? 'bg-muted text-muted-foreground'
+                                        : 'bg-purple-400/10 text-purple-600',
                             )}
                         >
                             {char}
