@@ -128,14 +128,6 @@ function MeetingEventMeta({
                 </span>
                 <div className="min-w-[15rem]">
                     <div className="flex items-center gap-1">
-                        <button
-                            type="button"
-                            onClick={() => participantInputRef.current?.focus()}
-                            className="inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-xs text-muted-foreground/80 hover:bg-muted hover:text-foreground"
-                            aria-label={language === 'nl' ? 'Deelnemer toevoegen' : 'Add participant'}
-                        >
-                            <Plus className="size-3" />
-                        </button>
                         <TokenPropertyInput
                             mode="participants"
                             inputRef={(element) => {
@@ -154,6 +146,14 @@ function MeetingEventMeta({
                             }
                             className="h-8 rounded-sm bg-muted/30 px-1 text-[0.82rem]"
                         />
+                        <button
+                            type="button"
+                            onClick={() => participantInputRef.current?.focus()}
+                            className="inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-xs text-muted-foreground/80 hover:bg-muted hover:text-foreground"
+                            aria-label={language === 'nl' ? 'Deelnemer toevoegen' : 'Add participant'}
+                        >
+                            <Plus className="size-3" />
+                        </button>
                     </div>
                 </div>
             </div>
