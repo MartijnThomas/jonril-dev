@@ -314,7 +314,7 @@ class Note extends Model
         ) {
             $period = $this->searchJournalPeriod();
             if (is_string($period) && $period !== '') {
-                return "/w/{$workspaceSlug}/journal/{$period}";
+                return "/journal/{$period}";
             }
         }
 

@@ -1380,7 +1380,6 @@ test('migrate targets endpoint returns journal presets and workspace notes', fun
 
 test('migrate targets endpoint returns journal preset paths for personal workspace when source note is in non-personal workspace', function () {
     $user = User::factory()->create();
-    $personalWorkspace = $user->currentWorkspace();
 
     $nonPersonalWorkspace = Workspace::factory()->create([
         'owner_id' => $user->id,
@@ -1405,8 +1404,7 @@ test('migrate targets endpoint returns journal preset paths for personal workspa
         ->first(fn (array $item) => ($item['target_journal_granularity'] ?? null) === Note::JOURNAL_DAILY);
 
     expect($dailyPreset)->not()->toBeNull();
-    expect((string) ($dailyPreset['path'] ?? ''))->toContain("/w/{$personalWorkspace?->slug}/journal/");
-    expect((string) ($dailyPreset['path'] ?? ''))->not->toContain("/w/{$nonPersonalWorkspace->slug}/journal/");
+    expect((string) ($dailyPreset['path'] ?? ''))->toContain('/journal/');
 });
 
 test('migrating a task marks source as migrated and appends cloned task to target note', function () {

@@ -286,8 +286,9 @@ Status (2026-03-20):
   - Canonical journal route is now `/journal/{period}` (`journal.show.by-period`).
   - `/journal/{granularity}/{period}` redirects to the canonical period route.
   - Workspace-scoped journal routes are kept for backward compatibility and redirect to canonical non-scoped routes.
+  - Journal URL generation now uses canonical non-scoped URLs in slug/search helpers and task migrate targets.
 - Pending:
-  - Update any remaining frontend route generation to prefer canonical non-scoped journal URLs everywhere.
+  - None.
 
 ### Step 5: Prevent workspace context switch on journal pages
 

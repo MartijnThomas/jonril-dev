@@ -15,7 +15,7 @@ function scoped_note_url($workspace, string $note): string
 
 function scoped_journal_url($workspace, string $granularity, string $period): string
 {
-    return "/w/{$workspace?->slug}/journal/{$period}";
+    return "/journal/{$period}";
 }
 
 test('start creates a note for the authenticated user and redirects to it', function () {
@@ -1309,15 +1309,19 @@ test('journal route creates and reuses daily journal notes', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
 
-    $response = $this
+    $this
         ->actingAs($user)
-        ->get('/journal/daily/2026-03-07');
+        ->get('/journal/daily/2026-03-07')
+        ->assertRedirect('/journal/2026-03-07');
 
-    $response->assertInertia(fn (Assert $page) => $page
-        ->where('noteType', 'journal')
-        ->where('journalGranularity', 'daily')
-        ->where('journalPeriod', '2026-03-07'),
-    );
+    $this
+        ->actingAs($user)
+        ->get('/journal/2026-03-07')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteType', 'journal')
+            ->where('journalGranularity', 'daily')
+            ->where('journalPeriod', '2026-03-07'),
+        );
 
     $journal = Note::query()
         ->where('workspace_id', $workspace?->id)
@@ -1328,7 +1332,7 @@ test('journal route creates and reuses daily journal notes', function () {
 
     expect($journal)->not()->toBeNull();
 
-    $this->actingAs($user)->get('/journal/daily/2026-03-07')->assertOk();
+    $this->actingAs($user)->get('/journal/2026-03-07')->assertOk();
 
     expect(
         Note::query()
@@ -1971,7 +1975,7 @@ test('daily journal note shows year month week and day breadcrumbs', function ()
 
     $this
         ->actingAs($user)
-        ->get('/journal/daily/2026-03-07')
+        ->get('/journal/2026-03-07')
         ->assertInertia(fn (Assert $page) => $page
             ->has('breadcrumbs', 5)
             ->where('breadcrumbs.0.title', 'Journal')
@@ -1994,7 +1998,7 @@ test('daily journal note uses english title and breadcrumbs when user language i
 
     $this
         ->actingAs($user)
-        ->get('/journal/daily/2026-03-07')
+        ->get('/journal/2026-03-07')
         ->assertInertia(fn (Assert $page) => $page
             ->where('breadcrumbs.2.title', 'March')
             ->where('breadcrumbs.4.title', 'Saturday 7 March 2026')
@@ -2202,7 +2206,7 @@ test('daily journal note includes due and deadline tasks for that day excluding 
 
     $this
         ->actingAs($user)
-        ->get('/journal/daily/2026-03-07')
+        ->get('/journal/2026-03-07')
         ->assertInertia(fn (Assert $page) => $page
             ->where('noteId', $currentDaily->id)
             ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred

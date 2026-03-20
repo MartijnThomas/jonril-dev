@@ -42,7 +42,7 @@ class NoteSlugService
                 $note->journal_date,
             );
 
-            return "/w/{$workspaceSlug}/journal/{$period}";
+            return "/journal/{$period}";
         }
 
         return "/w/{$workspaceSlug}/notes/{$note->id}";
@@ -64,11 +64,7 @@ class NoteSlugService
 
     public function journalUrlFor(Workspace|string $workspace, string $granularity, string $period): string
     {
-        $workspaceSlug = $workspace instanceof Workspace
-            ? $workspace->slug
-            : trim($workspace);
-
-        return "/w/{$workspaceSlug}/journal/{$period}";
+        return "/journal/{$period}";
     }
 
     public function syncNoteAndDescendants(Note $note): void

@@ -155,7 +155,7 @@ class NoteTask extends Model
                 $note->journal_date,
             );
 
-            return "/w/{$workspaceSlug}/journal/{$period}";
+            return "/journal/{$period}";
         }
 
         return "/w/{$workspaceSlug}/notes/{$this->note_id}";
