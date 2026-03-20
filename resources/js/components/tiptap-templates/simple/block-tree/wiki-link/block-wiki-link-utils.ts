@@ -116,7 +116,16 @@ export function deriveTargetPathFromNote(note: BlockWikiLinkNote): string {
 
             return `journal/${granularity}/${period}`;
         }
+    }
 
+    const normalizedPath = normalizeNoteTargetPath(
+        [note.path, note.title].filter(Boolean).join('/'),
+    );
+    if (normalizedPath !== '') {
+        return normalizedPath;
+    }
+
+    if (href !== '') {
         const noteMatch = href.match(/\/notes\/([^?#]+)/);
         if (noteMatch) {
             return decodeURIComponent(noteMatch[1] ?? note.id);

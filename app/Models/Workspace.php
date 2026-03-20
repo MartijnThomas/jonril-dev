@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
+use LogicException;
 
 class Workspace extends Model
 {
@@ -44,6 +45,33 @@ class Workspace extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (Workspace $workspace): void {
+            $ownerId = $workspace->owner_id;
+            if (! $ownerId) {
+                return;
+            }
+
+            $isDemotingPersonalWorkspace =
+                $workspace->exists
+                && $workspace->isDirty('is_personal')
+                && (bool) $workspace->getOriginal('is_personal') === true
+                && (bool) $workspace->is_personal === false;
+
+            if (! $isDemotingPersonalWorkspace) {
+                return;
+            }
+
+            $ownerHasAnotherPersonalWorkspace = static::query()
+                ->where('owner_id', $ownerId)
+                ->where('id', '!=', $workspace->id)
+                ->where('is_personal', true)
+                ->exists();
+
+            if (! $ownerHasAnotherPersonalWorkspace) {
+                throw new LogicException('Each owner must always have one personal workspace.');
+            }
+        });
+
         static::creating(function (Workspace $workspace): void {
             $rawColor = $workspace->getAttributeFromArray('color');
             if (! is_string($rawColor) || trim($rawColor) === '') {
@@ -85,6 +113,21 @@ class Workspace extends Model
                 (string) ($workspace->name ?: 'workspace'),
                 $workspace->id,
             );
+        });
+
+        static::saved(function (Workspace $workspace): void {
+            if (! $workspace->is_personal || ! $workspace->owner_id) {
+                return;
+            }
+
+            static::query()
+                ->where('owner_id', $workspace->owner_id)
+                ->where('id', '!=', $workspace->id)
+                ->where('is_personal', true)
+                ->update([
+                    'is_personal' => false,
+                    'updated_at' => now(),
+                ]);
         });
     }
 

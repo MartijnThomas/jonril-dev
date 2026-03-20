@@ -205,6 +205,10 @@ Status (2026-03-20):
   - Personal workspace auto-created for new users.
   - Newly created extra workspaces default to non-personal.
   - Guardrails: personal workspace delete blocked, ownership transfer blocked.
+  - Personal workspace invariant hardened in model lifecycle:
+    - promoting any workspace to personal automatically demotes other personal workspaces for that owner
+    - demoting the only personal workspace for an owner is blocked
+    - feature tests added for both behaviors
   - Feature tests for delete/transfer guardrails.
   - Console command added to reassign personal workspace for existing users:
     - `php artisan workspaces:set-personal --user=<id|email> --workspace=<id|slug> [--force]`
