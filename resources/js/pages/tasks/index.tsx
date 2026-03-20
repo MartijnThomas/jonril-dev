@@ -1237,11 +1237,14 @@ export default function TasksIndex({
                     <span className="min-w-0 flex-1 truncate">{node.title}</span>
 
                     {hasChildren ? (
-                        <Button
+                        <button
                             type="button"
-                            variant="ghost"
-                            size="sm"
-                            className={cn('h-6 px-2 text-xs', allSelectableSelected && 'text-primary')}
+                            className={cn(
+                                'inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-xs font-medium transition-colors',
+                                allSelectableSelected
+                                    ? 'border-transparent bg-primary/10 text-primary'
+                                    : 'border-border bg-background text-muted-foreground hover:text-foreground',
+                            )}
                             onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
@@ -1249,7 +1252,7 @@ export default function TasksIndex({
                             }}
                         >
                             {t('tasks_index.select_children', 'All')}
-                        </Button>
+                        </button>
                     ) : null}
                 </div>
 
