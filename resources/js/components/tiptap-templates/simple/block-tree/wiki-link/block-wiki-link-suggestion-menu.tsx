@@ -14,6 +14,13 @@ import {
     findCompleteRawWikiLinks,
 } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 
+declare global {
+    interface Window {
+        __sarthBlockWikiLinkSuggestionActive?: boolean;
+        __sarthBlockWikiLinkEnterHandledAt?: number;
+    }
+}
+
 type BlockWikiLinkSuggestionMenuProps = {
     editor: Editor;
     notes: BlockWikiLinkNote[];
@@ -24,6 +31,7 @@ type ActiveWikiLinkQuery = {
     from: number;
     to: number;
     query: string;
+    blockStyle: string | null;
 };
 
 function getActiveWikiLinkQuery(editor: Editor): ActiveWikiLinkQuery | null {
@@ -54,6 +62,11 @@ function getActiveWikiLinkQuery(editor: Editor): ActiveWikiLinkQuery | null {
             from: parentStart + match.from,
             to: parentStart + match.to,
             query: match.inner,
+            blockStyle: parent.type.name === 'paragraph'
+                ? (typeof parent.attrs?.blockStyle === 'string'
+                    ? parent.attrs.blockStyle
+                    : 'paragraph')
+                : null,
         };
     }
 
@@ -79,6 +92,11 @@ function getActiveWikiLinkQuery(editor: Editor): ActiveWikiLinkQuery | null {
         from: parentStart + openIndex,
         to: parentStart + localCursor,
         query: parentText.slice(openIndex + 2, localCursor).trim(),
+        blockStyle: parent.type.name === 'paragraph'
+            ? (typeof parent.attrs?.blockStyle === 'string'
+                ? parent.attrs.blockStyle
+                : 'paragraph')
+            : null,
     };
 }
 
@@ -167,6 +185,15 @@ export function BlockWikiLinkSuggestionMenu({
     }, [editor]);
 
     useEffect(() => {
+        window.__sarthBlockWikiLinkSuggestionActive =
+            Boolean(activeQuery) && items.length > 0;
+
+        return () => {
+            window.__sarthBlockWikiLinkSuggestionActive = false;
+        };
+    }, [activeQuery, items.length]);
+
+    useEffect(() => {
         if (!activeQuery || items.length === 0 || !containerRef.current) {
             return;
         }
@@ -211,6 +238,8 @@ export function BlockWikiLinkSuggestionMenu({
 
             const handled = listRef.current?.onKeyDown({ event }) ?? false;
             if (handled) {
+                window.__sarthBlockWikiLinkEnterHandledAt =
+                    event.key === 'Enter' ? Date.now() : 0;
                 event.preventDefault();
             }
         };
@@ -227,6 +256,11 @@ export function BlockWikiLinkSuggestionMenu({
     }
 
     const command = (item: BlockWikiLinkSuggestionItem) => {
+        const preservedBlockStyle =
+            activeQuery.blockStyle && activeQuery.blockStyle !== 'paragraph'
+                ? activeQuery.blockStyle
+                : null;
+
         editor
             .chain()
             .focus()
@@ -265,12 +299,37 @@ export function BlockWikiLinkSuggestionMenu({
             )
             .run();
 
+        if (preservedBlockStyle) {
+            editor.commands.command(({ state, tr, dispatch }) => {
+                const $from = state.selection.$from;
+                if ($from.parent.type.name !== 'paragraph') {
+                    return false;
+                }
+
+                const paragraphPos = $from.before();
+                const paragraphNode = state.doc.nodeAt(paragraphPos);
+                if (!paragraphNode || paragraphNode.type.name !== 'paragraph') {
+                    return false;
+                }
+
+                dispatch?.(
+                    tr.setNodeMarkup(paragraphPos, undefined, {
+                        ...paragraphNode.attrs,
+                        blockStyle: preservedBlockStyle,
+                    }),
+                );
+
+                return true;
+            });
+        }
+
         setActiveQuery(null);
     };
 
     return createPortal(
         <div
             ref={containerRef}
+            data-block-wiki-link-suggestion="true"
             style={{
                 position: 'fixed',
                 left: position?.left ?? 0,

@@ -34,6 +34,13 @@ import {
 import { findCompleteRawWikiLinks } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-utils';
 import type { CreateBlockTreeEditorExtensionsOptions } from '@/components/tiptap-templates/simple/block-tree-editor-extension-options';
 
+declare global {
+    interface Window {
+        __sarthBlockWikiLinkSuggestionActive?: boolean;
+        __sarthBlockWikiLinkEnterHandledAt?: number;
+    }
+}
+
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         blockTree: {
@@ -299,6 +306,59 @@ function insertParagraphAfterCurrentBlock(
     return true;
 }
 
+function syncParagraphBulletMarkers(state: any) {
+    const paragraphsToNormalize: number[] = [];
+
+    state.doc.descendants((node: any, pos: number) => {
+        if (node.type.name !== 'paragraph') {
+            return true;
+        }
+
+        const attrs = normalizeParagraphAttrs(node.attrs);
+        if (attrs.blockStyle === 'task' || attrs.blockStyle === 'checklist') {
+            return true;
+        }
+
+        if (!node.textContent.startsWith('- ')) {
+            return true;
+        }
+
+        paragraphsToNormalize.push(pos);
+
+        return true;
+    });
+
+    if (paragraphsToNormalize.length === 0) {
+        return null;
+    }
+
+    let transaction = state.tr;
+
+    for (const paragraphPos of [...paragraphsToNormalize].reverse()) {
+        const currentNode = transaction.doc.nodeAt(paragraphPos);
+        if (!currentNode || currentNode.type.name !== 'paragraph') {
+            continue;
+        }
+
+        if (!currentNode.textContent.startsWith('- ')) {
+            continue;
+        }
+
+        const attrs = normalizeParagraphAttrs(currentNode.attrs);
+        transaction = transaction
+            .setNodeMarkup(paragraphPos, undefined, {
+                ...attrs,
+                blockStyle: 'bullet',
+                order: 1,
+                checked: false,
+                taskStatus: null,
+            })
+            .delete(paragraphPos + 1, paragraphPos + 3);
+    }
+
+    return transaction.docChanged ? transaction : null;
+}
+
 function createBlockEditingExtension(
     options: CreateBlockTreeEditorExtensionsOptions = {},
 ) {
@@ -331,6 +391,11 @@ function createBlockEditingExtension(
             return [
                 new Plugin({
                     appendTransaction: (_transactions, _oldState, newState) => {
+                        const bulletSyncTransaction = syncParagraphBulletMarkers(newState);
+                        if (bulletSyncTransaction) {
+                            return bulletSyncTransaction;
+                        }
+
                         return syncTaskParagraphStatusesFromText(newState);
                     },
                     props: {
@@ -802,6 +867,20 @@ function createBlockEditingExtension(
                         },
                         handleDOMEvents: {
                         keydown: (_view, event) => {
+                            if (event.defaultPrevented) {
+                                return false;
+                            }
+
+                            if (
+                                event.key === 'Enter' &&
+                                (Date.now() - (window.__sarthBlockWikiLinkEnterHandledAt ?? 0) <
+                                    250 ||
+                                    window.__sarthBlockWikiLinkSuggestionActive ||
+                                    document.querySelector('[data-block-wiki-link-suggestion="true"]'))
+                            ) {
+                                return false;
+                            }
+
                             if (event.key !== 'Enter') {
                                 return false;
                             }
