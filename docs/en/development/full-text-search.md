@@ -5,12 +5,14 @@ section: Development
 
 # Full-Text Search — Current Architecture & Next Steps
 
-## Current status (2026-03-18)
+## Current status (2026-03-20)
 
 - Laravel Scout + Meilisearch is active for `NoteTask` search.
+- Laravel Scout + Meilisearch is active for `Note` search used by Command Palette.
 - Tasks page currently uses a **hybrid query flow**:
   - If `q` is empty: MySQL/Eloquent only.
   - If `q` is present: Scout/Meilisearch finds matching task IDs first, then MySQL/Eloquent builds the final paginated task list.
+- Command Palette now queries Scout-backed command search for notes, headings, and tasks, with filter pills and task-status scope.
 - Frontend task filters currently in use:
   - `workspace_ids`
   - `note_scope_ids`
@@ -26,6 +28,34 @@ section: Development
 - MySQL is still the source of truth for final task payload mapping, eager loading, ordering, and pagination.
 - Meilisearch is used where it adds most value now: text search + fast filter narrowing when `q` is present.
 - This keeps non-search list views resilient if search infrastructure is unavailable.
+
+---
+
+## Command search status (Scout)
+
+- Endpoint: `GET /w/{workspace}/search/command`
+- Controller: `CommandSearchController`
+- Meilisearch-backed note matching currently searches:
+  - `title`
+  - `path_titles`
+  - `journal_path_nl` / `journal_path_en`
+  - `headings`
+  - `content_text`
+- Meilisearch-backed task matching currently searches:
+  - `content_text`
+  - with scoped status filters mapped to `search_status`
+
+### Gap: props coverage in note index
+
+`NoteSearchExtractor` already extracts:
+
+- `mentions`
+- `hashtags`
+- `tags`
+- `property_terms`
+- `task_terms`
+
+But `Note::toSearchableArray()` currently does not publish these fields in the `notes` index payload, so command search cannot match note properties/tags/mention metadata reliably yet.
 
 ---
 
@@ -130,13 +160,30 @@ If `SCOUT_QUEUE=true` in production, indexing happens through queues. You must k
 - Tune ranking/searchable attributes (title/path stronger than content if desired).
 - Add acceptance tests for expected ranking order on common queries.
 
-### 4. Start Note index design as separate track
-- Introduce `Note` searchable payload (title + extracted text + tags/mentions/hashtags).
-- Keep task search and note search concerns separated to avoid coupling rollout risk.
+### 4. Close note props indexing gap
+- Add to `Note::toSearchableArray()`:
+  - `mentions`
+  - `hashtags`
+  - `tags`
+  - `property_terms`
+  - `task_terms`
+- Update `config/scout.php` `notes.searchableAttributes` to include these fields.
+- Re-sync and backfill:
+  - `php artisan scout:sync-index-settings`
+  - `php artisan scout:import "App\Models\Note"`
+- Add feature coverage for command search matching by properties (context/tags/participants mentions).
 
 ---
 
 ## Note indexing plan (implementation-ready)
+
+Status update:
+
+- Phase A/B/C/D/E/F are mostly implemented for command palette note search.
+- Remaining high-value items are:
+  - property/props terms indexing (above gap)
+  - ranking fine-tuning
+  - cross-workspace search policy decisions.
 
 ### Goal
 - Add note search for the **Command Palette as primary entry point**, using Scout/Meilisearch, without regressing editor save flow.

@@ -24,13 +24,18 @@ You can cycle recent items by opening the palette and navigating with arrow keys
 Use search to find notes by typing in the palette input.
 
 - Default mode searches notes.
-- Heading search is available with `# ` (hash + space).
+- You can scope search using pills:
+  - `Notes`
+  - `Headings`
+  - `Tasks`
+  - `Journals`
+- Use **More** to filter task statuses.
 - Command mode is activated with `:`.
 
 ### Search behavior
 
-- Typing normal text searches notes.
-- Typing `# ` starts heading search.
+- Typing normal text searches using the active pills/scopes.
+- `# ` prefix mode is deprecated and no longer required for heading results.
 - Typing `:` switches to command mode.
 
 ## Commands
