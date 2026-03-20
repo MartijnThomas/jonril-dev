@@ -9,8 +9,106 @@ type BlockInfo = {
     node: ProseMirrorNode;
 };
 
+type BlockRange = {
+    from: number;
+    to: number;
+    node: ProseMirrorNode;
+};
+
 function isBlockNode(node: ProseMirrorNode): boolean {
     return node.type.name === 'heading' || node.type.name === 'paragraph';
+}
+
+function getTopLevelBlocks(doc: ProseMirrorNode): Array<{ pos: number; node: ProseMirrorNode }> {
+    const blocks: Array<{ pos: number; node: ProseMirrorNode }> = [];
+
+    doc.descendants((node, pos, parent) => {
+        if (parent !== doc) {
+            return false;
+        }
+
+        if (isBlockNode(node)) {
+            blocks.push({ pos, node });
+        }
+
+        return false;
+    });
+
+    return blocks;
+}
+
+function getMovableBlockRange(doc: ProseMirrorNode, sourcePos: number): BlockRange | null {
+    const sourceNode = doc.nodeAt(sourcePos);
+    if (!sourceNode || !isBlockNode(sourceNode)) {
+        return null;
+    }
+
+    const topLevelBlocks = getTopLevelBlocks(doc);
+    const sourceIndex = topLevelBlocks.findIndex((block) => block.pos === sourcePos);
+    if (sourceIndex === -1) {
+        return {
+            from: sourcePos,
+            to: sourcePos + sourceNode.nodeSize,
+            node: sourceNode,
+        };
+    }
+
+    if (sourceNode.type.name === 'heading') {
+        const currentLevel = Math.max(1, Number(sourceNode.attrs.level ?? 1) || 1);
+        let endPos = doc.content.size;
+
+        for (let index = sourceIndex + 1; index < topLevelBlocks.length; index += 1) {
+            const next = topLevelBlocks[index];
+            if (next.node.type.name !== 'heading') {
+                continue;
+            }
+
+            const nextLevel = Math.max(1, Number(next.node.attrs.level ?? 1) || 1);
+            if (nextLevel <= currentLevel) {
+                endPos = next.pos;
+                break;
+            }
+        }
+
+        return {
+            from: sourcePos,
+            to: endPos,
+            node: sourceNode,
+        };
+    }
+
+    if (sourceNode.type.name === 'paragraph') {
+        const currentIndent = Math.max(0, Number(sourceNode.attrs.indent ?? 0) || 0);
+        let endPos = sourcePos + sourceNode.nodeSize;
+
+        for (let index = sourceIndex + 1; index < topLevelBlocks.length; index += 1) {
+            const next = topLevelBlocks[index];
+            if (next.node.type.name !== 'paragraph') {
+                endPos = next.pos;
+                break;
+            }
+
+            const nextIndent = Math.max(0, Number(next.node.attrs.indent ?? 0) || 0);
+            if (nextIndent <= currentIndent) {
+                endPos = next.pos;
+                break;
+            }
+
+            endPos = next.pos + next.node.nodeSize;
+        }
+
+        return {
+            from: sourcePos,
+            to: endPos,
+            node: sourceNode,
+        };
+    }
+
+    return {
+        from: sourcePos,
+        to: sourcePos + sourceNode.nodeSize,
+        node: sourceNode,
+    };
 }
 
 function getBlockInfoFromResolvedPos($pos: ResolvedPos): BlockInfo | null {
@@ -121,27 +219,33 @@ function moveBlock(
         return false;
     }
 
-    const sourceNode = view.state.doc.nodeAt(sourcePos);
+    const sourceRange = getMovableBlockRange(view.state.doc, sourcePos);
     const targetNode = view.state.doc.nodeAt(targetPos);
-    if (!sourceNode || !targetNode || !isBlockNode(sourceNode) || !isBlockNode(targetNode)) {
+    if (!sourceRange || !targetNode || !isBlockNode(targetNode)) {
         return false;
     }
 
     let insertPos = placeAfter ? targetPos + targetNode.nodeSize : targetPos;
+    const movedSize = sourceRange.to - sourceRange.from;
 
     if (
-        (placeAfter && sourcePos === targetPos + targetNode.nodeSize) ||
-        (!placeAfter && sourcePos + sourceNode.nodeSize === targetPos)
+        (placeAfter && sourceRange.to === targetPos + targetNode.nodeSize) ||
+        (!placeAfter && sourceRange.from === targetPos)
     ) {
         return false;
     }
 
-    if (sourcePos < insertPos) {
-        insertPos -= sourceNode.nodeSize;
+    if (insertPos > sourceRange.from && insertPos < sourceRange.to) {
+        return false;
     }
 
-    let tr = view.state.tr.delete(sourcePos, sourcePos + sourceNode.nodeSize);
-    tr = tr.insert(insertPos, sourceNode);
+    if (sourceRange.from < insertPos) {
+        insertPos -= movedSize;
+    }
+
+    const movedSlice = view.state.doc.slice(sourceRange.from, sourceRange.to).content;
+    let tr = view.state.tr.delete(sourceRange.from, sourceRange.to);
+    tr = tr.insert(insertPos, movedSlice);
     tr = tr.setSelection(TextSelection.near(tr.doc.resolve(insertPos + 1)));
     view.dispatch(tr.scrollIntoView());
 
