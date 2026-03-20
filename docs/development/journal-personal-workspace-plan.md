@@ -4,8 +4,11 @@
 
 - Every note (including journal notes) belongs to a workspace via `workspace_id`.
 - Journal notes are unique per `(workspace_id, journal_granularity, journal_date)`.
-- All routes are workspace-scoped: `/w/{workspace}/journal/{granularity}/{period}`.
-- Switching workspaces updates `user.settings['workspace_id']` and redirects to the journal or notes index of the target workspace.
+- Journal routes currently exist in both forms:
+  - workspace-scoped: `/w/{workspace}/journal/{granularity}/{period}`
+  - legacy non-scoped aliases: `/journal/{granularity}/{period}`
+- Journal entry points (`/journal`, `/notes`) already resolve against personal workspace.
+- Switching workspaces still updates `user.settings['workspace_id']`.
 - Users can have multiple workspaces. The personal workspace is auto-created on registration.
 
 ---
@@ -258,10 +261,11 @@ Status (2026-03-20):
   - Feature tests added for both scoped journal route variants.
   - Task migrate flows now create/use journal targets in the personal workspace (never in non-personal source workspaces).
   - Feature tests added to verify no journal is created in non-personal workspace during task-to-journal migration.
-- Pending:
-  - Command/import policy decision implemented:
+  - Command/import policy decision applied:
     - `JournalNoteService` now blocks creating new journals in non-personal workspaces by default.
     - Legacy import keeps an explicit migration-only exception (`allowNonPersonalWorkspace = true`) for historical imports.
+- Pending:
+  - None for app-facing journal creation flows in this phase.
 
 ### Step 4: Introduce workspace-agnostic journal routes
 
@@ -277,6 +281,9 @@ Controller behaviour:
 
 Keep existing `/w/{workspace}/journal/...` routes for backward compatibility during transition.
 
+Status (2026-03-20):
+- Not started yet (next step).
+
 ### Step 5: Prevent workspace context switch on journal pages
 
 In `HandleInertiaRequests`:
@@ -284,6 +291,9 @@ In `HandleInertiaRequests`:
 - detect journal routes (`journal.*`)
 - keep `currentWorkspace` based on last active workspace, not journal note workspace
 - ensure right sidebar events on journal pages are always resolved from the personal workspace
+
+Status (2026-03-20):
+- Not started yet.
 
 Acceptance criteria:
 
@@ -300,12 +310,15 @@ Acceptance criteria:
   - navigate to workspace B note, context switches to B
   - browser back returns to journal without broken state
 
+Status (2026-03-20):
+- Not started yet.
+
 ---
 
 ## PR Breakdown (Suggested)
 
-1. **PR A:** personal workspace lifecycle guardrails (delete/transfer/erase) + tests.
-2. **PR B:** personal workspace resolver + journal restriction to personal workspace.
+1. **PR A:** personal workspace lifecycle guardrails (delete/transfer/erase) + tests. (completed)
+2. **PR B:** personal workspace resolver + journal restriction to personal workspace. (completed)
 3. **PR C:** new `/journal/...` routes + controller wiring + middleware context guard.
 4. **PR D:** sidebar/frontend route updates + browser tests.
 5. **PR E:** cross-workspace link/backlink schema + query updates.
