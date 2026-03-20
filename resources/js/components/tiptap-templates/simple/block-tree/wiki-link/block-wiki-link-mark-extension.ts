@@ -151,6 +151,10 @@ export const BlockWikiLinkMark = Mark.create<{
                 return null;
             }
 
+            if (workspaceSlugFromInertiaPageCache.payload === payload) {
+                return workspaceSlugFromInertiaPageCache.slug;
+            }
+
             try {
                 const page = JSON.parse(payload) as {
                     props?: {
@@ -160,11 +164,29 @@ export const BlockWikiLinkMark = Mark.create<{
                     } | null;
                 };
                 const slug = page?.props?.currentWorkspace?.slug;
+                const resolved = typeof slug === 'string' && slug.trim() !== '' ? slug.trim() : null;
+                workspaceSlugFromInertiaPageCache = {
+                    payload,
+                    slug: resolved,
+                };
 
-                return typeof slug === 'string' && slug.trim() !== '' ? slug.trim() : null;
+                return resolved;
             } catch {
+                workspaceSlugFromInertiaPageCache = {
+                    payload,
+                    slug: null,
+                };
+
                 return null;
             }
+        };
+
+        let workspaceSlugFromInertiaPageCache: {
+            payload: string | null;
+            slug: string | null;
+        } = {
+            payload: null,
+            slug: null,
         };
 
         const activeWorkspaceSlug = (): string | null => {

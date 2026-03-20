@@ -951,9 +951,9 @@ class NotesController extends Controller
             ],
             'properties' => $note->properties ?? [],
             'linkableNotes' => $linkableNotes
-                ->map(function (Note $linkableNote) use ($crossWorkspaceWikiScope, $workspaceId, $workspaceMetaById, $resolveLinkablePath): array {
+                ->map(function (Note $linkableNote) use ($crossWorkspaceWikiScope, $note, $workspaceMetaById, $resolveLinkablePath): array {
                     $workspacePrefix = null;
-                    if ($crossWorkspaceWikiScope && $linkableNote->workspace_id !== $workspaceId) {
+                    if ($crossWorkspaceWikiScope && $linkableNote->workspace_id !== $note->workspace_id) {
                         $workspaceEntry = $workspaceMetaById->get($linkableNote->workspace_id);
                         $workspacePrefix = trim((string) ($workspaceEntry?->name ?: $workspaceEntry?->slug ?: ''));
                     }
