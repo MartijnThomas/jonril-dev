@@ -312,6 +312,9 @@ export const BlockWikiLinkMark = Mark.create<{
                 noteId,
                 targetBlockId || null,
             );
+            if (targetPath.startsWith('journal/')) {
+                return fallbackHref;
+            }
             // Prefer UUID-based URL when noteId is available so stale slug-based
             // hrefs stored in existing documents don't break navigation.
             const baseHref = noteId ? fallbackHref : rawHref || fallbackHref;
@@ -625,6 +628,36 @@ export const BlockWikiLinkMark = Mark.create<{
                             typeof wikiMark.attrs.targetBlockId === 'string'
                                 ? wikiMark.attrs.targetBlockId.trim()
                                 : '';
+                        const currentHref = wikiMark.attrs.href ?? null;
+
+                        if (targetPath.startsWith('journal/')) {
+                            const expectedJournalHref = fallbackBlockWikiHrefFromTargetPath(
+                                targetPath,
+                                null,
+                                targetBlockId || null,
+                            );
+
+                            if (currentHref !== expectedJournalHref) {
+                                const from = pos;
+                                const to = from + node.nodeSize;
+                                tr.removeMark(from, to, markType);
+                                tr.addMark(
+                                    from,
+                                    to,
+                                    markType.create({
+                                        ...wikiMark.attrs,
+                                        noteId: null,
+                                        href: expectedJournalHref,
+                                        targetPath,
+                                        targetBlockId: targetBlockId || null,
+                                    }),
+                                );
+                                changed = true;
+                            }
+
+                            return true;
+                        }
+
                         const expectedHref =
                             targetBlockId !== ''
                                 ? fallbackBlockWikiHrefFromTargetPath(
@@ -638,7 +671,6 @@ export const BlockWikiLinkMark = Mark.create<{
                                       resolved.id,
                                   );
                         const currentNoteId = wikiMark.attrs.noteId ?? null;
-                        const currentHref = wikiMark.attrs.href ?? null;
 
                         if (
                             currentNoteId === resolved.id &&
