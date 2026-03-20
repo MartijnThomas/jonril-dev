@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/react';
 import {
     AtSign,
     Bold,
+    ChevronDown,
     Code2,
     Hash,
     Heading1,
@@ -40,6 +41,13 @@ import {
     setCurrentParagraphStyle,
 } from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const BLOCK_NODE_OPTIONS = [
     { value: 'paragraph', label: 'Paragraph', icon: Pilcrow },
@@ -62,9 +70,22 @@ const BLOCK_MARK_OPTIONS = [
     { value: 'italic', label: 'Italic', icon: Italic },
     { value: 'underline', label: 'Underline', icon: Underline },
     { value: 'strike', label: 'Strikethrough', icon: Strikethrough },
-    { value: 'highlight', label: 'Highlight', icon: Highlighter },
     { value: 'superscript', label: 'Superscript', icon: Superscript },
     { value: 'subscript', label: 'Subscript', icon: Subscript },
+] as const;
+
+const DEFAULT_HIGHLIGHT_COLOR = 'var(--tt-color-highlight-yellow)';
+
+const HIGHLIGHT_COLOR_OPTIONS = [
+    { value: 'var(--tt-color-highlight-yellow)', label: 'Yellow' },
+    { value: 'var(--tt-color-highlight-green)', label: 'Green' },
+    { value: 'var(--tt-color-highlight-blue)', label: 'Blue' },
+    { value: 'var(--tt-color-highlight-purple)', label: 'Purple' },
+    { value: 'var(--tt-color-highlight-red)', label: 'Red' },
+    { value: 'var(--tt-color-highlight-orange)', label: 'Orange' },
+    { value: 'var(--tt-color-highlight-pink)', label: 'Pink' },
+    { value: 'var(--tt-color-highlight-gray)', label: 'Gray' },
+    { value: 'var(--tt-color-highlight-brown)', label: 'Brown' },
 ] as const;
 
 const BLOCK_INSERT_OPTIONS = [
@@ -99,7 +120,7 @@ function canToggleMark(editor: Editor, mark: BlockMarkType): boolean {
     return editor.isEditable && editor.can().toggleMark(mark);
 }
 
-function getCurrentMarkState(editor: Editor): Record<BlockMarkType, boolean> {
+function getCurrentMarkState(editor: Editor): CurrentMarkState {
     return {
         bold: editor.isActive('bold'),
         code: editor.isActive('code'),
@@ -112,7 +133,19 @@ function getCurrentMarkState(editor: Editor): Record<BlockMarkType, boolean> {
     };
 }
 
+function getCurrentHighlightColor(editor: Editor): string | null {
+    const color = editor.getAttributes('highlight').color;
+    if (typeof color !== 'string' || color.trim() === '') {
+        return null;
+    }
+
+    return color.trim();
+}
+
 type BlockMarkType = (typeof BLOCK_MARK_OPTIONS)[number]['value'];
+type CurrentMarkState = Record<BlockMarkType, boolean> & {
+    highlight: boolean;
+};
 
 type BlockNodeToolbarProps = {
     editor: Editor;
@@ -129,11 +162,12 @@ export function BlockNodeToolbar({
     meetingNotesCount = 0,
     onToggleMeetingNotes,
 }: BlockNodeToolbarProps) {
-    const { currentValue, currentMarks } = useEditorState({
+    const { currentValue, currentMarks, currentHighlightColor } = useEditorState({
         editor,
         selector: (ctx) => ({
             currentValue: getCurrentBlockValue(ctx.editor),
             currentMarks: getCurrentMarkState(ctx.editor),
+            currentHighlightColor: getCurrentHighlightColor(ctx.editor),
         }),
     });
 
@@ -200,6 +234,24 @@ export function BlockNodeToolbar({
 
     const handleMarkToggle = (mark: BlockMarkType) => {
         editor.chain().focus().toggleMark(mark).run();
+    };
+
+    const canHighlight = editor.isEditable && editor.can().toggleHighlight();
+
+    const handleToggleDefaultHighlight = () => {
+        editor
+            .chain()
+            .focus()
+            .toggleHighlight({ color: DEFAULT_HIGHLIGHT_COLOR })
+            .run();
+    };
+
+    const handleApplyHighlightColor = (color: string) => {
+        editor.chain().focus().setHighlight({ color }).run();
+    };
+
+    const handleRemoveHighlight = () => {
+        editor.chain().focus().unsetHighlight().run();
     };
 
     const handleIndent = () => {
@@ -518,6 +570,79 @@ export function BlockNodeToolbar({
                                     </Button>
                                 );
                             })}
+
+                            <div className="flex items-center">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={currentMarks.highlight ? 'default' : 'ghost'}
+                                    className={
+                                        currentMarks.highlight
+                                            ? `${activeSquareButtonHoverClass} rounded-r-none border-r-0`
+                                            : `${inactiveSquareButtonClass} rounded-r-none border-r-0`
+                                    }
+                                    onClick={handleToggleDefaultHighlight}
+                                    aria-pressed={currentMarks.highlight}
+                                    aria-label="Toggle default highlight"
+                                    title="Toggle default highlight"
+                                    disabled={!canHighlight}
+                                >
+                                    <Highlighter className="size-4" />
+                                    <span className="sr-only">Toggle default highlight</span>
+                                </Button>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={currentMarks.highlight ? 'default' : 'ghost'}
+                                            className={
+                                                currentMarks.highlight
+                                                    ? `${activeSquareButtonHoverClass} rounded-l-none px-1.5`
+                                                    : `${inactiveSquareButtonClass} rounded-l-none px-1.5`
+                                            }
+                                            aria-label="Pick highlight color"
+                                            title="Pick highlight color"
+                                            disabled={!canHighlight}
+                                        >
+                                            <ChevronDown className="size-3.5" />
+                                            <span className="sr-only">Pick highlight color</span>
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                        {HIGHLIGHT_COLOR_OPTIONS.map((option) => {
+                                            const isActiveColor =
+                                                currentHighlightColor === option.value;
+
+                                            return (
+                                                <DropdownMenuItem
+                                                    key={option.value}
+                                                    onSelect={() =>
+                                                        handleApplyHighlightColor(option.value)
+                                                    }
+                                                    className="gap-2"
+                                                >
+                                                    <span
+                                                        aria-hidden
+                                                        className="inline-block size-3 rounded-sm border border-border/60"
+                                                        style={{ backgroundColor: option.value }}
+                                                    />
+                                                    <span>{option.label}</span>
+                                                    {isActiveColor ? (
+                                                        <span className="ml-auto text-xs text-muted-foreground">
+                                                            active
+                                                        </span>
+                                                    ) : null}
+                                                </DropdownMenuItem>
+                                            );
+                                        })}
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onSelect={handleRemoveHighlight}>
+                                            Clear highlight
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
 
                             <Button
                                 type="button"
