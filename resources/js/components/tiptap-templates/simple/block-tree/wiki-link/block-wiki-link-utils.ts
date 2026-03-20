@@ -141,6 +141,24 @@ function normalizePathLike(value: string): string {
         .join('/');
 }
 
+function fullMatchablePathFromNote(
+    note: BlockWikiLinkNote,
+    targetPath: string,
+): string {
+    if (targetPath.startsWith('journal/')) {
+        return toPathDisplay(note.editablePath ?? note.title);
+    }
+
+    const parentPath = toPathDisplay(note.path ?? '');
+    const title = toPathDisplay(note.title);
+
+    if (parentPath !== '') {
+        return `${parentPath} / ${title}`;
+    }
+
+    return title;
+}
+
 export function displayPathFromNote(
     note: BlockWikiLinkNote,
     targetPath: string,
@@ -642,8 +660,13 @@ function scoreSuggestionPathMatch(
     }
 
     const displayPath = normalizePathLike(displayPathFromNote(note, targetPath));
+    const fullPath = normalizePathLike(fullMatchablePathFromNote(note, targetPath));
     const normalizedTargetPath = normalizePathLike(targetPath);
     const normalizedTitle = slugifySegment(note.title);
+
+    if (fullPath === normalizedRaw) {
+        return 340;
+    }
 
     if (displayPath === normalizedRaw) {
         return 300;
@@ -657,12 +680,20 @@ function scoreSuggestionPathMatch(
         return 220;
     }
 
+    if (fullPath.startsWith(normalizedRaw)) {
+        return 200;
+    }
+
     if (normalizedTargetPath.startsWith(normalizedRaw)) {
         return 180;
     }
 
     if (displayPath.includes(normalizedRaw)) {
         return 140;
+    }
+
+    if (fullPath.includes(normalizedRaw)) {
+        return 130;
     }
 
     if (normalizedTargetPath.includes(normalizedRaw)) {
@@ -687,6 +718,7 @@ export function buildBlockWikiLinkSuggestions(
 ): BlockWikiLinkSuggestionItem[] {
     const { rawPath, rawHeading } = parseWikiLinkQuery(query);
     const normalized = normalizeQuery(rawPath);
+    const normalizedPathQuery = normalizePathLike(rawPath);
     const existingTargetPaths = new Set<string>();
     const existingItemsWithScore: Array<{ item: BlockWikiLinkSuggestionItem; score: number }> = [];
     const resolvedTargetPath = resolveTargetPathFromQuery(rawPath, notes);
@@ -702,12 +734,24 @@ export function buildBlockWikiLinkSuggestions(
     notes.forEach((note) => {
         const targetPath = deriveTargetPathFromNote(note);
         const subtitle = displayPathFromNote(note, targetPath);
+        const fullPath = fullMatchablePathFromNote(note, targetPath);
+        const normalizedTargetPath = normalizePathLike(targetPath);
+        const normalizedSubtitle = normalizePathLike(subtitle);
+        const normalizedFullPath = normalizePathLike(fullPath);
 
         if (
             normalized &&
             !note.title.toLowerCase().includes(normalized) &&
             !subtitle.toLowerCase().includes(normalized) &&
-            !targetPath.toLowerCase().includes(normalized)
+            !targetPath.toLowerCase().includes(normalized) &&
+            (
+                normalizedPathQuery === '' ||
+                (
+                    !normalizedTargetPath.includes(normalizedPathQuery) &&
+                    !normalizedSubtitle.includes(normalizedPathQuery) &&
+                    !normalizedFullPath.includes(normalizedPathQuery)
+                )
+            )
         ) {
             return;
         }

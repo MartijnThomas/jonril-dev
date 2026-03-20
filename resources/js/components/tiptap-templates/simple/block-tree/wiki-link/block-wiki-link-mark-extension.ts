@@ -407,8 +407,8 @@ export const BlockWikiLinkMark = Mark.create<{
                                 );
 
                                 const cursorInsideWikiLink = wikiLinkAtCursor
-                                    ? cursor > wikiLinkAtCursor.range.from &&
-                                      cursor < wikiLinkAtCursor.range.to
+                                    ? cursor >= wikiLinkAtCursor.range.from &&
+                                      cursor <= wikiLinkAtCursor.range.to
                                     : false;
 
                                 if (wikiLinkAtCursor && cursorInsideWikiLink) {
