@@ -281,11 +281,13 @@ In `HandleInertiaRequests`:
 
 - detect journal routes (`journal.*`)
 - keep `currentWorkspace` based on last active workspace, not journal note workspace
+- ensure right sidebar events on journal pages are always resolved from the personal workspace
 
 Acceptance criteria:
 
 - Opening a journal note never changes sidebar workspace context.
 - Returning from a shared-workspace note back to journal keeps expected context.
+- Right sidebar event list on journal pages always reflects personal workspace events.
 
 ### Step 6: Frontend journal entry point + switcher behaviour
 
