@@ -3,6 +3,7 @@
 use App\Models\Note;
 use App\Models\NoteTask;
 use App\Models\User;
+use App\Models\Workspace;
 
 beforeEach(function (): void {
     config()->set('scout.driver', 'collection');
@@ -311,4 +312,45 @@ test('command search tasks only include tasks matching task content', function (
     expect($taskIds)
         ->toContain((string) $matchingTask->id)
         ->not->toContain((string) $nonMatchingTask->id);
+});
+
+test('command search excludes migrated workspaces', function () {
+    $user = User::factory()->create();
+    $personalWorkspace = $user->currentWorkspace();
+
+    $migratedWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+        'name' => 'Migrated Source',
+        'migrated_at' => now(),
+    ]);
+
+    $migratedNote = Note::factory()->create([
+        'workspace_id' => $migratedWorkspace->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Migrated Search Target',
+    ]);
+
+    $personalNote = Note::factory()->create([
+        'workspace_id' => $personalWorkspace->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Personal Search Target',
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->getJson("/w/{$migratedWorkspace->slug}/search/command?mode=notes&q=target")
+        ->assertOk()
+        ->assertJsonPath('mode', 'notes')
+        ->assertJsonCount(0, 'items')
+        ->assertJsonCount(0, 'tasks');
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson("/w/{$personalWorkspace->slug}/search/command?mode=notes&q=target")
+        ->assertOk();
+
+    $ids = collect($response->json('items'))->pluck('id')->all();
+    expect($ids)->toContain($personalNote->id)
+        ->not->toContain($migratedNote->id);
 });

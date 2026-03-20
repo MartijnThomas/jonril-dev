@@ -182,6 +182,18 @@ test('journal page linkable notes include member workspaces and exclude non-memb
         'title' => 'Shared Target',
     ]);
 
+    $migratedWorkspace = Workspace::factory()->create([
+        'owner_id' => $user->id,
+        'is_personal' => false,
+        'name' => 'Migrated Source',
+        'migrated_at' => now(),
+    ]);
+
+    $migratedNote = $migratedWorkspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Migrated Target',
+    ]);
+
     $outsiderUser = User::factory()->create();
     $outsiderWorkspace = $outsiderUser->currentWorkspace();
     $outsiderNote = $outsiderWorkspace->notes()->create([
@@ -200,7 +212,7 @@ test('journal page linkable notes include member workspaces and exclude non-memb
         ->actingAs($user)
         ->get('/journal/2026-03-07')
         ->assertInertia(fn (Assert $page) => $page
-            ->where('linkableNotes', function ($linkableNotes) use ($memberNote, $outsiderNote): bool {
+            ->where('linkableNotes', function ($linkableNotes) use ($memberNote, $outsiderNote, $migratedNote): bool {
                 $items = collect($linkableNotes);
                 $member = $items->first(fn (array $item) => ($item['id'] ?? null) === $memberNote->id);
                 if (! is_array($member)) {
@@ -215,9 +227,11 @@ test('journal page linkable notes include member workspaces and exclude non-memb
                     return false;
                 }
 
-                return $items->every(
-                    fn (array $item) => ($item['id'] ?? null) !== $outsiderNote->id,
-                );
+                return $items->every(fn (array $item) => ! in_array(
+                    (string) ($item['id'] ?? ''),
+                    [$outsiderNote->id, $migratedNote->id],
+                    true,
+                ));
             }),
         );
 });

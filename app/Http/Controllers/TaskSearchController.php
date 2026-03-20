@@ -20,7 +20,11 @@ class TaskSearchController extends Controller
             abort(403);
         }
 
-        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->values()->all();
+        $workspaceIds = $user->workspaces()
+            ->whereNull('workspaces.migrated_at')
+            ->pluck('workspaces.id')
+            ->values()
+            ->all();
         if ($workspaceIds === []) {
             abort(403, 'No workspace available.');
         }

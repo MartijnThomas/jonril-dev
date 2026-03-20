@@ -78,7 +78,7 @@ export const BlockWikiLinkList = forwardRef<
                             {item.subtitle && (
                                 <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                                     {item.isCrossWorkspace && item.workspaceName ? (
-                                        <span className="inline-flex items-center rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                                        <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                                             {item.workspaceName}
                                         </span>
                                     ) : null}

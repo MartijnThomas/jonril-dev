@@ -774,6 +774,7 @@ class NotesController extends Controller
         $linkableWorkspaceIds = [$workspaceId];
         if ($crossWorkspaceWikiScope) {
             $linkableWorkspaceIds = Auth::user()?->workspaces()
+                ->whereNull('workspaces.migrated_at')
                 ->pluck('workspaces.id')
                 ->filter(fn ($id) => is_string($id) && trim($id) !== '')
                 ->values()

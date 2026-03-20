@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Note;
 use App\Models\NoteHeading;
 use App\Models\NoteTask;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Notes\NoteHeadingIndexer;
 use App\Support\Notes\NoteSlugService;
@@ -32,6 +33,24 @@ class CommandSearchController extends Controller
             $workspace->users()->where('users.id', $user->id)->exists(),
             403,
         );
+
+        $mode = $request->input('mode', 'notes');
+        if ($workspace->isMigratedSource()) {
+            return response()->json([
+                'mode' => $mode === 'headings' ? 'headings' : 'notes',
+                'items' => [],
+                'tasks' => [],
+            ]);
+        }
+
+        $searchableWorkspaceIds = $this->searchableWorkspaceIdsFor($user);
+        if (! in_array($workspace->id, $searchableWorkspaceIds, true)) {
+            return response()->json([
+                'mode' => $mode === 'headings' ? 'headings' : 'notes',
+                'items' => [],
+                'tasks' => [],
+            ]);
+        }
 
         $workspaceIds = [$workspace->id];
 
@@ -1112,6 +1131,19 @@ class CommandSearchController extends Controller
     {
         return config('scout.driver') === 'meilisearch'
             && class_exists(Client::class);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function searchableWorkspaceIdsFor(User $user): array
+    {
+        return $user->workspaces()
+            ->whereNull('workspaces.migrated_at')
+            ->pluck('workspaces.id')
+            ->filter(fn ($id) => is_string($id) && trim($id) !== '')
+            ->values()
+            ->all();
     }
 
     /**
