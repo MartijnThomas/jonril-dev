@@ -1,3 +1,4 @@
+import { getMarkRange } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import type { Editor } from '@tiptap/react';
 import {
@@ -33,6 +34,7 @@ import {
     Superscript,
     Underline,
 } from 'lucide-react';
+import { useState } from 'react';
 import {
     convertCurrentHeadingToParagraph,
     getCurrentBlockNode,
@@ -47,6 +49,11 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 
 const BLOCK_NODE_OPTIONS = [
     { value: 'paragraph', label: 'Paragraph', icon: Pilcrow },
@@ -164,6 +171,10 @@ export function BlockNodeToolbar({
     meetingNotesCount = 0,
     onToggleMeetingNotes,
 }: BlockNodeToolbarProps) {
+    const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
+    const [linkInputValue, setLinkInputValue] = useState('');
+    const [linkTextValue, setLinkTextValue] = useState('');
+
     const { currentValue, currentMarks, currentHighlightColor } = useEditorState({
         editor,
         selector: (ctx) => ({
@@ -172,6 +183,26 @@ export function BlockNodeToolbar({
             currentHighlightColor: getCurrentHighlightColor(ctx.editor),
         }),
     });
+    const isLinkActive = editor.isActive('link');
+    const currentLinkHref = String(editor.getAttributes('link').href ?? '').trim();
+
+    const getCurrentLinkText = (): string => {
+        const { state } = editor;
+        const { from, to, empty } = state.selection;
+
+        if (!empty) {
+            return state.doc.textBetween(from, to, '');
+        }
+
+        const linkMark = state.schema.marks.link;
+        const range = getMarkRange(state.selection.$from, linkMark);
+
+        if (!range) {
+            return '';
+        }
+
+        return state.doc.textBetween(range.from, range.to, '');
+    };
 
     const handleValueChange = (value: string) => {
         const currentBlock = getCurrentBlockNode(editor);
@@ -416,32 +447,49 @@ export function BlockNodeToolbar({
     };
 
     const handleLinkAction = () => {
-        const currentHref = String(editor.getAttributes('link').href ?? '');
-        const input = window.prompt(
-            'Enter URL (leave empty to remove link)',
-            currentHref || 'https://',
-        );
-
-        if (input === null) {
-            return;
-        }
-
-        const href = normalizeLinkHref(input);
-        const { from, empty } = editor.state.selection;
+        const href = normalizeLinkHref(linkInputValue);
+        const { state } = editor;
+        const { from, to, empty } = state.selection;
 
         if (href === '') {
             editor.chain().focus().extendMarkRange('link').unsetLink().run();
+            setLinkPopoverOpen(false);
             return;
         }
 
+        const normalizedText = linkTextValue.trim();
+        const selectedText = state.doc.textBetween(from, to, '');
+
         if (empty) {
+            const linkMark = state.schema.marks.link;
+            const range = getMarkRange(state.selection.$from, linkMark);
+
+            if (range) {
+                const existingText = state.doc.textBetween(range.from, range.to, '');
+                const finalText = normalizedText !== '' ? normalizedText : (existingText || href);
+
+                editor
+                    .chain()
+                    .focus()
+                    .insertContentAt({ from: range.from, to: range.to }, finalText)
+                    .setTextSelection({ from: range.from, to: range.from + finalText.length })
+                    .setLink({ href })
+                    .setTextSelection(range.from + finalText.length)
+                    .run();
+
+                setLinkPopoverOpen(false);
+                return;
+            }
+
+            const finalText = normalizedText !== '' ? normalizedText : href;
+
             editor
                 .chain()
                 .focus()
                 .insertContentAt(from, [
                     {
                         type: 'text',
-                        text: href,
+                        text: finalText,
                         marks: [
                             {
                                 type: 'link',
@@ -454,13 +502,30 @@ export function BlockNodeToolbar({
                         text: ' ',
                     },
                 ])
-                .setTextSelection(from + href.length + 1)
+                .setTextSelection(from + finalText.length + 1)
                 .run();
 
+            setLinkPopoverOpen(false);
             return;
         }
 
-        editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
+        const finalText = normalizedText !== '' ? normalizedText : (selectedText || href);
+
+        editor
+            .chain()
+            .focus()
+            .insertContentAt({ from, to }, finalText)
+            .setTextSelection({ from, to: from + finalText.length })
+            .setLink({ href })
+            .setTextSelection(from + finalText.length)
+            .run();
+
+        setLinkPopoverOpen(false);
+    };
+
+    const handleRemoveLink = () => {
+        editor.chain().focus().extendMarkRange('link').unsetLink().run();
+        setLinkPopoverOpen(false);
     };
 
     const currentBlock = getCurrentBlockNode(editor);
@@ -483,7 +548,7 @@ export function BlockNodeToolbar({
     return (
         <div className="sticky top-0 z-30 w-full overflow-hidden border-b border-border/60 bg-background/95 shadow-xs backdrop-blur supports-backdrop-filter:bg-background/85">
             <div className={`mx-auto w-full overflow-x-auto overflow-y-hidden px-2 py-1.5 md:px-4 ${hasMeetingToggle ? 'pr-20!' : ''}`}>
-                <div className="mx-auto inline-flex min-w-max items-center gap-2.5">
+                <div className="mx-auto flex w-max min-w-full items-center justify-center gap-2.5">
                         <div className="flex items-center gap-2">
                         <Button
                             key={paragraphOption.value}
@@ -720,23 +785,83 @@ export function BlockNodeToolbar({
                                 </DropdownMenu>
                             </div>
 
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className={
-                                    editor.isActive('link')
-                                        ? activeSquareButtonHoverClass
-                                        : inactiveSquareButtonClass
-                                }
-                                onClick={handleLinkAction}
-                                aria-pressed={editor.isActive('link')}
-                                aria-label="Insert or edit link"
-                                title="Insert or edit link"
+                            <Popover
+                                open={linkPopoverOpen}
+                                onOpenChange={(open) => {
+                                    setLinkPopoverOpen(open);
+                                    if (open) {
+                                        setLinkInputValue(currentLinkHref);
+                                        setLinkTextValue(getCurrentLinkText());
+                                    }
+                                }}
                             >
-                                <Link2 className="size-4" />
-                                <span className="sr-only">Insert or edit link</span>
-                            </Button>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className={
+                                            isLinkActive
+                                                ? activeSquareButtonHoverClass
+                                                : inactiveSquareButtonClass
+                                        }
+                                        aria-pressed={isLinkActive}
+                                        aria-label="Insert or edit link"
+                                        title="Insert or edit link"
+                                    >
+                                        <Link2 className="size-4" />
+                                        <span className="sr-only">Insert or edit link</span>
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent align="start" className="w-[19rem] p-2.5">
+                                    <div className="space-y-2">
+                                        <input
+                                            type="url"
+                                            value={linkInputValue}
+                                            onChange={(event) => setLinkInputValue(event.target.value)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter') {
+                                                    event.preventDefault();
+                                                    handleLinkAction();
+                                                }
+                                            }}
+                                            placeholder="Paste a link..."
+                                            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={linkTextValue}
+                                            onChange={(event) => setLinkTextValue(event.target.value)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter') {
+                                                    event.preventDefault();
+                                                    handleLinkAction();
+                                                }
+                                            }}
+                                            placeholder="Link text (optional)"
+                                            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                                        />
+                                        <div className="flex items-center justify-end gap-1.5">
+                                            {(isLinkActive || linkInputValue.trim() !== '') ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRemoveLink}
+                                                    className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                >
+                                                    Remove
+                                                </button>
+                                            ) : null}
+                                            <button
+                                                type="button"
+                                                onClick={handleLinkAction}
+                                                className="rounded-md bg-muted px-2 py-1 text-xs text-foreground hover:bg-muted/80"
+                                            >
+                                                Apply
+                                            </button>
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         <div className="h-6 w-px bg-border/60" />
