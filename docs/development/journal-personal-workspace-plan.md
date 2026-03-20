@@ -259,7 +259,9 @@ Status (2026-03-20):
   - Task migrate flows now create/use journal targets in the personal workspace (never in non-personal source workspaces).
   - Feature tests added to verify no journal is created in non-personal workspace during task-to-journal migration.
 - Pending:
-  - Evaluate command/import-only flows that may still create historical journal notes outside personal workspace.
+  - Command/import policy decision implemented:
+    - `JournalNoteService` now blocks creating new journals in non-personal workspaces by default.
+    - Legacy import keeps an explicit migration-only exception (`allowNonPersonalWorkspace = true`) for historical imports.
 
 ### Step 4: Introduce workspace-agnostic journal routes
 

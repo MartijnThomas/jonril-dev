@@ -182,6 +182,8 @@ class LegacyNotesImporter
                         $journalInfo['date'],
                     ),
                     'nl',
+                    null,
+                    true,
                 );
 
                 $note->properties = $this->buildLegacyProperties(

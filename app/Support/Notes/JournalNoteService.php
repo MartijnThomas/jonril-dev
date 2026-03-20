@@ -16,8 +16,8 @@ class JournalNoteService
         string $period,
         ?string $locale = null,
         ?string $longDateFormat = null,
-    ): Note
-    {
+        bool $allowNonPersonalWorkspace = false,
+    ): Note {
         $normalizedGranularity = $this->normalizeGranularity($granularity);
         $date = $this->parsePeriod($normalizedGranularity, $period);
 
@@ -32,6 +32,10 @@ class JournalNoteService
             $this->syncJournalMetadata($existing, $normalizedGranularity, $date);
 
             return $existing;
+        }
+
+        if (! $workspace->isPersonal() && ! $allowNonPersonalWorkspace) {
+            throw new InvalidArgumentException('Journal notes can only be created in personal workspaces.');
         }
 
         $title = $this->titleFor($normalizedGranularity, $date, $locale, $longDateFormat);
@@ -65,8 +69,7 @@ class JournalNoteService
         mixed $journalDate,
         ?string $locale = null,
         ?string $longDateFormat = null,
-    ): string
-    {
+    ): string {
         $normalizedGranularity = $this->normalizeGranularity($granularity);
         $normalizedLocale = $this->normalizeLocale($locale);
         $date = $this->normalizeDate($journalDate)->locale($normalizedLocale);
