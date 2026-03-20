@@ -566,16 +566,16 @@ export function BlockNodeToolbar({
                             })}
 
                             <div className="flex items-center">
-                                <div className="relative">
-                                    <Button
+                                <div
+                                    className={
+                                        currentMarks.highlight
+                                            ? 'inline-flex h-8 items-stretch rounded-md border border-border/80 bg-background text-foreground shadow-xs'
+                                            : 'inline-flex h-8 items-stretch rounded-md border border-transparent text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground'
+                                    }
+                                >
+                                    <button
                                         type="button"
-                                        size="sm"
-                                        variant={currentMarks.highlight ? 'default' : 'ghost'}
-                                        className={
-                                            currentMarks.highlight
-                                                ? `${activeSquareButtonHoverClass} pr-9`
-                                                : `${inactiveSquareButtonClass} pr-9`
-                                        }
+                                        className="inline-flex items-center justify-center rounded-l-md px-2"
                                         onClick={handleToggleDefaultHighlight}
                                         aria-pressed={currentMarks.highlight}
                                         aria-label="Toggle default highlight"
@@ -584,12 +584,12 @@ export function BlockNodeToolbar({
                                     >
                                         <Highlighter className="size-4" />
                                         <span className="sr-only">Toggle default highlight</span>
-                                    </Button>
+                                    </button>
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <button
                                                 type="button"
-                                                className="absolute inset-y-0 right-0 z-10 inline-flex w-7 items-center justify-center gap-1 rounded-r-md border-l border-border/60 bg-transparent pr-1 hover:bg-accent/40"
+                                                className="inline-flex items-center gap-1 border-l border-border/60 rounded-r-md px-1.5 hover:bg-accent/40"
                                                 aria-label="Pick highlight color"
                                                 title="Pick highlight color"
                                                 disabled={!canHighlight}
