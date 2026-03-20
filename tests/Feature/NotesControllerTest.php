@@ -1368,6 +1368,96 @@ test('legacy simplified journal period url resolves with inferred granularity', 
     expect($journal)->not()->toBeNull();
 });
 
+dataset('canonical_journal_period_cases', [
+    'daily' => [
+        'period' => '2026-03-07',
+        'granularity' => Note::JOURNAL_DAILY,
+        'date' => '2026-03-07',
+    ],
+    'weekly' => [
+        'period' => '2026-W11',
+        'granularity' => Note::JOURNAL_WEEKLY,
+        'date' => '2026-03-09',
+    ],
+    'monthly' => [
+        'period' => '2026-03',
+        'granularity' => Note::JOURNAL_MONTHLY,
+        'date' => '2026-03-01',
+    ],
+    'yearly' => [
+        'period' => '2026',
+        'granularity' => Note::JOURNAL_YEARLY,
+        'date' => '2026-01-01',
+    ],
+]);
+
+test('canonical journal period url creates missing journal notes for all granularities', function (
+    string $period,
+    string $granularity,
+    string $date,
+) {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $response = $this
+        ->actingAs($user)
+        ->get("/journal/{$period}");
+
+    $response
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteType', 'journal')
+            ->where('journalGranularity', $granularity)
+            ->where('journalPeriod', $period),
+        );
+
+    $journal = Note::query()
+        ->where('workspace_id', $workspace?->id)
+        ->where('type', Note::TYPE_JOURNAL)
+        ->where('journal_granularity', $granularity)
+        ->whereDate('journal_date', $date)
+        ->first();
+
+    expect($journal)->not()->toBeNull();
+})->with('canonical_journal_period_cases');
+
+test('canonical journal period url reuses existing journal notes for all granularities', function (
+    string $period,
+    string $granularity,
+    string $date,
+) {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $workspace?->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'title' => "Existing {$granularity} journal",
+        'journal_granularity' => $granularity,
+        'journal_date' => $date,
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get("/journal/{$period}");
+
+    $response
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('noteType', 'journal')
+            ->where('journalGranularity', $granularity)
+            ->where('journalPeriod', $period),
+        );
+
+    expect(
+        Note::query()
+            ->where('workspace_id', $workspace?->id)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->where('journal_granularity', $granularity)
+            ->whereDate('journal_date', $date)
+            ->count(),
+    )->toBe(1);
+})->with('canonical_journal_period_cases');
+
 test('update uses the first h1 as note title', function () {
     $user = User::factory()->create();
     $note = $user->notes()->create([

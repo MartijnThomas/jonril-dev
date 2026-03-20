@@ -142,7 +142,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('w/{workspace:slug}/journal/{granularity}/{period}', [NotesController::class, 'showJournalScoped'])
         ->name('journal.show.scoped');
     Route::get('w/{workspace:slug}/journal/{period}', [NotesController::class, 'showJournalScopedByPeriod'])
-        ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)')
+        ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)?')
         ->name('journal.show.by-period.scoped');
 
     Route::get('notes/{noteId}/history', [NotesController::class, 'showRevisions'])
@@ -190,7 +190,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('journal/{granularity}/{period}', [NotesController::class, 'showJournal'])
         ->name('journal.show');
     Route::get('journal/{period}', [NotesController::class, 'showJournalByPeriod'])
-        ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)')
+        ->where('period', '\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)?')
         ->name('journal.show.by-period');
 
     // Legacy non-workspace-scoped URLs kept for note routes only.
