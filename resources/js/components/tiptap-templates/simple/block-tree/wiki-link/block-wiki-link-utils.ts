@@ -155,27 +155,27 @@ export function displayPathFromNote(
     targetPath: string,
 ): string {
     const editablePath = toPathDisplay(note.editablePath ?? '');
-    if (editablePath !== '') {
+    if (targetPath.startsWith('journal/') && editablePath !== '') {
         return editablePath;
     }
 
     const resolvedPath = toPathDisplay(note.path ?? '');
-    const resolvedTitle = toPathDisplay(note.title);
-
     if (resolvedPath !== '') {
-        return `${resolvedPath} / ${resolvedTitle}`;
+        return resolvedPath;
     }
 
-    return (
-        editableJournalPathFromTargetPath(targetPath) ||
-        targetPath
-    );
+    return editableJournalPathFromTargetPath(targetPath) || '';
 }
 
 export function resolveTargetPathFromQuery(
     rawPath: string,
     notes: BlockWikiLinkNote[],
 ): string | null {
+    const normalizedYear = rawPath.trim().match(/^(\d{4})$/);
+    if (normalizedYear) {
+        return `journal/yearly/${normalizedYear[1]}`;
+    }
+
     const normalizedJournal = normalizeJournalTargetPath(rawPath);
     if (normalizedJournal) {
         return normalizedJournal;
