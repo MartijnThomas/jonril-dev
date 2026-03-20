@@ -61,11 +61,8 @@ export function fallbackBlockWikiHrefFromTargetPath(
 
         if (workspaceSlug) {
             if (normalizedTargetPath.startsWith('journal/')) {
-                const journalMatch = normalizedTargetPath.match(
-                    /^journal\/(daily|weekly|monthly|yearly)\/(.+)$/,
-                );
-                if (journalMatch) {
-                    const period = encodeWikiTargetPath(journalMatch[2] ?? '');
+                const period = journalPeriodFromTargetPath(normalizedTargetPath);
+                if (period) {
                     return `/w/${workspaceSlug}/journal/${period}${hash}`;
                 }
             }
@@ -83,12 +80,8 @@ export function fallbackBlockWikiHrefFromTargetPath(
     }
 
     if (normalizedTargetPath.startsWith('journal/')) {
-        const journalMatch = normalizedTargetPath.match(
-            /^journal\/(daily|weekly|monthly|yearly)\/(.+)$/,
-        );
-
-        if (journalMatch) {
-            const period = encodeWikiTargetPath(journalMatch[2] ?? '');
+        const period = journalPeriodFromTargetPath(normalizedTargetPath);
+        if (period) {
             return `/journal/${period}${hash}`;
         }
     }
@@ -112,10 +105,8 @@ export function deriveTargetPathFromNote(note: BlockWikiLinkNote): string {
 
         const journalMatch = href.match(/\/journal\/(daily|weekly|monthly|yearly)\/([^?#]+)/);
         if (journalMatch) {
-            const granularity = journalMatch[1] ?? '';
             const period = decodeURIComponent(journalMatch[2] ?? '');
-
-            return `journal/${granularity}/${period}`;
+            return `journal/${period}`;
         }
     }
 
@@ -173,7 +164,7 @@ export function resolveTargetPathFromQuery(
 ): string | null {
     const normalizedYear = rawPath.trim().match(/^(\d{4})$/);
     if (normalizedYear) {
-        return `journal/yearly/${normalizedYear[1]}`;
+        return `journal/${normalizedYear[1]}`;
     }
 
     const normalizedJournal = normalizeJournalTargetPath(rawPath);
@@ -246,7 +237,7 @@ export function normalizeJournalTargetPath(rawPath: string): string | null {
             return null;
         }
 
-        return `journal/${granularity}/${period}`;
+        return `journal/${period}`;
     }
 
     const simpleMatch = normalized.match(/^journal\/(.+)$/i);
@@ -260,55 +251,42 @@ export function normalizeJournalTargetPath(rawPath: string): string | null {
     }
 
     if (rules.daily.test(period)) {
-        return `journal/daily/${period}`;
+        return `journal/${period}`;
     }
 
     if (rules.weekly.test(period)) {
-        return `journal/weekly/${period}`;
+        return `journal/${period}`;
     }
 
     if (rules.monthly.test(period)) {
-        return `journal/monthly/${period}`;
+        return `journal/${period}`;
     }
 
     if (rules.yearly.test(period)) {
-        return `journal/yearly/${period}`;
+        return `journal/${period}`;
     }
 
     return null;
 }
 
 export function editableJournalPathFromTargetPath(targetPath: string): string | null {
-    const match = targetPath
-        .trim()
-        .match(/^journal\/(daily|weekly|monthly|yearly)\/(.+)$/i);
-    if (!match) {
-        return null;
-    }
-
-    const period = (match[2] ?? '').trim();
+    const period = journalPeriodFromTargetPath(targetPath.trim());
     if (!period) {
         return null;
     }
 
-    return `journal/${period}`;
+    return `journal/${decodeURIComponent(period)}`;
 }
 
 export function wikiLinkInsertTextFromTargetPath(
     targetPath: string,
     fallback: string,
 ): string {
-    const match = targetPath
-        .trim()
-        .match(/^journal\/(daily|weekly|monthly|yearly)\/(.+)$/i);
-
-    if (!match) {
+    const period = journalPeriodFromTargetPath(targetPath.trim());
+    if (!period) {
         return fallback;
     }
-
-    const period = (match[2] ?? '').trim();
-
-    return period !== '' ? period : fallback;
+    return decodeURIComponent(period);
 }
 
 function capitalizeFirst(value: string): string {
@@ -337,10 +315,10 @@ function humanizePathSegment(segment: string): string {
 }
 
 function journalDisplayTitle(
-    granularity: 'daily' | 'weekly' | 'monthly' | 'yearly',
     period: string,
     language: string,
 ): string | null {
+    const granularity = granularityFromJournalPeriod(period);
     if (granularity === 'yearly') {
         return period;
     }
@@ -384,18 +362,12 @@ export function displayTitleFromTargetPath(
     language: string = 'nl',
 ): string {
     const normalized = targetPath.trim().replace(/^\/+|\/+$/g, '');
-    const journalMatch = normalized.match(
-        /^journal\/(daily|weekly|monthly|yearly)\/(.+)$/i,
-    );
-
-    if (journalMatch) {
-        const granularity = (journalMatch[1] ?? '').toLowerCase() as
-            | 'daily'
-            | 'weekly'
-            | 'monthly'
-            | 'yearly';
-        const period = (journalMatch[2] ?? '').trim();
-        const journalTitle = journalDisplayTitle(granularity, period, language);
+    const period = journalPeriodFromTargetPath(normalized);
+    if (period) {
+        const journalTitle = journalDisplayTitle(
+            decodeURIComponent(period),
+            language,
+        );
 
         if (journalTitle) {
             return journalTitle;
@@ -405,6 +377,48 @@ export function displayTitleFromTargetPath(
     const segment = normalized.split('/').filter(Boolean).at(-1) ?? normalized;
 
     return humanizePathSegment(segment);
+}
+
+function granularityFromJournalPeriod(
+    period: string,
+): 'daily' | 'weekly' | 'monthly' | 'yearly' {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(period)) {
+        return 'daily';
+    }
+
+    if (/^\d{4}-W\d{2}$/i.test(period)) {
+        return 'weekly';
+    }
+
+    if (/^\d{4}-\d{2}$/.test(period)) {
+        return 'monthly';
+    }
+
+    return 'yearly';
+}
+
+function journalPeriodFromTargetPath(targetPath: string): string | null {
+    const normalized = targetPath.trim().replace(/^\/+|\/+$/g, '');
+    const canonicalMatch = normalized.match(/^journal\/(.+)$/i);
+    if (!canonicalMatch) {
+        return null;
+    }
+
+    const canonicalPeriod = (canonicalMatch[1] ?? '').trim();
+    if (/^\d{4}(?:-W\d{2}|-\d{2}(?:-\d{2})?)$/.test(canonicalPeriod)) {
+        return encodeWikiTargetPath(canonicalPeriod);
+    }
+
+    const legacyMatch = normalized.match(
+        /^journal\/(?:daily|weekly|monthly|yearly)\/(.+)$/i,
+    );
+    if (!legacyMatch) {
+        return null;
+    }
+
+    const legacyPeriod = (legacyMatch[1] ?? '').trim();
+
+    return legacyPeriod !== '' ? encodeWikiTargetPath(legacyPeriod) : null;
 }
 
 export function parseWikiLinkQuery(query: string): {
@@ -559,28 +573,28 @@ export function buildProgressiveJournalSuggestions(
     const dailyMatch = query.match(/^(\d{4}-\d{2}-\d{2})$/);
     if (dailyMatch) {
         const period = dailyMatch[1] ?? '';
-        const targetPath = `journal/daily/${period}`;
+        const targetPath = `journal/${period}`;
         push(targetPath, displayTitleFromTargetPath(targetPath, language));
     }
 
     const weeklyMatch = query.match(/^(\d{4}-w\d{2})$/i);
     if (weeklyMatch) {
         const period = (weeklyMatch[1] ?? '').toUpperCase();
-        const targetPath = `journal/weekly/${period}`;
+        const targetPath = `journal/${period}`;
         push(targetPath, displayTitleFromTargetPath(targetPath, language));
     }
 
     const monthlyMatch = query.match(/^(\d{4}-\d{2})$/);
     if (monthlyMatch) {
         const period = monthlyMatch[1] ?? '';
-        const targetPath = `journal/monthly/${period}`;
+        const targetPath = `journal/${period}`;
         push(targetPath, displayTitleFromTargetPath(targetPath, language));
     }
 
     const yearlyMatch = query.match(/^(\d{4})$/);
     if (yearlyMatch) {
         const period = yearlyMatch[1] ?? '';
-        const targetPath = `journal/yearly/${period}`;
+        const targetPath = `journal/${period}`;
         push(targetPath, displayTitleFromTargetPath(targetPath, language));
     }
 
@@ -601,7 +615,7 @@ export function buildProgressiveJournalSuggestions(
 
         years.forEach((itemYear) => {
             const period = `${itemYear}-${String(month).padStart(2, '0')}`;
-            push(`journal/monthly/${period}`, `Monthly journal ${period}`);
+            push(`journal/${period}`, `Monthly journal ${period}`);
         });
     }
 
