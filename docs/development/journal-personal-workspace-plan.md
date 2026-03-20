@@ -327,8 +327,12 @@ Status (2026-03-20):
   - Journal sidebar entry links now target canonical non-scoped `/journal/{period}` URLs.
   - Header/FAB journal entry links now target canonical `/journal/{period}` daily URLs.
   - Journal previous/next navigation in the note header now navigates via `/journal/{period}`.
+  - Browser coverage added for journal context behavior:
+    - opening journal while active workspace is A keeps context A
+    - navigating to workspace-B scoped note shows context B
+    - browser back returns to journal route with stable context/JS state
 - Pending:
-  - Add browser tests for journal navigation/context behavior across workspace switching.
+  - None.
 
 
 ### Step ?: Some remarks
