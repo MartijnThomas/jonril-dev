@@ -7,6 +7,7 @@ export type SimpleEditorProps = {
     id?: string;
     noteUpdateUrl?: string;
     noteHashUrl?: string;
+    noteImageUploadUrl?: string;
     contentHash?: string | null;
     content?: SimpleEditorContent;
     properties?: DocumentPropertiesValue;

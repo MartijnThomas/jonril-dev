@@ -824,6 +824,77 @@ class TasksController extends Controller
         ]);
     }
 
+    public function cancelByReference(Request $request)
+    {
+        $user = $request->user();
+        if (! $user) {
+            abort(403);
+        }
+
+        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->all();
+        if ($workspaceIds === []) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'note_id' => [
+                'required',
+                'uuid',
+                Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
+            ],
+            'block_id' => ['nullable', 'string', 'max:255'],
+            'position' => ['required_without:block_id', 'integer', 'min:1'],
+        ]);
+
+        $note = Note::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->find($data['note_id']);
+        if (! $note) {
+            abort(404);
+        }
+
+        $note->loadMissing('workspace');
+        if ($note->workspace?->isMigratedSource()) {
+            abort(409, 'Task updates are disabled for migrated source workspaces.');
+        }
+
+        $content = is_array($note->content) ? $note->content : null;
+        if (! $content) {
+            abort(422, 'Note content is invalid.');
+        }
+
+        $canceledAt = Carbon::now()->toIso8601String();
+
+        $updated = false;
+        if (is_string($data['block_id'] ?? null) && trim((string) $data['block_id']) !== '') {
+            $updated = $this->updateTaskItemCancelByBlockId(
+                $content,
+                trim((string) $data['block_id']),
+                $canceledAt,
+            );
+        }
+
+        if (! $updated) {
+            $position = (int) ($data['position'] ?? 0);
+            if ($position > 0) {
+                $updated = $this->updateTaskItemCancelByPosition(
+                    $content,
+                    $position,
+                    $canceledAt,
+                );
+            }
+        }
+
+        if (! $updated) {
+            abort(422, 'Unable to locate task item in note content.');
+        }
+
+        $note->content = $content;
+        $note->save();
+
+        return back();
+    }
+
     public function migrate(Request $request)
     {
         $user = $request->user();
@@ -1751,5 +1822,110 @@ class TasksController extends Controller
         $content = $taskItem['content'];
         $walk($content);
         $taskItem['content'] = $content;
+    }
+
+    /**
+     * @param  array<string, mixed>  $content
+     */
+    private function updateTaskItemCancelByBlockId(array &$content, string $blockId, string $canceledAt): bool
+    {
+        if (! isset($content['content']) || ! is_array($content['content'])) {
+            return false;
+        }
+
+        return $this->walkAndCancelByBlockId($content['content'], $blockId, $canceledAt);
+    }
+
+    /**
+     * @param  array<int, mixed>  $nodes
+     */
+    private function walkAndCancelByBlockId(array &$nodes, string $blockId, string $canceledAt): bool
+    {
+        foreach ($nodes as &$node) {
+            if (! is_array($node)) {
+                continue;
+            }
+
+            $type = $node['type'] ?? null;
+            $nodeBlockId = $node['attrs']['id'] ?? null;
+            $isTaskItem = $type === 'taskItem' && $nodeBlockId === $blockId;
+            $isBlockParagraph = $type === 'paragraph'
+                && ($node['attrs']['blockStyle'] ?? '') === 'task'
+                && $nodeBlockId === $blockId;
+
+            if ($isTaskItem || $isBlockParagraph) {
+                $this->applyTaskCancelUpdate($node, $canceledAt);
+
+                return true;
+            }
+
+            if (isset($node['content']) && is_array($node['content'])) {
+                if ($this->walkAndCancelByBlockId($node['content'], $blockId, $canceledAt)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $content
+     */
+    private function updateTaskItemCancelByPosition(array &$content, int $targetPosition, string $canceledAt): bool
+    {
+        if (! isset($content['content']) || ! is_array($content['content'])) {
+            return false;
+        }
+
+        $position = 0;
+
+        return $this->walkAndCancelByPosition($content['content'], $targetPosition, $position, $canceledAt);
+    }
+
+    /**
+     * @param  array<int, mixed>  $nodes
+     */
+    private function walkAndCancelByPosition(array &$nodes, int $targetPosition, int &$position, string $canceledAt): bool
+    {
+        foreach ($nodes as &$node) {
+            if (! is_array($node)) {
+                continue;
+            }
+
+            $type = $node['type'] ?? null;
+            $isTaskItem = $type === 'taskItem';
+            $isBlockParagraph = $type === 'paragraph'
+                && ($node['attrs']['blockStyle'] ?? '') === 'task';
+
+            if ($isTaskItem || $isBlockParagraph) {
+                $position++;
+                if ($position === $targetPosition) {
+                    $this->applyTaskCancelUpdate($node, $canceledAt);
+
+                    return true;
+                }
+            }
+
+            if (isset($node['content']) && is_array($node['content'])) {
+                if ($this->walkAndCancelByPosition($node['content'], $targetPosition, $position, $canceledAt)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $taskItem
+     */
+    private function applyTaskCancelUpdate(array &$taskItem, string $canceledAt): void
+    {
+        $attrs = is_array($taskItem['attrs'] ?? null) ? $taskItem['attrs'] : [];
+        $attrs['checked'] = false;
+        $attrs['taskStatus'] = 'canceled';
+        $attrs['canceledAt'] = $canceledAt;
+        $taskItem['attrs'] = $attrs;
     }
 }

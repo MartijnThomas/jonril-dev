@@ -11,6 +11,7 @@ type Props = {
     noteId: string;
     noteUpdateUrl: string;
     noteHashUrl: string;
+    noteImageUploadUrl: string;
     properties: any;
     linkableNotes: {
         id: string;
@@ -96,6 +97,7 @@ export default function Dashboard({
     noteId,
     noteUpdateUrl,
     noteHashUrl,
+    noteImageUploadUrl,
     properties,
     linkableNotes,
     breadcrumbs,
@@ -207,6 +209,7 @@ export default function Dashboard({
                 id={noteId}
                 noteUpdateUrl={noteUpdateUrl}
                 noteHashUrl={noteHashUrl}
+                noteImageUploadUrl={noteImageUploadUrl}
                 contentHash={contentHash}
                 content={content}
                 properties={properties}

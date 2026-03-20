@@ -19,6 +19,7 @@ class WorkspaceFactory extends Factory
             'owner_id' => User::factory(),
             'is_personal' => false,
             'name' => fake()->company().' Workspace',
+            'storage_disk' => null,
             'color' => fake()->randomElement([
                 'black',
                 'slate',

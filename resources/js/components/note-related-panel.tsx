@@ -1,4 +1,5 @@
 import { Link, router, usePage, useRemember } from '@inertiajs/react';
+import { ArrowRightToLine, Ban, FileText } from 'lucide-react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -10,6 +11,13 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { Switch } from '@/components/ui/switch';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -296,6 +304,99 @@ export function NoteRelatedPanel({
         );
     };
 
+    const cancelTask = (task: RelatedTaskItem) => {
+        if (workspaceReadOnly || pendingTaskIds.includes(task.id)) {
+            return;
+        }
+
+        setPendingTaskIds((current) => [...current, task.id]);
+
+        router.patch(
+            '/tasks/cancel',
+            {
+                note_id: task.note_id,
+                block_id: task.block_id,
+                position: task.position,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onSuccess: () => {
+                    setTaskItems((current) =>
+                        current.map((item) =>
+                            item.id === task.id
+                                ? { ...item, task_status: 'canceled', checked: false }
+                                : item,
+                        ),
+                    );
+                    setStickyVisibleTaskIds((current) =>
+                        current.includes(task.id) ? current : [...current, task.id],
+                    );
+                },
+                onError: () => {
+                    toast.error(
+                        language === 'en'
+                            ? 'Failed to cancel task.'
+                            : 'Annuleren van taak mislukt.',
+                    );
+                },
+                onFinish: () => {
+                    setPendingTaskIds((current) =>
+                        current.filter((taskId) => taskId !== task.id),
+                    );
+                },
+            },
+        );
+    };
+
+    const migrateToCurrentNote = (task: RelatedTaskItem) => {
+        if (workspaceReadOnly || pendingTaskIds.includes(task.id)) {
+            return;
+        }
+
+        setPendingTaskIds((current) => [...current, task.id]);
+
+        router.post(
+            '/tasks/migrate',
+            {
+                source_note_id: task.note_id,
+                block_id: task.block_id,
+                position: task.position,
+                target_note_id: noteId,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onSuccess: () => {
+                    setTaskItems((current) =>
+                        current.map((item) =>
+                            item.id === task.id
+                                ? { ...item, task_status: 'migrated', checked: false }
+                                : item,
+                        ),
+                    );
+                    setStickyVisibleTaskIds((current) =>
+                        current.includes(task.id) ? current : [...current, task.id],
+                    );
+                },
+                onError: () => {
+                    toast.error(
+                        language === 'en'
+                            ? 'Failed to migrate task.'
+                            : 'Verplaatsen van taak mislukt.',
+                    );
+                },
+                onFinish: () => {
+                    setPendingTaskIds((current) =>
+                        current.filter((taskId) => taskId !== task.id),
+                    );
+                },
+            },
+        );
+    };
+
     const openTaskInNote = (task: RelatedTaskItem) => {
         if (!task.block_id) {
             return;
@@ -476,105 +577,142 @@ export function NoteRelatedPanel({
 
                                                     <CollapsibleContent className="pl-3 md:pl-5">
                                                         {group.tasks.map((task) => (
-                                                            <article
-                                                                key={`${task.id}-${task.position}`}
-                                                                className="py-1 md:pl-1"
-                                                                onDoubleClick={() =>
-                                                                    openTaskInNote(task)
-                                                                }
-                                                            >
-                                                                <div className="flex items-start gap-4">
-                                                                    <TaskToggleCheckbox
-                                                                        className="mt-1"
-                                                                        checked={task.checked}
-                                                                        status={
-                                                                            task.task_status === 'canceled'
-                                                                                ? 'canceled'
-                                                                                : task.task_status === 'migrated'
-                                                                                  ? 'migrated'
-                                                                                  : task.task_status === 'in_progress'
-                                                                                    ? 'in_progress'
-                                                                                  : task.task_status === 'backlog'
-                                                                                    ? 'backlog'
-                                                                                  : task.task_status === 'assigned'
-                                                                                    ? 'assigned'
-                                                                                  : task.checked
-                                                                                    ? 'completed'
-                                                                                    : 'open'
+                                                            <ContextMenu key={`${task.id}-${task.position}`}>
+                                                                <ContextMenuTrigger asChild>
+                                                                    <article
+                                                                        className="py-1 md:pl-1"
+                                                                        onDoubleClick={() =>
+                                                                            openTaskInNote(task)
                                                                         }
+                                                                    >
+                                                                        <div className="flex items-start gap-4">
+                                                                            <TaskToggleCheckbox
+                                                                                className="mt-1"
+                                                                                checked={task.checked}
+                                                                                status={
+                                                                                    task.task_status === 'canceled'
+                                                                                        ? 'canceled'
+                                                                                        : task.task_status === 'migrated'
+                                                                                          ? 'migrated'
+                                                                                          : task.task_status === 'in_progress'
+                                                                                            ? 'in_progress'
+                                                                                          : task.task_status === 'backlog'
+                                                                                            ? 'backlog'
+                                                                                          : task.task_status === 'assigned'
+                                                                                            ? 'assigned'
+                                                                                          : task.checked
+                                                                                            ? 'completed'
+                                                                                            : 'open'
+                                                                                }
+                                                                                disabled={
+                                                                                    workspaceReadOnly ||
+                                                                                    pendingTaskIds.includes(
+                                                                                        task.id,
+                                                                                    ) ||
+                                                                                    task.task_status ===
+                                                                                        'canceled' ||
+                                                                                    task.task_status ===
+                                                                                        'migrated'
+                                                                                }
+                                                                                ariaLabel={`Toggle task ${task.content || task.id}`}
+                                                                                onCheckedChange={() =>
+                                                                                    toggleTask(task)
+                                                                                }
+                                                                            />
+                                                                            <div className="min-w-0 flex-1 pt-px">
+                                                                                <p
+                                                                                    className={cn(
+                                                                                        'text-base leading-[1.62]',
+                                                                                        task.task_status ===
+                                                                                            'canceled' &&
+                                                                                            'line-through opacity-70',
+                                                                                        task.task_status ===
+                                                                                            'migrated' &&
+                                                                                            'opacity-70',
+                                                                                        task.task_status !==
+                                                                                            'canceled' &&
+                                                                                            task.task_status !==
+                                                                                                'migrated' &&
+                                                                                            task.checked &&
+                                                                                            'line-through opacity-70',
+                                                                                    )}
+                                                                                >
+                                                                                    <TaskInlineContent
+                                                                                        fragments={
+                                                                                            task
+                                                                                                .render_fragments
+                                                                                                .length > 0
+                                                                                                ? task.render_fragments
+                                                                                                : [
+                                                                                                      {
+                                                                                                          type: 'text',
+                                                                                                          text:
+                                                                                                              task.content ||
+                                                                                                              (language ===
+                                                                                                              'en'
+                                                                                                                  ? 'Untitled task'
+                                                                                                                  : 'Naamloze taak'),
+                                                                                                      },
+                                                                                                  ]
+                                                                                        }
+                                                                                        language={language}
+                                                                                        canceled={
+                                                                                            task.task_status ===
+                                                                                            'canceled'
+                                                                                        }
+                                                                                        className={cn(
+                                                                                            'text-[1em] leading-[1.66] font-normal tracking-[-0.01em] md:text-base md:leading-[1.62]',
+                                                                                            (task.task_status ===
+                                                                                                'canceled' ||
+                                                                                                task.task_status ===
+                                                                                                    'migrated' ||
+                                                                                                task.checked) &&
+                                                                                                'task-inline--faded',
+                                                                                        )}
+                                                                                        priorityStyle="range"
+                                                                                        hideStatusTokens
+                                                                                        hidePriorityTokens
+                                                                                    />
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </article>
+                                                                </ContextMenuTrigger>
+                                                                <ContextMenuContent>
+                                                                    <ContextMenuItem
+                                                                        onSelect={() => openTaskInNote(task)}
+                                                                        disabled={!task.block_id}
+                                                                    >
+                                                                        <FileText />
+                                                                        {language === 'en' ? 'Go to task in note' : 'Ga naar taak in notitie'}
+                                                                    </ContextMenuItem>
+                                                                    <ContextMenuSeparator />
+                                                                    <ContextMenuItem
+                                                                        onSelect={() => cancelTask(task)}
                                                                         disabled={
                                                                             workspaceReadOnly ||
-                                                                            pendingTaskIds.includes(
-                                                                                task.id,
-                                                                            ) ||
-                                                                            task.task_status ===
-                                                                                'canceled' ||
-                                                                            task.task_status ===
-                                                                                'migrated'
+                                                                            task.task_status === 'canceled' ||
+                                                                            task.task_status === 'migrated' ||
+                                                                            pendingTaskIds.includes(task.id)
                                                                         }
-                                                                        ariaLabel={`Toggle task ${task.content || task.id}`}
-                                                                        onCheckedChange={() =>
-                                                                            toggleTask(task)
+                                                                    >
+                                                                        <Ban />
+                                                                        {language === 'en' ? 'Cancel task' : 'Taak annuleren'}
+                                                                    </ContextMenuItem>
+                                                                    <ContextMenuItem
+                                                                        onSelect={() => migrateToCurrentNote(task)}
+                                                                        disabled={
+                                                                            workspaceReadOnly ||
+                                                                            task.task_status === 'migrated' ||
+                                                                            task.task_status === 'canceled' ||
+                                                                            pendingTaskIds.includes(task.id)
                                                                         }
-                                                                    />
-                                                                    <div className="min-w-0 flex-1 pt-[1px]">
-                                                                        <p
-                                                                            className={cn(
-                                                                                'text-base leading-[1.62]',
-                                                                                task.task_status ===
-                                                                                    'canceled' &&
-                                                                                    'line-through opacity-70',
-                                                                                task.task_status ===
-                                                                                    'migrated' &&
-                                                                                    'opacity-70',
-                                                                                task.task_status !==
-                                                                                    'canceled' &&
-                                                                                    task.task_status !==
-                                                                                        'migrated' &&
-                                                                                    task.checked &&
-                                                                                    'line-through opacity-70',
-                                                                            )}
-                                                                        >
-                                                                            <TaskInlineContent
-                                                                                fragments={
-                                                                                    task
-                                                                                        .render_fragments
-                                                                                        .length > 0
-                                                                                        ? task.render_fragments
-                                                                                        : [
-                                                                                              {
-                                                                                                  type: 'text',
-                                                                                                  text:
-                                                                                                      task.content ||
-                                                                                                      (language ===
-                                                                                                      'en'
-                                                                                                          ? 'Untitled task'
-                                                                                                          : 'Naamloze taak'),
-                                                                                              },
-                                                                                          ]
-                                                                                }
-                                                                                language={language}
-                                                                                canceled={
-                                                                                    task.task_status ===
-                                                                                    'canceled'
-                                                                                }
-                                                                                className={cn(
-                                                                                    'text-[1em] leading-[1.66] font-normal tracking-[-0.01em] md:text-base md:leading-[1.62]',
-                                                                                    (task.task_status ===
-                                                                                        'canceled' ||
-                                                                                        task.task_status ===
-                                                                                            'migrated' ||
-                                                                                        task.checked) &&
-                                                                                        'task-inline--faded',
-                                                                                )}
-                                                                                priorityStyle="range"
-                                                                                hideStatusTokens
-                                                                                hidePriorityTokens
-                                                                            />
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
-                                                            </article>
+                                                                    >
+                                                                        <ArrowRightToLine />
+                                                                        {language === 'en' ? 'Migrate to this note' : 'Verplaatsen naar deze notitie'}
+                                                                    </ContextMenuItem>
+                                                                </ContextMenuContent>
+                                                            </ContextMenu>
                                                         ))}
                                                     </CollapsibleContent>
                                                 </Collapsible>

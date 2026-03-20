@@ -1,3 +1,5 @@
+import type { UploadFunction } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
+
 export type BlockWikiLinkNote = {
     id: string;
     title: string;
@@ -21,4 +23,5 @@ export type CreateBlockTreeEditorExtensionsOptions = {
     journalGranularity?: string | null;
     journalDate?: string | null;
     defaultTimeblockDurationMinutes?: number;
+    imageUploadHandler?: UploadFunction;
 };

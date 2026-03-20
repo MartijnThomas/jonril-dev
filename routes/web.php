@@ -3,6 +3,7 @@
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CommandSearchController;
 use App\Http\Controllers\DocumentationController;
+use App\Http\Controllers\NoteImageController;
 use App\Http\Controllers\NotesController;
 use App\Http\Controllers\SidebarEventsController;
 use App\Http\Controllers\TasksController;
@@ -138,6 +139,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('sidebar-events.index');
     Route::get('w/{workspace:slug}/attachable-events', [SidebarEventsController::class, 'attachable'])
         ->name('sidebar-events.attachable');
+    Route::post('w/{workspace:slug}/images', [NoteImageController::class, 'store'])
+        ->name('workspace.images.store');
+    Route::get('w/{workspace:slug}/images/{image}', [NoteImageController::class, 'show'])
+        ->whereUuid('image')
+        ->name('workspace.images.show');
 
     Route::get('w/{workspace:slug}/journal/{granularity}/{period}', [NotesController::class, 'showJournalScoped'])
         ->name('journal.show.scoped');
@@ -216,6 +222,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('search.command');
     Route::patch('tasks/checked', [TasksController::class, 'updateCheckedByReference'])
         ->name('tasks.checked-by-reference');
+    Route::patch('tasks/cancel', [TasksController::class, 'cancelByReference'])
+        ->name('tasks.cancel-by-reference');
     Route::patch('tasks/{task}/checked', [TasksController::class, 'updateChecked'])
         ->name('tasks.checked');
     Route::post('tasks/filter-presets', [TasksController::class, 'saveFilterPreset'])

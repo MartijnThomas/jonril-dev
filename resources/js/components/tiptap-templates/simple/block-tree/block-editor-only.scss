@@ -51,6 +51,15 @@
     margin-top: 0;
 }
 
+.simple-editor-content .tiptap.ProseMirror.simple-editor[data-editor-mode='block'] > img,
+[data-editor-mode='block'] .simple-editor-content .tiptap.ProseMirror.simple-editor > img {
+    margin: 0.75rem 0;
+    max-width: min(100%, 56rem);
+    width: auto;
+    height: auto;
+    border-radius: 0.4rem;
+}
+
 .tiptap.ProseMirror[data-editor-mode='block'] {
     --bt-indent-step: 1.7rem;
     --bt-ordered-marker-width: 2.4rem;

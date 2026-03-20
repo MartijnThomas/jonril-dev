@@ -113,6 +113,11 @@ class User extends Authenticatable
         return $workspace->notes();
     }
 
+    public function noteImages(): HasMany
+    {
+        return $this->hasMany(NoteImage::class, 'uploaded_by');
+    }
+
     public function currentWorkspace(): ?Workspace
     {
         $preferredWorkspaceId = data_get($this->settings, 'workspace_id');

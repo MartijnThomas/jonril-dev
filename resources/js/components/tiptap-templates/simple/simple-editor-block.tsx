@@ -28,6 +28,7 @@ import type {
 } from '@/components/tiptap-templates/simple/simple-editor-types';
 import { useEditorSave } from '@/components/tiptap-templates/simple/use-editor-save';
 import { useEditorVersion } from '@/contexts/editor-version-context';
+import { createBlockNoteImageUploadHandler } from '@/lib/block-note-image-upload';
 
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss';
 import '@/components/tiptap-node/code-block-node/code-block-node.scss';
@@ -43,6 +44,12 @@ import '@/components/tiptap-templates/simple/block-tree/block-editor-only.scss';
 const EMPTY_SUGGESTIONS: string[] = [];
 const DEFERRED_RELATED_DATA = ['relatedTasks', 'backlinks'] as const;
 const PROPERTY_VISIBILITY_META_PREFIX = '__visible:';
+
+type WindowWithBlockImageUpload = Window & {
+    __blockNoteImageUploadHandler?: ReturnType<typeof createBlockNoteImageUploadHandler>;
+    __blockNoteImageUploadTestStub?: (file: File) => Promise<string>;
+    __blockNoteImageInsertDataUrlForTest?: (dataUrl: string) => Promise<boolean>;
+};
 
 type MeetingEventData = {
     starts_at: string | null;
@@ -292,6 +299,7 @@ function SimpleEditorComponent({
     noteUpdateUrl = '',
     noteHashUrl,
     contentHash,
+    noteImageUploadUrl = '',
     content = '',
     properties = {},
     linkableNotes = [],
@@ -396,6 +404,39 @@ function SimpleEditorComponent({
     const previousNoteIdRef = useRef<string | null>(null);
     const previousLoadedContentSerializedRef = useRef<string>('');
     const previewHydrationKeyRef = useRef<string | null>(null);
+    const imageUploadHandler = useMemo(() => {
+        if (typeof window !== 'undefined') {
+            const testStub = (window as WindowWithBlockImageUpload).__blockNoteImageUploadTestStub;
+            if (typeof testStub === 'function') {
+                return async (file: File, onProgress) => {
+                    onProgress?.({ progress: 100 });
+                    return testStub(file);
+                };
+            }
+        }
+
+        const uploadUrl = noteImageUploadUrl.trim();
+        if (uploadUrl === '') {
+            return undefined;
+        }
+
+        return createBlockNoteImageUploadHandler(uploadUrl, id);
+    }, [id, noteImageUploadUrl]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const typedWindow = window as WindowWithBlockImageUpload;
+        typedWindow.__blockNoteImageUploadHandler = imageUploadHandler;
+
+        return () => {
+            if (typedWindow.__blockNoteImageUploadHandler === imageUploadHandler) {
+                delete typedWindow.__blockNoteImageUploadHandler;
+            }
+        };
+    }, [imageUploadHandler]);
 
     const extensions = useMemo(
         () =>
@@ -410,6 +451,7 @@ function SimpleEditorComponent({
                 journalGranularity,
                 journalDate,
                 defaultTimeblockDurationMinutes,
+                imageUploadHandler,
             }),
         [
             language,
@@ -420,6 +462,7 @@ function SimpleEditorComponent({
             linkableNotes,
             mentionSuggestions,
             hashtagSuggestions,
+            imageUploadHandler,
         ],
     );
 
@@ -466,6 +509,73 @@ function SimpleEditorComponent({
 
         editor.setEditable(!readOnly, false);
     }, [editor, readOnly]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !editor || !imageUploadHandler) {
+            return;
+        }
+
+        const typedWindow = window as WindowWithBlockImageUpload;
+        typedWindow.__blockNoteImageInsertDataUrlForTest = async (dataUrl: string) => {
+            const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+            if (!match) {
+                return false;
+            }
+
+            const mimeType = match[1];
+            const base64Content = match[2];
+
+            let bytes: Uint8Array;
+            try {
+                const binary = atob(base64Content);
+                bytes = new Uint8Array(binary.length);
+                for (let index = 0; index < binary.length; index += 1) {
+                    bytes[index] = binary.charCodeAt(index);
+                }
+            } catch {
+                return false;
+            }
+
+            const extension = mimeType.split('/')[1] ?? 'png';
+            const file = new File([bytes], `pasted-image-test.${extension}`, {
+                type: mimeType,
+            });
+
+            try {
+                const testStub = typedWindow.__blockNoteImageUploadTestStub;
+                const uploadedUrl = typeof testStub === 'function'
+                    ? await testStub(file)
+                    : await imageUploadHandler(file);
+                const trimmedUrl = uploadedUrl.trim();
+                if (trimmedUrl === '') {
+                    return false;
+                }
+
+                editor
+                    .chain()
+                    .focus()
+                    .insertContent({
+                        type: 'image',
+                        attrs: {
+                            src: trimmedUrl,
+                            alt: 'pasted-image-test',
+                            title: 'pasted-image-test',
+                        },
+                    })
+                    .run();
+
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
+        return () => {
+            if (typedWindow.__blockNoteImageInsertDataUrlForTest) {
+                delete typedWindow.__blockNoteImageInsertDataUrlForTest;
+            }
+        };
+    }, [editor, imageUploadHandler]);
 
     const { blockUi } = useBlockEditorUi({
         editor,

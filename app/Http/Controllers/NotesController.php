@@ -712,8 +712,9 @@ class NotesController extends Controller
     {
         $previewBlock = (bool) ($request?->boolean('preview_block', false) ?? false);
         $useBlockPreview = $previewBlock;
-        $workspaceEditorMode = $this->currentWorkspace()->editor_mode;
-        $workspaceReadOnly = $this->currentWorkspace()->isMigratedSource();
+        $workspace = $this->currentWorkspace();
+        $workspaceEditorMode = $workspace->editor_mode;
+        $workspaceReadOnly = $workspace->isMigratedSource();
         $usesBlockEditor = $useBlockPreview || $workspaceEditorMode === Workspace::EDITOR_MODE_BLOCK;
 
         if ($note->type === Note::TYPE_NOTE && ! $useBlockPreview) {
@@ -725,7 +726,7 @@ class NotesController extends Controller
             $editorContent = $this->legacyToBlockNoteConverter->convertNote($note)['document'];
         }
 
-        $workspaceId = $this->currentWorkspace()->id;
+        $workspaceId = $workspace->id;
 
         // Recursive CTE: walks up from the current note to the root.
         // Only the ancestor chain is needed for breadcrumbs and parent_path —
@@ -895,6 +896,9 @@ class NotesController extends Controller
             'noteHashUrl' => ($useBlockPreview || $workspaceReadOnly)
                 ? ''
                 : $this->noteSlugService->hashUrlFor($note),
+            'noteImageUploadUrl' => ($useBlockPreview || $workspaceReadOnly)
+                ? ''
+                : route('workspace.images.store', ['workspace' => $workspace->slug], absolute: false),
             'noteType' => $note->type,
             'journalGranularity' => $note->journal_granularity,
             'journalDate' => $note->journal_date?->toDateString(),

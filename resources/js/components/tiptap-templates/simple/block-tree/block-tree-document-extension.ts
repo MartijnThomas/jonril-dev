@@ -3,5 +3,5 @@ import { Node } from '@tiptap/core';
 export const BlockTreeDocument = Node.create({
     name: 'doc',
     topNode: true,
-    content: '(paragraph|heading|codeBlock|horizontalRule)+',
+    content: '(paragraph|heading|codeBlock|horizontalRule|image|imageUpload)+',
 });

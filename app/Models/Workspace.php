@@ -39,6 +39,7 @@ class Workspace extends Model
         'editor_mode',
         'migrated_at',
         'icon',
+        'storage_disk',
         'mention_suggestions',
         'hashtag_suggestions',
     ];
@@ -224,5 +225,39 @@ class Workspace extends Model
     public function calendars(): HasMany
     {
         return $this->hasMany(Calendar::class);
+    }
+
+    public function images(): HasMany
+    {
+        return $this->hasMany(NoteImage::class);
+    }
+
+    public function resolvedStorageDisk(): string
+    {
+        $defaultDisk = (string) config('note-images.default_disk', 'public');
+        $allowedDisks = config('note-images.allowed_disks', [$defaultDisk]);
+        if (! is_array($allowedDisks)) {
+            $allowedDisks = [$defaultDisk];
+        }
+
+        $normalizedAllowedDisks = collect($allowedDisks)
+            ->filter(fn ($disk) => is_string($disk) && trim($disk) !== '')
+            ->map(fn (string $disk) => trim($disk))
+            ->values()
+            ->all();
+
+        $configuredDisk = is_string($this->storage_disk) ? trim($this->storage_disk) : '';
+        if ($configuredDisk !== '' && in_array($configuredDisk, $normalizedAllowedDisks, true)) {
+            return $configuredDisk;
+        }
+
+        return $defaultDisk;
+    }
+
+    public function imageStorageDirectory(): string
+    {
+        $basePath = trim((string) config('note-images.folder', 'uploads/images'), '/');
+
+        return "{$basePath}/workspaces/{$this->id}";
     }
 }

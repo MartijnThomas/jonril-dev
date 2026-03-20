@@ -19,6 +19,7 @@ import {
     ListChecks,
     ListOrdered,
     Link2,
+    ImagePlus,
     CalendarDays,
     Minus,
     NotebookText,
@@ -297,6 +298,56 @@ export function BlockNodeToolbar({
         }
     };
 
+    const handleInsertImageUpload = () => {
+        const insertedViaCommand = editor
+            .chain()
+            .focus()
+            .setImageUploadNode({
+                accept: 'image/*',
+                limit: 3,
+                maxSize: 10 * 1024 * 1024,
+            })
+            .run();
+
+        if (insertedViaCommand) {
+            return;
+        }
+
+        const currentBlock = getCurrentBlockNode(editor);
+        if (currentBlock) {
+            const insertPos = currentBlock.pos + currentBlock.node.nodeSize;
+            const insertedAtBlockBoundary = editor
+                .chain()
+                .focus()
+                .insertContentAt(insertPos, {
+                    type: 'imageUpload',
+                    attrs: {
+                        accept: 'image/*',
+                        limit: 3,
+                        maxSize: 10 * 1024 * 1024,
+                    },
+                })
+                .run();
+
+            if (insertedAtBlockBoundary) {
+                return;
+            }
+        }
+
+        editor
+            .chain()
+            .focus()
+            .insertContent({
+                type: 'imageUpload',
+                attrs: {
+                    accept: 'image/*',
+                    limit: 3,
+                    maxSize: 10 * 1024 * 1024,
+                },
+            })
+            .run();
+    };
+
     const normalizeLinkHref = (value: string): string => {
         const trimmed = value.trim();
         if (trimmed === '') {
@@ -509,6 +560,20 @@ export function BlockNodeToolbar({
                                     </Button>
                                 );
                             })}
+
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={inactiveSquareButtonClass}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={handleInsertImageUpload}
+                                aria-label="Insert image"
+                                title="Insert image"
+                            >
+                                <ImagePlus className="size-4" />
+                                <span className="sr-only">Insert image</span>
+                            </Button>
 
                             <Button
                                 type="button"

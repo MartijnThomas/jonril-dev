@@ -134,6 +134,11 @@ class Note extends Model
         return $this->hasMany(Event::class);
     }
 
+    public function images(): HasMany
+    {
+        return $this->hasMany(NoteImage::class);
+    }
+
     public function searchableAs(): string
     {
         return 'notes';

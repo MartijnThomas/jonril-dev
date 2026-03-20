@@ -79,14 +79,30 @@ export interface UploadOptions {
   onError?: (error: Error) => void
 }
 
+type WindowWithBlockImageUpload = Window & {
+  __blockNoteImageUploadHandler?: UploadOptions["upload"]
+}
+
 /**
  * Custom hook for managing multiple file uploads with progress tracking and cancellation
  */
 function useFileUpload(options: UploadOptions) {
   const [fileItems, setFileItems] = useState<FileItem[]>([])
 
+  const generateFileItemId = (): string => {
+    const maybeCrypto = globalThis.crypto as Crypto | undefined
+    if (
+      maybeCrypto &&
+      typeof maybeCrypto.randomUUID === "function"
+    ) {
+      return maybeCrypto.randomUUID()
+    }
+
+    return `upload-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+  }
+
   const uploadFile = async (file: File): Promise<string | null> => {
-    if (file.size > options.maxSize) {
+    if (options.maxSize > 0 && file.size > options.maxSize) {
       const error = new Error(
         `File size exceeds maximum allowed (${options.maxSize / 1024 / 1024}MB)`
       )
@@ -95,7 +111,7 @@ function useFileUpload(options: UploadOptions) {
     }
 
     const abortController = new AbortController()
-    const fileId = crypto.randomUUID()
+    const fileId = generateFileItemId()
 
     const newFileItem: FileItem = {
       id: fileId,
@@ -442,7 +458,11 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
     maxSize,
     limit,
     accept,
-    upload: extension.options.upload,
+    upload:
+      extension.options.upload ??
+      ((typeof window !== "undefined"
+        ? (window as WindowWithBlockImageUpload).__blockNoteImageUploadHandler
+        : undefined) as UploadOptions["upload"]),
     onSuccess: extension.options.onSuccess,
     onError: extension.options.onError,
   }

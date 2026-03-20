@@ -120,7 +120,7 @@ class LegacyToBlockNoteConverter
             }
 
             $type = (string) ($node['type'] ?? '');
-            if (! in_array($type, ['heading', 'paragraph', 'codeBlock', 'horizontalRule'], true)) {
+            if (! in_array($type, ['heading', 'paragraph', 'codeBlock', 'horizontalRule', 'image'], true)) {
                 return false;
             }
 
@@ -154,7 +154,7 @@ class LegacyToBlockNoteConverter
             }
 
             $type = (string) ($node['type'] ?? '');
-            if (! in_array($type, ['heading', 'paragraph', 'codeBlock', 'horizontalRule'], true)) {
+            if (! in_array($type, ['heading', 'paragraph', 'codeBlock', 'horizontalRule', 'image'], true)) {
                 continue;
             }
 
@@ -173,6 +173,27 @@ class LegacyToBlockNoteConverter
                         ['id' => $id],
                     ),
                     'content' => Arr::get($node, 'content', []),
+                ];
+
+                continue;
+            }
+
+            if ($type === 'image') {
+                $src = trim((string) Arr::get($node, 'attrs.src', ''));
+                if ($src === '') {
+                    continue;
+                }
+
+                $attrs = Arr::get($node, 'attrs', []);
+                $normalized[] = [
+                    'type' => 'image',
+                    'attrs' => [
+                        'src' => $src,
+                        'alt' => is_string(Arr::get($attrs, 'alt')) ? Arr::get($attrs, 'alt') : null,
+                        'title' => is_string(Arr::get($attrs, 'title')) ? Arr::get($attrs, 'title') : null,
+                        'width' => Arr::get($attrs, 'width'),
+                        'height' => Arr::get($attrs, 'height'),
+                    ],
                 ];
 
                 continue;
@@ -270,6 +291,27 @@ class LegacyToBlockNoteConverter
                         ['id' => $id],
                     ),
                     'content' => Arr::get($node, 'content', []),
+                ];
+
+                continue;
+            }
+
+            if ($type === 'image') {
+                $src = trim((string) Arr::get($node, 'attrs.src', ''));
+                if ($src === '') {
+                    continue;
+                }
+
+                $attrs = Arr::get($node, 'attrs', []);
+                $converted[] = [
+                    'type' => 'image',
+                    'attrs' => [
+                        'src' => $src,
+                        'alt' => is_string(Arr::get($attrs, 'alt')) ? Arr::get($attrs, 'alt') : null,
+                        'title' => is_string(Arr::get($attrs, 'title')) ? Arr::get($attrs, 'title') : null,
+                        'width' => Arr::get($attrs, 'width'),
+                        'height' => Arr::get($attrs, 'height'),
+                    ],
                 ];
 
                 continue;
