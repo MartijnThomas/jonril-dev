@@ -130,7 +130,7 @@ type TokenPropertyInputProps = {
     onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
 };
 
-function TokenPropertyInput({
+export function TokenPropertyInput({
     mode,
     value,
     onChange,

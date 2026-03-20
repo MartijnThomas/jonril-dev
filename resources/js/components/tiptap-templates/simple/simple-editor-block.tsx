@@ -5,6 +5,7 @@ import type { Editor } from '@tiptap/core';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
+import { Plus } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import { MeetingNotesSidebar } from '@/components/meeting-notes-sidebar';
@@ -13,6 +14,7 @@ import {
     NoteRelatedPanelPlaceholder,
 } from '@/components/note-related-panel';
 import { DocumentProperties } from '@/components/tiptap-properties/document-properties';
+import { TokenPropertyInput } from '@/components/tiptap-properties/document-properties';
 import type { DocumentPropertiesValue } from '@/components/tiptap-properties/document-properties';
 import {
     createEmptyBlockDocument,
@@ -83,14 +85,20 @@ function formatMeetingTimeRange(
 function MeetingEventMeta({
     event,
     language,
-    participants,
-    onAddParticipants,
+    participantsValue,
+    participantOptions,
+    onParticipantsChange,
+    onPersistParticipant,
 }: {
     event: MeetingEventData;
     language: 'nl' | 'en';
-    participants: string[];
-    onAddParticipants: () => void;
+    participantsValue: string;
+    participantOptions: string[];
+    onParticipantsChange: (value: string) => void;
+    onPersistParticipant: (value: string) => Promise<string[]>;
 }) {
+    const [showInlineParticipantsEditor, setShowInlineParticipantsEditor] = useState(false);
+    const participants = parseParticipants(participantsValue);
     const timeLabel = formatMeetingTimeRange(event.starts_at, event.ends_at, language);
     if (!timeLabel && !event.location && participants.length === 0) return null;
 
@@ -130,17 +138,37 @@ function MeetingEventMeta({
                 </div>
             ) : (
                 <div className="flex items-baseline gap-3 text-muted-foreground">
-                    <div className="flex items-baseline gap-1.5">
-                        <span className="whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
-                            {language === 'nl' ? 'Wie' : 'Who'}
-                        </span>
-                        <button
-                            type="button"
-                            onClick={onAddParticipants}
-                            className="rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground/80 hover:bg-muted hover:text-foreground"
-                        >
-                            {language === 'nl' ? 'Deelnemers toevoegen' : 'Add participants'}
-                        </button>
+                    <span className="w-16 shrink-0 whitespace-nowrap text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
+                        {language === 'nl' ? 'Wie' : 'Who'}
+                    </span>
+                    <div className="min-w-[15rem]">
+                        {!showInlineParticipantsEditor ? (
+                            <button
+                                type="button"
+                                onClick={() => setShowInlineParticipantsEditor(true)}
+                                className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground/80 hover:bg-muted hover:text-foreground"
+                            >
+                                <Plus className="size-3" />
+                                {language === 'nl' ? 'Deelnemers toevoegen' : 'Add participants'}
+                            </button>
+                        ) : (
+                            <TokenPropertyInput
+                                mode="participants"
+                                value={participantsValue}
+                                onChange={onParticipantsChange}
+                                onPersist={async (_kind, value) =>
+                                    onPersistParticipant(value)
+                                }
+                                options={participantOptions}
+                                placeholder="@participant1, @participant2"
+                                onBlur={() => {
+                                    if (parseParticipants(participantsValue).length === 0) {
+                                        setShowInlineParticipantsEditor(false);
+                                    }
+                                }}
+                                className="h-8 rounded-sm bg-transparent px-0 text-[0.82rem]"
+                            />
+                        )}
                     </div>
                 </div>
             )}
@@ -153,7 +181,7 @@ const isPropertyVisibilityMetaKey = (key: string) =>
 
 const isDefaultVisibleProperty = (key: string) => {
     const normalized = key.trim().toLowerCase();
-    return normalized === 'context' || normalized === 'tags';
+    return normalized === 'context' || normalized === 'participants' || normalized === 'tags';
 };
 
 const hasVisibleProperties = (properties: DocumentPropertiesValue): boolean => {
@@ -326,10 +354,59 @@ function SimpleEditorComponent({
         workspaceSuggestions?.mentions ?? EMPTY_SUGGESTIONS;
     const hashtagSuggestions =
         workspaceSuggestions?.hashtags ?? EMPTY_SUGGESTIONS;
-    const meetingParticipants = useMemo(
-        () => parseParticipants(documentProperties.participants),
-        [documentProperties.participants],
+    const [meetingParticipantOptions, setMeetingParticipantOptions] = useState<string[]>(
+        mentionSuggestions,
     );
+    useEffect(() => {
+        setMeetingParticipantOptions(mentionSuggestions);
+    }, [mentionSuggestions]);
+
+    const getCookie = (name: string): string | null => {
+        const match = document.cookie
+            .split('; ')
+            .find((part) => part.startsWith(`${name}=`));
+
+        if (!match) {
+            return null;
+        }
+
+        return decodeURIComponent(match.split('=').slice(1).join('='));
+    };
+
+    const persistMeetingParticipantSuggestion = async (
+        rawValue: string,
+    ): Promise<string[]> => {
+        const normalized = rawValue.trim().replace(/^@/, '').trim();
+        if (normalized === '') {
+            return meetingParticipantOptions;
+        }
+
+        const xsrfToken = getCookie('XSRF-TOKEN');
+        const response = await fetch('/workspaces/suggestions', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
+            },
+            body: JSON.stringify({
+                kind: 'mention',
+                value: normalized,
+            }),
+        });
+
+        if (!response.ok) {
+            return meetingParticipantOptions;
+        }
+
+        const payload = (await response.json()) as { items?: string[] };
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        setMeetingParticipantOptions(items);
+
+        return items;
+    };
 
     const previousNoteIdRef = useRef<string | null>(null);
     const previousLoadedContentSerializedRef = useRef<string>('');
@@ -751,12 +828,18 @@ function SimpleEditorComponent({
                                 <MeetingEventMeta
                                     event={meetingEvent}
                                     language={language}
-                                    participants={meetingParticipants}
-                                    onAddParticipants={() => {
-                                        window.dispatchEvent(
-                                            new Event('note-properties-toggle-request'),
-                                        );
+                                    participantsValue={documentProperties.participants ?? ''}
+                                    participantOptions={meetingParticipantOptions}
+                                    onParticipantsChange={(nextValue) => {
+                                        setDocumentProperties((current) => ({
+                                            ...current,
+                                            participants: nextValue,
+                                        }));
+                                        requestAnimationFrame(() => {
+                                            saveEditor(false);
+                                        });
                                     }}
+                                    onPersistParticipant={persistMeetingParticipantSuggestion}
                                 />
                             ) : null}
                             <EditorContent
