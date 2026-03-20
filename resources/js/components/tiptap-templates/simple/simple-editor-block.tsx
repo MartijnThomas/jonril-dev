@@ -98,9 +98,24 @@ function MeetingEventMeta({
     onPersistParticipant: (value: string) => Promise<string[]>;
 }) {
     const [showInlineParticipantsEditor, setShowInlineParticipantsEditor] = useState(false);
+    const participantInputRef = useRef<HTMLInputElement | null>(null);
     const participants = parseParticipants(participantsValue);
     const timeLabel = formatMeetingTimeRange(event.starts_at, event.ends_at, language);
-    if (!timeLabel && !event.location && participants.length === 0) return null;
+    const shouldRenderMeta = Boolean(timeLabel || event.location || participants.length > 0);
+
+    useEffect(() => {
+        if (!showInlineParticipantsEditor) {
+            return;
+        }
+
+        const frame = requestAnimationFrame(() => {
+            participantInputRef.current?.focus();
+        });
+
+        return () => cancelAnimationFrame(frame);
+    }, [showInlineParticipantsEditor]);
+
+    if (!shouldRenderMeta) return null;
 
     return (
         <div className="mt-3 mb-1 flex flex-col gap-1.5 text-sm">
@@ -154,6 +169,9 @@ function MeetingEventMeta({
                         ) : (
                             <TokenPropertyInput
                                 mode="participants"
+                                inputRef={(element) => {
+                                    participantInputRef.current = element;
+                                }}
                                 value={participantsValue}
                                 onChange={onParticipantsChange}
                                 onPersist={async (_kind, value) =>
