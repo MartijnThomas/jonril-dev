@@ -211,6 +211,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('tasks', [TasksController::class, 'index'])
         ->name('tasks.index');
+    Route::get('tasks/kanban', [TasksController::class, 'kanban'])
+        ->name('tasks.kanban');
     Route::get('tasks/search', TaskSearchController::class)
         ->name('tasks.search');
     Route::get('docs', [DocumentationController::class, 'index'])

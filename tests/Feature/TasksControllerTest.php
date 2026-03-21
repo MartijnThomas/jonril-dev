@@ -20,6 +20,109 @@ test('tasks index redirects to notes list for migrated source workspace', functi
         ->assertRedirect(route('notes.index', ['type' => 'all'], absolute: false));
 });
 
+test('tasks kanban renders board columns with mapped task statuses', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace?->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Kanban source note',
+        'slug' => 'kanban-source-note',
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-backlog',
+        'position' => 1,
+        'checked' => false,
+        'content_text' => 'Backlog task',
+        'task_status' => 'backlog',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-open',
+        'position' => 2,
+        'checked' => false,
+        'content_text' => 'Open task',
+        'task_status' => null,
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-doing',
+        'position' => 3,
+        'checked' => false,
+        'content_text' => 'Doing task',
+        'task_status' => 'assigned',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-done',
+        'position' => 4,
+        'checked' => true,
+        'content_text' => 'Done task',
+        'task_status' => null,
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks/kanban?status[]=open&status[]=assigned&status[]=backlog&status[]=completed')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/kanban')
+            ->where('tasks.total', 4)
+            ->where('kanbanColumns.0.key', 'backlog')
+            ->where('kanbanColumns.0.tasks.0.content', 'Backlog task')
+            ->where('kanbanColumns.1.key', 'new')
+            ->where('kanbanColumns.1.tasks.0.content', 'Open task')
+            ->where('kanbanColumns.2.key', 'doing')
+            ->where('kanbanColumns.2.tasks.0.content', 'Doing task')
+            ->where('kanbanColumns.3.key', 'done')
+            ->where('kanbanColumns.3.tasks.0.content', 'Done task'),
+        );
+});
+
+test('tasks kanban keeps kanban route when applying default preset redirect', function () {
+    $user = User::factory()->create();
+    $user->forceFill([
+        'settings' => [
+            ...(is_array($user->settings) ? $user->settings : []),
+            'tasks' => [
+                'filter_presets' => [[
+                    'id' => 'preset-kanban-default',
+                    'name' => 'Kanban Default',
+                    'default' => true,
+                    'favorite' => true,
+                    'filters' => [
+                        'status' => ['assigned'],
+                    ],
+                ]],
+            ],
+        ],
+    ])->save();
+
+    $response = $this
+        ->actingAs($user)
+        ->get('/tasks/kanban');
+
+    $response->assertRedirect();
+    expect($response->headers->get('Location'))->toContain('/tasks/kanban?');
+});
+
 test('tasks cannot be toggled by reference in migrated source workspace', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();

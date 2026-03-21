@@ -38,6 +38,7 @@ interface UseTaskFiltersOptions {
     filterPresets: FilterPreset[];
     t: (key: string, fallback: string) => string;
     dateLocale: Locale;
+    basePath?: string;
 }
 
  
@@ -46,6 +47,7 @@ export function useTaskFilters({
     filterPresets,
     t,
     dateLocale,
+    basePath = '/tasks',
 }: UseTaskFiltersOptions) {
     const [localFilters, setLocalFilters] = useState<Filters>({
         ...initialFilters,
@@ -222,7 +224,7 @@ export function useTaskFilters({
     };
 
     const visitWithFilters = (state: Filters) => {
-        router.get('/tasks', toQuery(state), {
+        router.get(basePath, toQuery(state), {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -280,7 +282,7 @@ export function useTaskFilters({
 
     const clearAppliedPreset = () => {
         router.get(
-            '/tasks',
+            basePath,
             {},
             {
                 preserveState: false,

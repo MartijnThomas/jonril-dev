@@ -28,6 +28,16 @@ class TasksController extends Controller
 
     public function index(Request $request)
     {
+        return $this->renderTasksPage($request, 'tasks/index');
+    }
+
+    public function kanban(Request $request)
+    {
+        return $this->renderTasksPage($request, 'tasks/kanban');
+    }
+
+    private function renderTasksPage(Request $request, string $component)
+    {
         $user = $request->user();
         if (! $user) {
             abort(403, 'No workspace available.');
@@ -62,6 +72,9 @@ class TasksController extends Controller
         if (! $request->hasAny($filterKeys)) {
             $defaultPreset = collect($this->taskFilterPresetsForUser($user))
                 ->first(fn (array $p) => (bool) ($p['default'] ?? false));
+            $defaultRoute = $component === 'tasks/kanban'
+                ? 'tasks.kanban'
+                : 'tasks.index';
 
             if ($defaultPreset) {
                 $normalized = $this->normalizeTaskPresetFilters((array) ($defaultPreset['filters'] ?? []));
@@ -93,7 +106,7 @@ class TasksController extends Controller
                 }
 
                 if (! empty($query)) {
-                    return redirect()->route('tasks.index', $query);
+                    return redirect()->route($defaultRoute, $query);
                 }
             }
         }
@@ -393,7 +406,7 @@ class TasksController extends Controller
             }
         }
 
-        return Inertia::render('tasks/index', [
+        $props = [
             'tasks' => $tasks,
             'filters' => [
                 'workspace_ids' => $selectedWorkspaceIds->values()->all(),
@@ -414,7 +427,80 @@ class TasksController extends Controller
                     'name' => $workspace->name,
                 ])
                 ->values(),
-        ]);
+        ];
+
+        if ($component === 'tasks/kanban') {
+            $props['kanbanColumns'] = $this->buildKanbanColumns(
+                $tasks->getCollection()->values()->all(),
+            );
+        }
+
+        return Inertia::render($component, $props);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $tasks
+     * @return array<int, array{key: string, label: string, statuses: array<int, string>, tasks: array<int, array<string, mixed>>}>
+     */
+    private function buildKanbanColumns(array $tasks): array
+    {
+        $columns = [
+            [
+                'key' => 'backlog',
+                'label' => 'Backlog',
+                'statuses' => ['backlog'],
+                'tasks' => [],
+            ],
+            [
+                'key' => 'new',
+                'label' => 'New',
+                'statuses' => ['open'],
+                'tasks' => [],
+            ],
+            [
+                'key' => 'doing',
+                'label' => 'Doing',
+                'statuses' => ['in_progress', 'assigned', 'deferred'],
+                'tasks' => [],
+            ],
+            [
+                'key' => 'done',
+                'label' => 'Done',
+                'statuses' => ['closed'],
+                'tasks' => [],
+            ],
+        ];
+
+        foreach ($tasks as $task) {
+            $status = is_string($task['task_status'] ?? null)
+                ? trim((string) $task['task_status'])
+                : null;
+            $checked = (bool) ($task['checked'] ?? false);
+
+            $columnKey = match (true) {
+                $status === 'backlog' => 'backlog',
+                $status === 'in_progress' || $status === 'assigned' || $status === 'deferred' => 'doing',
+                $checked && $status !== 'canceled' && $status !== 'migrated' => 'done',
+                ! $checked && $status === null => 'new',
+                default => null,
+            };
+
+            if (! is_string($columnKey)) {
+                continue;
+            }
+
+            $columnIndex = collect($columns)->search(
+                fn (array $column): bool => $column['key'] === $columnKey
+            );
+
+            if ($columnIndex === false) {
+                continue;
+            }
+
+            $columns[(int) $columnIndex]['tasks'][] = $task;
+        }
+
+        return $columns;
     }
 
     public function saveFilterPreset(Request $request)

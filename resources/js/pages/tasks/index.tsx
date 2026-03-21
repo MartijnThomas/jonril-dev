@@ -181,7 +181,8 @@ export default function TasksIndex({
     noteTreeOptions,
 }: Props) {
     const { t } = useI18n();
-    const pageProps = usePage().props as {
+    const page = usePage();
+    const pageProps = page.props as {
         auth?: {
             user?: {
                 settings?: {
@@ -213,6 +214,15 @@ export default function TasksIndex({
             href: '/tasks',
         },
     ];
+    const querySuffix = useMemo(() => {
+        const url = page.url;
+        const questionMarkIndex = url.indexOf('?');
+        if (questionMarkIndex === -1) {
+            return '';
+        }
+
+        return url.slice(questionMarkIndex);
+    }, [page.url]);
 
     const {
         localFilters,
@@ -1609,6 +1619,19 @@ export default function TasksIndex({
                             ) : null}
                         </div>
                         <div className="flex items-center gap-1.5">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                className="h-10 rounded-full border-0 bg-muted px-3 text-muted-foreground hover:bg-muted/80 hover:text-foreground md:h-8"
+                                asChild
+                            >
+                                <Link href={`/tasks/kanban${querySuffix}`}>
+                                    <ArrowRightToLine className="h-4 w-4" />
+                                    <span className="text-xs font-medium md:text-[11px]">
+                                        {t('tasks_index.kanban_view', 'Kanban')}
+                                    </span>
+                                </Link>
+                            </Button>
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button
