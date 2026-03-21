@@ -15,7 +15,6 @@ import { format, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import {
     ArrowRightToLine,
-    Ban,
     CirclePlus,
     Check,
     ChevronDown,
@@ -37,7 +36,6 @@ import {
     ContextMenu,
     ContextMenuContent,
     ContextMenuItem,
-    ContextMenuSeparator,
     ContextMenuSub,
     ContextMenuSubContent,
     ContextMenuSubTrigger,
@@ -297,7 +295,6 @@ function DraggableTaskCard({
     isActionPending,
     formatTaskDate,
     onOpenTaskInNote,
-    onCancelTask,
     onMigrateTaskToToday,
     currentColumnKey,
     onMoveTaskToColumn,
@@ -309,13 +306,11 @@ function DraggableTaskCard({
     isActionPending: boolean;
     formatTaskDate: (value: string | null) => string | null;
     onOpenTaskInNote: (task: TaskItem) => void;
-    onCancelTask: (task: TaskItem) => void;
     onMigrateTaskToToday: (task: TaskItem) => void;
     currentColumnKey: ColumnKey;
     onMoveTaskToColumn: (task: TaskItem, targetColumn: ColumnKey) => void;
     labels: {
         goToTaskInNote: string;
-        cancelTask: string;
         migrateToToday: string;
         setStatus: string;
         moveToBacklog: string;
@@ -362,18 +357,6 @@ function DraggableTaskCard({
                 >
                     <FileText />
                     {labels.goToTaskInNote}
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem
-                    onSelect={() => onCancelTask(task)}
-                    disabled={
-                        task.task_status === 'canceled'
-                        || task.task_status === 'migrated'
-                        || isActionPending
-                    }
-                >
-                    <Ban />
-                    {labels.cancelTask}
                 </ContextMenuItem>
                 <ContextMenuSub>
                     <ContextMenuSubTrigger>{labels.setStatus}</ContextMenuSubTrigger>
@@ -977,33 +960,6 @@ export default function TasksKanban({
                 preserveState: false,
                 preserveScroll: false,
                 replace: false,
-            },
-        );
-    };
-
-    const cancelTask = (task: TaskItem): void => {
-        if (pendingTaskActionIds.includes(task.id)) {
-            return;
-        }
-
-        setPendingTaskActionIds((current) => [...current, task.id]);
-
-        router.patch(
-            '/tasks/cancel',
-            {
-                note_id: task.note.id,
-                block_id: task.block_id,
-                position: task.position,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-                onFinish: () => {
-                    setPendingTaskActionIds((current) =>
-                        current.filter((id) => id !== task.id),
-                    );
-                },
             },
         );
     };
@@ -1729,7 +1685,6 @@ export default function TasksKanban({
                                                         isActionPending={pendingTaskActionIds.includes(task.id)}
                                                         formatTaskDate={formatTaskDate}
                                                         onOpenTaskInNote={openTaskInNote}
-                                                        onCancelTask={cancelTask}
                                                         onMigrateTaskToToday={migrateTaskToToday}
                                                         currentColumnKey={resolveTaskColumnKey(task)}
                                                         onMoveTaskToColumn={moveTaskToColumn}
@@ -1738,7 +1693,6 @@ export default function TasksKanban({
                                                                 'tasks_index.go_to_task_in_note',
                                                                 'Go to task in note',
                                                             ),
-                                                            cancelTask: t('tasks_index.cancel_task', 'Cancel task'),
                                                             migrateToToday: t(
                                                                 'tasks_index.migrate_to_today',
                                                                 'Migrate to today',
