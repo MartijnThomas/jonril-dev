@@ -14,11 +14,14 @@ import { Head, router, usePage } from '@inertiajs/react';
 import { format, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import {
+    ArrowRightToLine,
+    Ban,
     CirclePlus,
     Check,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
+    FileText,
     GripVertical,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -30,6 +33,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuSub,
+    ContextMenuSubContent,
+    ContextMenuSubTrigger,
+    ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import {
     Popover,
     PopoverContent,
@@ -87,6 +100,8 @@ type DragTaskMeta = {
     taskId: number;
     fromColumnKey: string;
 };
+
+type ColumnKey = 'backlog' | 'new' | 'doing' | 'done' | 'canceled';
 
 type Props = {
     tasks: {
@@ -279,12 +294,36 @@ function DraggableTaskCard({
     task,
     columnKey,
     isMoving,
+    isActionPending,
     formatTaskDate,
+    onOpenTaskInNote,
+    onCancelTask,
+    onMigrateTaskToToday,
+    currentColumnKey,
+    onMoveTaskToColumn,
+    labels,
 }: {
     task: TaskItem;
     columnKey: string;
     isMoving: boolean;
+    isActionPending: boolean;
     formatTaskDate: (value: string | null) => string | null;
+    onOpenTaskInNote: (task: TaskItem) => void;
+    onCancelTask: (task: TaskItem) => void;
+    onMigrateTaskToToday: (task: TaskItem) => void;
+    currentColumnKey: ColumnKey;
+    onMoveTaskToColumn: (task: TaskItem, targetColumn: ColumnKey) => void;
+    labels: {
+        goToTaskInNote: string;
+        cancelTask: string;
+        migrateToToday: string;
+        setStatus: string;
+        moveToBacklog: string;
+        moveToNew: string;
+        moveToDoing: string;
+        moveToDone: string;
+        moveToCanceled: string;
+    };
 }): JSX.Element {
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: `task-${task.id}`,
@@ -300,19 +339,90 @@ function DraggableTaskCard({
     };
 
     return (
-        <div
-            ref={setNodeRef}
-            style={isDragging ? undefined : style}
-            className={cn(
-                'touch-none cursor-pointer transition-opacity',
-                isMoving && 'pointer-events-none opacity-60',
-                isDragging && 'opacity-10',
-            )}
-            {...listeners}
-            {...attributes}
-        >
-            <TaskCard task={task} formatTaskDate={formatTaskDate} />
-        </div>
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div
+                    ref={setNodeRef}
+                    style={isDragging ? undefined : style}
+                    className={cn(
+                        'touch-none cursor-pointer transition-opacity',
+                        isMoving && 'pointer-events-none opacity-60',
+                        isDragging && 'opacity-10',
+                    )}
+                    {...listeners}
+                    {...attributes}
+                >
+                    <TaskCard task={task} formatTaskDate={formatTaskDate} />
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+                <ContextMenuItem
+                    onSelect={() => onOpenTaskInNote(task)}
+                    disabled={!task.block_id}
+                >
+                    <FileText />
+                    {labels.goToTaskInNote}
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem
+                    onSelect={() => onCancelTask(task)}
+                    disabled={
+                        task.task_status === 'canceled'
+                        || task.task_status === 'migrated'
+                        || isActionPending
+                    }
+                >
+                    <Ban />
+                    {labels.cancelTask}
+                </ContextMenuItem>
+                <ContextMenuSub>
+                    <ContextMenuSubTrigger>{labels.setStatus}</ContextMenuSubTrigger>
+                    <ContextMenuSubContent>
+                        <ContextMenuItem
+                            onSelect={() => onMoveTaskToColumn(task, 'backlog')}
+                            disabled={isActionPending || currentColumnKey === 'backlog'}
+                        >
+                            {labels.moveToBacklog}
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                            onSelect={() => onMoveTaskToColumn(task, 'new')}
+                            disabled={isActionPending || currentColumnKey === 'new'}
+                        >
+                            {labels.moveToNew}
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                            onSelect={() => onMoveTaskToColumn(task, 'doing')}
+                            disabled={isActionPending || currentColumnKey === 'doing'}
+                        >
+                            {labels.moveToDoing}
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                            onSelect={() => onMoveTaskToColumn(task, 'done')}
+                            disabled={isActionPending || currentColumnKey === 'done'}
+                        >
+                            {labels.moveToDone}
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                            onSelect={() => onMoveTaskToColumn(task, 'canceled')}
+                            disabled={isActionPending || currentColumnKey === 'canceled'}
+                        >
+                            {labels.moveToCanceled}
+                        </ContextMenuItem>
+                    </ContextMenuSubContent>
+                </ContextMenuSub>
+                <ContextMenuItem
+                    onSelect={() => onMigrateTaskToToday(task)}
+                    disabled={
+                        task.task_status === 'canceled'
+                        || task.task_status === 'migrated'
+                        || isActionPending
+                    }
+                >
+                    <ArrowRightToLine />
+                    {labels.migrateToToday}
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     );
 }
 
@@ -461,6 +571,7 @@ export default function TasksKanban({
     const [optimisticMoves, setOptimisticMoves] = useState<
         Record<number, { fromColumnKey: string; targetColumnKey: string; task: TaskItem }>
     >({});
+    const [pendingTaskActionIds, setPendingTaskActionIds] = useState<number[]>([]);
     const minSearchChars = 3;
 
     const noteTree = useMemo<NoteTreeNode[]>(() => {
@@ -757,6 +868,170 @@ export default function TasksKanban({
 
                         return next;
                     });
+                },
+            },
+        );
+    };
+
+    const resolveTaskColumnKey = (task: TaskItem): ColumnKey => {
+        if (task.task_status === 'canceled') {
+            return 'canceled';
+        }
+
+        if (task.checked) {
+            return 'done';
+        }
+
+        if (task.task_status === 'backlog') {
+            return 'backlog';
+        }
+
+        if (
+            task.task_status === 'in_progress'
+            || task.task_status === 'assigned'
+            || task.task_status === 'deferred'
+            || task.task_status === 'starred'
+        ) {
+            return 'doing';
+        }
+
+        return 'new';
+    };
+
+    const moveTaskToColumn = (task: TaskItem, targetColumn: ColumnKey): void => {
+        const fromColumnKey = resolveTaskColumnKey(task);
+        if (fromColumnKey === targetColumn || pendingTaskActionIds.includes(task.id)) {
+            return;
+        }
+
+        setPendingTaskActionIds((current) => [...current, task.id]);
+        setOptimisticMoves((current) => ({
+            ...current,
+            [task.id]: {
+                fromColumnKey,
+                targetColumnKey: targetColumn,
+                task,
+            },
+        }));
+
+        router.patch(
+            '/tasks/status',
+            {
+                note_id: task.note.id,
+                block_id: task.block_id,
+                position: task.position,
+                target_column: targetColumn,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onError: () => {
+                    setOptimisticMoves((current) => {
+                        const next = { ...current };
+                        delete next[task.id];
+
+                        return next;
+                    });
+                },
+                onFinish: () => {
+                    setPendingTaskActionIds((current) =>
+                        current.filter((id) => id !== task.id),
+                    );
+                    setOptimisticMoves((current) => {
+                        const next = { ...current };
+                        delete next[task.id];
+
+                        return next;
+                    });
+                },
+            },
+        );
+    };
+
+    const openTaskInNote = (task: TaskItem): void => {
+        if (!task.block_id) {
+            return;
+        }
+
+        const targetUrl = new URL(task.note.href, window.location.origin);
+        targetUrl.hash = task.block_id;
+        const targetPathWithHash = `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+        const currentUrl = new URL(window.location.href);
+
+        if (currentUrl.pathname === targetUrl.pathname) {
+            window.history.replaceState(window.history.state, '', targetPathWithHash);
+            const element = document.getElementById(task.block_id);
+            element?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            });
+
+            return;
+        }
+
+        router.get(
+            targetPathWithHash,
+            {},
+            {
+                preserveState: false,
+                preserveScroll: false,
+                replace: false,
+            },
+        );
+    };
+
+    const cancelTask = (task: TaskItem): void => {
+        if (pendingTaskActionIds.includes(task.id)) {
+            return;
+        }
+
+        setPendingTaskActionIds((current) => [...current, task.id]);
+
+        router.patch(
+            '/tasks/cancel',
+            {
+                note_id: task.note.id,
+                block_id: task.block_id,
+                position: task.position,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onFinish: () => {
+                    setPendingTaskActionIds((current) =>
+                        current.filter((id) => id !== task.id),
+                    );
+                },
+            },
+        );
+    };
+
+    const migrateTaskToToday = (task: TaskItem): void => {
+        if (pendingTaskActionIds.includes(task.id)) {
+            return;
+        }
+
+        setPendingTaskActionIds((current) => [...current, task.id]);
+
+        router.post(
+            '/tasks/migrate',
+            {
+                source_note_id: task.note.id,
+                block_id: task.block_id,
+                position: task.position,
+                target_journal_granularity: 'daily',
+                target_journal_period: format(new Date(), 'yyyy-MM-dd'),
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onFinish: () => {
+                    setPendingTaskActionIds((current) =>
+                        current.filter((id) => id !== task.id),
+                    );
                 },
             },
         );
@@ -1451,7 +1726,30 @@ export default function TasksKanban({
                                                         task={task}
                                                         columnKey={column.key}
                                                         isMoving={movingTaskIds.includes(task.id)}
+                                                        isActionPending={pendingTaskActionIds.includes(task.id)}
                                                         formatTaskDate={formatTaskDate}
+                                                        onOpenTaskInNote={openTaskInNote}
+                                                        onCancelTask={cancelTask}
+                                                        onMigrateTaskToToday={migrateTaskToToday}
+                                                        currentColumnKey={resolveTaskColumnKey(task)}
+                                                        onMoveTaskToColumn={moveTaskToColumn}
+                                                        labels={{
+                                                            goToTaskInNote: t(
+                                                                'tasks_index.go_to_task_in_note',
+                                                                'Go to task in note',
+                                                            ),
+                                                            cancelTask: t('tasks_index.cancel_task', 'Cancel task'),
+                                                            migrateToToday: t(
+                                                                'tasks_index.migrate_to_today',
+                                                                'Migrate to today',
+                                                            ),
+                                                            setStatus: t('tasks_index.status_filter_label', 'Status'),
+                                                            moveToBacklog: t('tasks_kanban.backlog', 'Backlog'),
+                                                            moveToNew: t('tasks_kanban.new', 'New'),
+                                                            moveToDoing: t('tasks_kanban.doing', 'Doing'),
+                                                            moveToDone: t('tasks_kanban.done', 'Done'),
+                                                            moveToCanceled: t('tasks_kanban.canceled', 'Canceled'),
+                                                        }}
                                                     />
                                                 ))
                                             )}
