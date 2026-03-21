@@ -13,6 +13,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -126,9 +127,22 @@ class TasksController extends Controller
             'status.*' => ['string', Rule::in(['open', 'completed', 'canceled', 'migrated', 'assigned', 'in_progress', 'starred', 'backlog', 'question'])],
             'group_by' => ['nullable', Rule::in(['none', 'note', 'date'])],
             'q' => ['nullable', 'string', 'max:160'],
+            'include_columns' => ['nullable', 'array'],
+            'include_columns.*' => ['string', Rule::in(['backlog', 'new', 'doing', 'done', 'canceled'])],
         ]);
 
         $searchQuery = trim((string) ($filters['q'] ?? ''));
+        $includeColumnKeys = $component === 'tasks/kanban'
+            ? collect($filters['include_columns'] ?? [])
+                ->map(fn ($value) => is_string($value) ? trim($value) : '')
+                ->filter(fn (string $value) => $value !== '')
+                ->unique()
+                ->values()
+            : collect(['backlog', 'new', 'doing', 'done', 'canceled']);
+
+        if ($component === 'tasks/kanban' && $includeColumnKeys->isEmpty()) {
+            $includeColumnKeys = collect(['backlog', 'new', 'doing']);
+        }
 
         $selectedWorkspaceIds = collect($filters['workspace_ids'] ?? [])
             ->map(fn ($id) => is_string($id) ? trim($id) : '')
@@ -168,7 +182,9 @@ class TasksController extends Controller
             ->values();
 
         if ($selectedStatuses->isEmpty()) {
-            $selectedStatuses = collect(['open']);
+            $selectedStatuses = $component === 'tasks/kanban'
+                ? collect(['open', 'assigned', 'in_progress', 'deferred', 'backlog', 'completed'])
+                : collect(['open']);
         }
 
         $query->where(function (Builder $statusQuery) use ($selectedStatuses): void {
@@ -180,7 +196,7 @@ class TasksController extends Controller
                         'canceled' => $inner->where('task_status', 'canceled'),
                         'migrated' => $inner->where('task_status', 'migrated'),
                         'assigned' => $inner->where('task_status', 'assigned'),
-                        'in_progress' => $inner->where('task_status', 'in_progress'),
+                        'in_progress' => $inner->whereIn('task_status', ['in_progress', 'in-progress', 'in progress']),
                         'starred' => $inner->where('task_status', 'starred'),
                         'backlog' => $inner->whereIn('task_status', ['backlog', 'question']),
                         'question' => $inner->whereIn('task_status', ['backlog', 'question']),
@@ -286,80 +302,25 @@ class TasksController extends Controller
                 ->orderBy('updated_at', 'desc');
         }
 
+        $kanbanTaskCollection = null;
+        $kanbanColumnCounts = null;
+        if ($component === 'tasks/kanban') {
+            $kanbanColumnCounts = $this->kanbanColumnCounts((clone $query));
+            $kanbanTaskCollection = (clone $query)
+                ->where(function (Builder $columnQuery) use ($includeColumnKeys): void {
+                    foreach ($includeColumnKeys as $columnKey) {
+                        $this->applyKanbanColumnCondition($columnQuery, (string) $columnKey, 'or');
+                    }
+                })
+                ->get();
+        }
+
         $tasks = $query
             ->paginate(50)
             ->withQueryString();
 
-        $migrationNoteIds = $tasks->getCollection()
-            ->flatMap(fn (NoteTask $task) => [$task->migrated_to_note_id, $task->migrated_from_note_id])
-            ->filter(fn ($id) => is_string($id) && trim($id) !== '')
-            ->map(fn (string $id) => trim($id))
-            ->unique()
-            ->values()
-            ->all();
-
-        /** @var array<string, Note> $migrationNotesById */
-        $migrationNotesById = Note::query()
-            ->whereIn('id', $migrationNoteIds)
-            ->get(['id', 'workspace_id', 'slug', 'type', 'journal_granularity', 'journal_date', 'title'])
-            ->keyBy('id')
-            ->all();
-
         $tasks->setCollection(
-            $tasks->getCollection()->map(function (NoteTask $task) use ($migrationNotesById, $workspaceNamesById): array {
-                $note = $task->note;
-                $migratedToNoteId = is_string($task->migrated_to_note_id)
-                    ? trim($task->migrated_to_note_id)
-                    : '';
-                $migratedFromNoteId = is_string($task->migrated_from_note_id)
-                    ? trim($task->migrated_from_note_id)
-                    : '';
-                $migratedToNote = $migratedToNoteId !== '' ? ($migrationNotesById[$migratedToNoteId] ?? null) : null;
-                $migratedFromNote = $migratedFromNoteId !== '' ? ($migrationNotesById[$migratedFromNoteId] ?? null) : null;
-
-                return [
-                    'id' => $task->id,
-                    'block_id' => $task->block_id,
-                    'position' => $task->position,
-                    'checked' => $task->checked,
-                    'task_status' => $task->task_status,
-                    'canceled_at' => $task->canceled_at?->toIso8601String(),
-                    'completed_at' => $task->completed_at?->toIso8601String(),
-                    'started_at' => $task->started_at?->toIso8601String(),
-                    'backlog_promoted_at' => $task->backlog_promoted_at?->toIso8601String(),
-                    'priority' => $task->priority,
-                    'content' => $task->content_text,
-                    'render_fragments' => $task->render_fragments ?? [],
-                    'children' => $task->children ?? [],
-                    'due_date' => $task->due_date?->toDateString(),
-                    'deadline_date' => $task->deadline_date?->toDateString(),
-                    'journal_date' => $task->journal_date?->toDateString(),
-                    'mentions' => $task->mentions ?? [],
-                    'hashtags' => $task->hashtags ?? [],
-                    'migrated_to_note' => $migratedToNote ? [
-                        'id' => $migratedToNote->id,
-                        'title' => $migratedToNote->display_title,
-                        'href' => $this->noteSlugService->urlFor($migratedToNote),
-                    ] : null,
-                    'migrated_from_note' => $migratedFromNote ? [
-                        'id' => $migratedFromNote->id,
-                        'title' => $migratedFromNote->display_title,
-                        'href' => $this->noteSlugService->urlFor($migratedFromNote),
-                    ] : null,
-                    'note' => [
-                        'id' => $task->note_id,
-                        'title' => $task->note_title ?? 'Untitled',
-                        'href' => $note ? $this->noteSlugService->urlFor($note) : null,
-                        'workspace_id' => $task->workspace_id,
-                        'workspace_name' => $note?->workspace?->name
-                            ?? ($workspaceNamesById[(string) $task->workspace_id] ?? null),
-                        'parent_id' => $task->parent_note_id,
-                        'parent_title' => $task->parent_note_title,
-                    ],
-                    'updated_at' => $task->updated_at?->toIso8601String(),
-                    'created_at' => $task->created_at?->toIso8601String(),
-                ];
-            }),
+            $this->transformTaskCollection($tasks->getCollection(), $workspaceNamesById),
         );
 
         $notes = Note::query()
@@ -431,8 +392,14 @@ class TasksController extends Controller
 
         if ($component === 'tasks/kanban') {
             $props['kanbanColumns'] = $this->buildKanbanColumns(
-                $tasks->getCollection()->values()->all(),
+                ($kanbanTaskCollection
+                    ? $this->transformTaskCollection($kanbanTaskCollection, $workspaceNamesById)
+                    : $tasks->getCollection())
+                    ->values()
+                    ->all(),
+                is_array($kanbanColumnCounts) ? $kanbanColumnCounts : [],
             );
+            $props['includeColumnKeys'] = $includeColumnKeys->values()->all();
         }
 
         return Inertia::render($component, $props);
@@ -440,9 +407,10 @@ class TasksController extends Controller
 
     /**
      * @param  array<int, array<string, mixed>>  $tasks
-     * @return array<int, array{key: string, label: string, statuses: array<int, string>, tasks: array<int, array<string, mixed>>}>
+     * @param  array<string, int>  $columnCounts
+     * @return array<int, array{key: string, label: string, statuses: array<int, string>, tasks: array<int, array<string, mixed>>, task_count: int}>
      */
-    private function buildKanbanColumns(array $tasks): array
+    private function buildKanbanColumns(array $tasks, array $columnCounts = []): array
     {
         $columns = [
             [
@@ -450,37 +418,54 @@ class TasksController extends Controller
                 'label' => 'Backlog',
                 'statuses' => ['backlog'],
                 'tasks' => [],
+                'task_count' => 0,
             ],
             [
                 'key' => 'new',
                 'label' => 'New',
                 'statuses' => ['open'],
                 'tasks' => [],
+                'task_count' => 0,
             ],
             [
                 'key' => 'doing',
                 'label' => 'Doing',
                 'statuses' => ['in_progress', 'assigned', 'deferred'],
                 'tasks' => [],
+                'task_count' => 0,
             ],
             [
                 'key' => 'done',
                 'label' => 'Done',
                 'statuses' => ['closed'],
                 'tasks' => [],
+                'task_count' => 0,
+            ],
+            [
+                'key' => 'canceled',
+                'label' => 'Canceled',
+                'statuses' => ['canceled'],
+                'tasks' => [],
+                'task_count' => 0,
             ],
         ];
 
         foreach ($tasks as $task) {
-            $status = is_string($task['task_status'] ?? null)
+            $rawStatus = is_string($task['task_status'] ?? null)
                 ? trim((string) $task['task_status'])
                 : null;
+            $status = match ($rawStatus) {
+                'question' => 'backlog',
+                'in-progress', 'in progress' => 'in_progress',
+                default => $rawStatus,
+            };
             $checked = (bool) ($task['checked'] ?? false);
 
             $columnKey = match (true) {
+                $status === 'canceled' => 'canceled',
+                $checked => 'done',
                 $status === 'backlog' => 'backlog',
-                $status === 'in_progress' || $status === 'assigned' || $status === 'deferred' => 'doing',
-                $checked && $status !== 'canceled' && $status !== 'migrated' => 'done',
+                ! $checked && ($status === 'in_progress' || $status === 'assigned' || $status === 'deferred' || $status === 'starred') => 'doing',
                 ! $checked && $status === null => 'new',
                 default => null,
             };
@@ -498,9 +483,136 @@ class TasksController extends Controller
             }
 
             $columns[(int) $columnIndex]['tasks'][] = $task;
+            $columns[(int) $columnIndex]['task_count']++;
+        }
+
+        if ($columnCounts !== []) {
+            foreach ($columns as $index => $column) {
+                $columnKey = (string) $column['key'];
+                if (array_key_exists($columnKey, $columnCounts)) {
+                    $columns[$index]['task_count'] = (int) $columnCounts[$columnKey];
+                }
+            }
         }
 
         return $columns;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function kanbanColumnCounts(Builder $query): array
+    {
+        $row = $query
+            ->selectRaw('SUM(CASE WHEN task_status IN ("backlog", "question") THEN 1 ELSE 0 END) as backlog_count')
+            ->selectRaw('SUM(CASE WHEN checked = 0 AND task_status IS NULL THEN 1 ELSE 0 END) as new_count')
+            ->selectRaw('SUM(CASE WHEN checked = 0 AND task_status IN ("in_progress", "in-progress", "in progress", "assigned", "deferred", "starred") THEN 1 ELSE 0 END) as doing_count')
+            ->selectRaw('SUM(CASE WHEN task_status = "canceled" THEN 1 ELSE 0 END) as canceled_count')
+            ->selectRaw('SUM(CASE WHEN checked = 1 AND (task_status IS NULL OR task_status != "canceled") THEN 1 ELSE 0 END) as done_count')
+            ->first();
+
+        return [
+            'backlog' => (int) ($row?->backlog_count ?? 0),
+            'new' => (int) ($row?->new_count ?? 0),
+            'doing' => (int) ($row?->doing_count ?? 0),
+            'done' => (int) ($row?->done_count ?? 0),
+            'canceled' => (int) ($row?->canceled_count ?? 0),
+        ];
+    }
+
+    private function applyKanbanColumnCondition(Builder $query, string $columnKey, string $boolean = 'and'): void
+    {
+        $query->where(function (Builder $inner) use ($columnKey): void {
+            match ($columnKey) {
+                'backlog' => $inner->whereIn('task_status', ['backlog', 'question']),
+                'new' => $inner->where('checked', false)->whereNull('task_status'),
+                'doing' => $inner->where('checked', false)->whereIn('task_status', ['in_progress', 'in-progress', 'in progress', 'assigned', 'deferred', 'starred']),
+                'done' => $inner->where('checked', true)->where(function (Builder $statusQuery): void {
+                    $statusQuery->whereNull('task_status')
+                        ->orWhere('task_status', '!=', 'canceled');
+                }),
+                'canceled' => $inner->where('task_status', 'canceled'),
+                default => $inner->whereRaw('1 = 0'),
+            };
+        }, null, null, $boolean);
+    }
+
+    /**
+     * @param  Collection<int, NoteTask>  $tasks
+     * @param  array<string, string>  $workspaceNamesById
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function transformTaskCollection(Collection $tasks, array $workspaceNamesById): Collection
+    {
+        $migrationNoteIds = $tasks
+            ->flatMap(fn (NoteTask $task) => [$task->migrated_to_note_id, $task->migrated_from_note_id])
+            ->filter(fn ($id) => is_string($id) && trim($id) !== '')
+            ->map(fn (string $id) => trim($id))
+            ->unique()
+            ->values()
+            ->all();
+
+        /** @var array<string, Note> $migrationNotesById */
+        $migrationNotesById = Note::query()
+            ->whereIn('id', $migrationNoteIds)
+            ->get(['id', 'workspace_id', 'slug', 'type', 'journal_granularity', 'journal_date', 'title'])
+            ->keyBy('id')
+            ->all();
+
+        return $tasks->map(function (NoteTask $task) use ($migrationNotesById, $workspaceNamesById): array {
+            $note = $task->note;
+            $migratedToNoteId = is_string($task->migrated_to_note_id)
+                ? trim($task->migrated_to_note_id)
+                : '';
+            $migratedFromNoteId = is_string($task->migrated_from_note_id)
+                ? trim($task->migrated_from_note_id)
+                : '';
+            $migratedToNote = $migratedToNoteId !== '' ? ($migrationNotesById[$migratedToNoteId] ?? null) : null;
+            $migratedFromNote = $migratedFromNoteId !== '' ? ($migrationNotesById[$migratedFromNoteId] ?? null) : null;
+
+            return [
+                'id' => $task->id,
+                'block_id' => $task->block_id,
+                'position' => $task->position,
+                'checked' => $task->checked,
+                'task_status' => $task->task_status,
+                'canceled_at' => $task->canceled_at?->toIso8601String(),
+                'completed_at' => $task->completed_at?->toIso8601String(),
+                'started_at' => $task->started_at?->toIso8601String(),
+                'backlog_promoted_at' => $task->backlog_promoted_at?->toIso8601String(),
+                'priority' => $task->priority,
+                'content' => $task->content_text,
+                'render_fragments' => $task->render_fragments ?? [],
+                'children' => $task->children ?? [],
+                'due_date' => $task->due_date?->toDateString(),
+                'deadline_date' => $task->deadline_date?->toDateString(),
+                'journal_date' => $task->journal_date?->toDateString(),
+                'mentions' => $task->mentions ?? [],
+                'hashtags' => $task->hashtags ?? [],
+                'migrated_to_note' => $migratedToNote ? [
+                    'id' => $migratedToNote->id,
+                    'title' => $migratedToNote->display_title,
+                    'href' => $this->noteSlugService->urlFor($migratedToNote),
+                ] : null,
+                'migrated_from_note' => $migratedFromNote ? [
+                    'id' => $migratedFromNote->id,
+                    'title' => $migratedFromNote->display_title,
+                    'href' => $this->noteSlugService->urlFor($migratedFromNote),
+                ] : null,
+                'note' => [
+                    'id' => $task->note_id,
+                    'title' => $task->note_title ?? 'Untitled',
+                    'href' => $note ? $this->noteSlugService->urlFor($note) : null,
+                    'workspace_id' => $task->workspace_id,
+                    'workspace_name' => $note?->workspace?->name
+                        ?? ($workspaceNamesById[(string) $task->workspace_id] ?? null),
+                    'parent_id' => $task->parent_note_id,
+                    'parent_title' => $task->parent_note_title,
+                ],
+                'updated_at' => $task->updated_at?->toIso8601String(),
+                'created_at' => $task->created_at?->toIso8601String(),
+            ];
+        });
     }
 
     public function saveFilterPreset(Request $request)
@@ -682,7 +794,9 @@ class TasksController extends Controller
         }
 
         $note->content = $content;
-        $note->save();
+        Note::withoutSyncingToSearch(function () use ($note): void {
+            $note->save();
+        });
 
         return back();
     }
@@ -761,6 +875,91 @@ class TasksController extends Controller
                     (bool) $data['checked'],
                     $promoteBacklog,
                     $promotionTimestamp,
+                );
+            }
+        }
+
+        if (! $updated) {
+            abort(422, 'Unable to locate task item in note content.');
+        }
+
+        $note->content = $content;
+        $note->save();
+
+        return back();
+    }
+
+    public function updateStatusByReference(Request $request)
+    {
+        $user = $request->user();
+        if (! $user) {
+            abort(403);
+        }
+
+        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->all();
+        if ($workspaceIds === []) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'note_id' => [
+                'required',
+                'uuid',
+                Rule::exists('notes', 'id')->where(fn ($query) => $query->whereIn('workspace_id', $workspaceIds)),
+            ],
+            'block_id' => ['nullable', 'string', 'max:255'],
+            'position' => ['required_without:block_id', 'integer', 'min:1'],
+            'target_column' => ['required', 'string', Rule::in(['backlog', 'new', 'doing', 'done', 'canceled'])],
+        ]);
+
+        $note = Note::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->find($data['note_id']);
+        if (! $note) {
+            abort(404);
+        }
+
+        $note->loadMissing('workspace');
+        if ($note->workspace?->isMigratedSource()) {
+            abort(409, 'Task updates are disabled for migrated source workspaces.');
+        }
+
+        if (is_string($data['block_id'] ?? null) && trim((string) $data['block_id']) !== '') {
+            $referencedTask = NoteTask::query()
+                ->where('note_id', $data['note_id'])
+                ->where('block_id', trim((string) $data['block_id']))
+                ->first(['task_status']);
+            if ($referencedTask?->task_status === 'migrated') {
+                abort(409, 'Migrated tasks cannot be updated in their origin note.');
+            }
+        }
+
+        $content = is_array($note->content) ? $note->content : null;
+        if (! $content) {
+            abort(422, 'Note content is invalid.');
+        }
+
+        $statusUpdate = $this->kanbanStatusUpdateForColumn((string) $data['target_column']);
+        $now = Carbon::now()->toIso8601String();
+
+        $updated = false;
+        if (is_string($data['block_id'] ?? null) && trim((string) $data['block_id']) !== '') {
+            $updated = $this->updateTaskItemStatusByBlockId(
+                $content,
+                trim((string) $data['block_id']),
+                $statusUpdate,
+                $now,
+            );
+        }
+
+        if (! $updated) {
+            $position = (int) ($data['position'] ?? 0);
+            if ($position > 0) {
+                $updated = $this->updateTaskItemStatusByPosition(
+                    $content,
+                    $position,
+                    $statusUpdate,
+                    $now,
                 );
             }
         }
@@ -1868,6 +2067,182 @@ class TasksController extends Controller
         $attrs['checked'] = $checked;
         $attrs['completedAt'] = $checked ? $promotionTimestamp : null;
         $taskItem['attrs'] = $attrs;
+    }
+
+    /**
+     * @param  array{checked: bool, task_status: string|null}  $statusUpdate
+     */
+    private function updateTaskItemStatusByBlockId(
+        array &$content,
+        string $blockId,
+        array $statusUpdate,
+        string $updatedAt,
+    ): bool {
+        if (! isset($content['content']) || ! is_array($content['content'])) {
+            return false;
+        }
+
+        return $this->walkAndUpdateStatusByBlockId(
+            $content['content'],
+            $blockId,
+            $statusUpdate,
+            $updatedAt,
+        );
+    }
+
+    /**
+     * @param  array<int, mixed>  $nodes
+     * @param  array{checked: bool, task_status: string|null}  $statusUpdate
+     */
+    private function walkAndUpdateStatusByBlockId(
+        array &$nodes,
+        string $blockId,
+        array $statusUpdate,
+        string $updatedAt,
+    ): bool {
+        foreach ($nodes as &$node) {
+            if (! is_array($node)) {
+                continue;
+            }
+
+            $type = $node['type'] ?? null;
+            $nodeBlockId = $node['attrs']['id'] ?? null;
+            $isTaskItem = $type === 'taskItem' && $nodeBlockId === $blockId;
+            $isBlockParagraph = $type === 'paragraph'
+                && ($node['attrs']['blockStyle'] ?? '') === 'task'
+                && $nodeBlockId === $blockId;
+
+            if ($isTaskItem || $isBlockParagraph) {
+                $this->applyTaskStatusUpdate($node, $statusUpdate, $updatedAt);
+
+                return true;
+            }
+
+            if (isset($node['content']) && is_array($node['content'])) {
+                if ($this->walkAndUpdateStatusByBlockId(
+                    $node['content'],
+                    $blockId,
+                    $statusUpdate,
+                    $updatedAt,
+                )) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array{checked: bool, task_status: string|null}  $statusUpdate
+     */
+    private function updateTaskItemStatusByPosition(
+        array &$content,
+        int $targetPosition,
+        array $statusUpdate,
+        string $updatedAt,
+    ): bool {
+        if (! isset($content['content']) || ! is_array($content['content'])) {
+            return false;
+        }
+
+        $position = 0;
+
+        return $this->walkAndUpdateStatusByPosition(
+            $content['content'],
+            $targetPosition,
+            $position,
+            $statusUpdate,
+            $updatedAt,
+        );
+    }
+
+    /**
+     * @param  array<int, mixed>  $nodes
+     * @param  array{checked: bool, task_status: string|null}  $statusUpdate
+     */
+    private function walkAndUpdateStatusByPosition(
+        array &$nodes,
+        int $targetPosition,
+        int &$position,
+        array $statusUpdate,
+        string $updatedAt,
+    ): bool {
+        foreach ($nodes as &$node) {
+            if (! is_array($node)) {
+                continue;
+            }
+
+            $type = $node['type'] ?? null;
+            $isTaskItem = $type === 'taskItem';
+            $isBlockParagraph = $type === 'paragraph'
+                && ($node['attrs']['blockStyle'] ?? '') === 'task';
+
+            if ($isTaskItem || $isBlockParagraph) {
+                $position++;
+                if ($position === $targetPosition) {
+                    $this->applyTaskStatusUpdate($node, $statusUpdate, $updatedAt);
+
+                    return true;
+                }
+            }
+
+            if (isset($node['content']) && is_array($node['content'])) {
+                if ($this->walkAndUpdateStatusByPosition(
+                    $node['content'],
+                    $targetPosition,
+                    $position,
+                    $statusUpdate,
+                    $updatedAt,
+                )) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $taskItem
+     * @param  array{checked: bool, task_status: string|null}  $statusUpdate
+     */
+    private function applyTaskStatusUpdate(array &$taskItem, array $statusUpdate, string $updatedAt): void
+    {
+        $attrs = is_array($taskItem['attrs'] ?? null) ? $taskItem['attrs'] : [];
+
+        $checked = (bool) $statusUpdate['checked'];
+        $taskStatus = is_string($statusUpdate['task_status'] ?? null)
+            ? (string) $statusUpdate['task_status']
+            : null;
+
+        $attrs['checked'] = $checked;
+        $attrs['taskStatus'] = $taskStatus;
+        $attrs['completedAt'] = $checked ? $updatedAt : null;
+
+        if ($taskStatus === 'canceled') {
+            $attrs['canceledAt'] = $updatedAt;
+            $attrs['completedAt'] = null;
+        } else {
+            $attrs['canceledAt'] = null;
+        }
+
+        $taskItem['attrs'] = $attrs;
+    }
+
+    /**
+     * @return array{checked: bool, task_status: string|null}
+     */
+    private function kanbanStatusUpdateForColumn(string $columnKey): array
+    {
+        return match ($columnKey) {
+            'backlog' => ['checked' => false, 'task_status' => 'backlog'],
+            'new' => ['checked' => false, 'task_status' => null],
+            'doing' => ['checked' => false, 'task_status' => 'in_progress'],
+            'done' => ['checked' => true, 'task_status' => null],
+            'canceled' => ['checked' => false, 'task_status' => 'canceled'],
+            default => ['checked' => false, 'task_status' => null],
+        };
     }
 
     /**

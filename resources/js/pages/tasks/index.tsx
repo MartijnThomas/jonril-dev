@@ -15,8 +15,6 @@ import {
     Ellipsis,
     FileText,
     Home,
-    Filter,
-    Search,
     Settings2,
     Star,
     X,
@@ -26,6 +24,7 @@ import { toast } from 'sonner';
 import { TaskInlineContent } from '@/components/task-inline-content';
 import type { TaskRenderFragment } from '@/components/task-inline-content';
 import { TaskToggleCheckbox } from '@/components/task-toggle-checkbox';
+import { TasksHeader } from '@/components/tasks/tasks-header';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -226,7 +225,6 @@ export default function TasksIndex({
 
     const {
         localFilters,
-        setLocalFilters,
         savePresetOpen,
         setSavePresetOpen,
         presetName,
@@ -246,7 +244,6 @@ export default function TasksIndex({
         hasDateFilterSelection,
         formatDateRangeLabel,
         applyFilters,
-        visitWithFilters,
         applyPreset,
         clearAppliedPreset,
         setDefaultPreset,
@@ -259,7 +256,7 @@ export default function TasksIndex({
 
     const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
     const [showAllSelectionPills, setShowAllSelectionPills] = useState(false);
-    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [showFiltersRow, setShowFiltersRow] = useState(false);
     const [relativeNow, setRelativeNow] = useState<number>(() => Date.now());
     const [expandedTaskIds, setExpandedTaskIds] = useState<number[]>([]);
     const [searchInput, setSearchInput] = useState(filters.q ?? '');
@@ -286,10 +283,6 @@ export default function TasksIndex({
 
         return () => window.clearInterval(timer);
     }, []);
-
-    useEffect(() => {
-        setSearchInput(localFilters.q ?? '');
-    }, [localFilters.q]);
 
     useEffect(() => {
         const trimmedInput = searchInput.trim();
@@ -1436,6 +1429,7 @@ export default function TasksIndex({
         0,
         activeFilterPills.length - visibleActiveFilterPills.length,
     );
+    const activeFilterCount = activeFilterPills.length;
 
     const toggleNoteNodeExpanded = (id: string) => {
         setExpandedNoteNodeIds((current) => {
@@ -1566,87 +1560,73 @@ export default function TasksIndex({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={t('tasks_index.page_title', 'Tasks')} />
 
-            <div className="flex-1 overflow-y-auto">
-                <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 p-4 pt-2 md:p-6">
-                <section className="mx-auto w-full max-w-3xl rounded-xl p-4 pt-3 md:p-6">
-                    <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                            <div className="flex items-baseline gap-2">
-                                <h1 className="text-2xl font-semibold leading-none md:text-3xl">
-                                    {t('tasks_index.heading', 'Tasks')}
-                                </h1>
-                                <span className="shrink-0 text-[11px] leading-none text-muted-foreground md:text-sm">
-                                    {resultsCountLabel}
-                                </span>
-                            </div>
-                            {activeFilterPreset ? (
-                                <div className="mt-1.5 flex min-w-0 items-center">
-                                    <span className="inline-flex min-w-0 items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                        <Bookmark className="h-3 w-3 shrink-0" />
-                                        <span className="truncate">
-                                            {activeFilterPreset.name}
+            <div className="flex h-full flex-1 flex-col overflow-y-auto bg-muted/25">
+                <div className="mx-auto flex h-full w-full max-w-[1560px] flex-1 flex-col gap-4 px-4 pb-6 pt-3 md:px-6">
+                    <TasksHeader
+                        title={t('tasks_index.heading', 'Tasks')}
+                        resultsCountLabel={resultsCountLabel}
+                        currentView="list"
+                        querySuffix={querySuffix}
+                        searchValue={searchInput}
+                        onSearchChange={setSearchInput}
+                        onToggleFilters={() => setShowFiltersRow((current) => !current)}
+                        activeFilterCount={activeFilterCount}
+                        titleMeta={
+                            <>
+                                {activeFilterPreset ? (
+                                    <div className="mt-1.5 flex min-w-0 items-center">
+                                        <span className="inline-flex min-w-0 items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                            <Bookmark className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">
+                                                {activeFilterPreset.name}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                                onClick={clearAppliedPreset}
+                                                aria-label={t(
+                                                    'tasks_index.clear_filter_preset',
+                                                    'Clear preset filter',
+                                                )}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
                                         </span>
-                                        <button
-                                            type="button"
-                                            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                                            onClick={clearAppliedPreset}
-                                            aria-label={t(
-                                                'tasks_index.clear_filter_preset',
-                                                'Clear preset filter',
-                                            )}
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </button>
-                                    </span>
-                                </div>
-                            ) : null}
-                            {activeFilterPills.length > 0 ? (
-                                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1 md:hidden">
-                                    {visibleActiveFilterPills.map((pill) => (
-                                        <span
-                                            key={pill.key}
-                                            className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                                        >
-                                            <span className="truncate">{pill.label}</span>
-                                        </span>
-                                    ))}
-                                    {hiddenActiveFilterPillCount > 0 ? (
-                                        <span className="inline-flex items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                            +{hiddenActiveFilterPillCount}
-                                        </span>
-                                    ) : null}
-                                </div>
-                            ) : null}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                className="h-10 rounded-full border-0 bg-muted px-3 text-muted-foreground hover:bg-muted/80 hover:text-foreground md:h-8"
-                                asChild
-                            >
-                                <Link href={`/tasks/kanban${querySuffix}`}>
-                                    <ArrowRightToLine className="h-4 w-4" />
-                                    <span className="text-xs font-medium md:text-[11px]">
-                                        {t('tasks_index.kanban_view', 'Kanban')}
-                                    </span>
-                                </Link>
-                            </Button>
+                                    </div>
+                                ) : null}
+                                {activeFilterPills.length > 0 ? (
+                                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1 md:hidden">
+                                        {visibleActiveFilterPills.map((pill) => (
+                                            <span
+                                                key={pill.key}
+                                                className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                                            >
+                                                <span className="truncate">{pill.label}</span>
+                                            </span>
+                                        ))}
+                                        {hiddenActiveFilterPillCount > 0 ? (
+                                            <span className="inline-flex items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                                +{hiddenActiveFilterPillCount}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                ) : null}
+                            </>
+                        }
+                        presetsButton={
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button
                                         type="button"
-                                        variant="secondary"
-                                        className="h-10 rounded-full border-0 bg-muted px-3 text-muted-foreground hover:bg-muted/80 hover:text-foreground md:h-8"
+                                        variant="outline"
+                                        className="h-10 rounded-xl"
                                         aria-label={t(
                                             'tasks_index.filter_presets_menu',
                                             'Filter presets',
                                         )}
                                     >
                                         <Bookmark className="h-4 w-4" />
-                                        <span className="text-xs font-medium md:text-[11px]">
-                                            {t('tasks_index.filter_presets_label', 'Preset filters')}
-                                        </span>
+                                        {t('tasks_index.filter_presets_label', 'Preset filters')}
                                         <ChevronDown className="h-3.5 w-3.5" />
                                     </Button>
                                 </DropdownMenuTrigger>
@@ -1662,9 +1642,7 @@ export default function TasksIndex({
                                             {favoriteFilterPresets.map((preset) => (
                                                 <DropdownMenuItem
                                                     key={preset.id}
-                                                    onClick={() =>
-                                                        applyPreset(preset)
-                                                    }
+                                                    onClick={() => applyPreset(preset)}
                                                     className="gap-2"
                                                 >
                                                     <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
@@ -1742,79 +1720,26 @@ export default function TasksIndex({
                                     ) : null}
                                 </DropdownMenuContent>
                             </DropdownMenu>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon"
-                                className="h-10 w-10 rounded-full border-0 bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground md:hidden"
-                                onClick={() =>
-                                    setMobileFiltersOpen((current) => !current)
-                                }
-                                aria-label={t(
-                                    'tasks_index.toggle_filters',
-                                    'Toggle filters',
-                                )}
-                                aria-pressed={mobileFiltersOpen}
-                            >
-                                <Filter className="h-5 w-5" />
-                            </Button>
-                        </div>
-                    </div>
+                        }
+                    />
 
+                {showFiltersRow ? (
+                    <button
+                        type="button"
+                        className="fixed inset-0 z-20 cursor-default bg-transparent"
+                        aria-label={t('tasks_index.close_filters', 'Close filters')}
+                        onClick={() => setShowFiltersRow(false)}
+                    />
+                ) : null}
+
+                <section className="relative mx-auto w-full max-w-3xl rounded-xl px-4 pb-6 md:px-6">
                     <div
                         className={cn(
-                            'mt-4 space-y-3',
-                            mobileFiltersOpen ? 'block' : 'hidden md:block',
+                            'fixed right-4 top-28 z-30 w-[min(96vw,420px)] space-y-3 rounded-xl border border-border/60 bg-background p-3 shadow-xl md:right-6 md:top-32',
+                            showFiltersRow ? 'block' : 'hidden',
                         )}
                     >
-                        <form
-                            className="flex items-center gap-2"
-                            onSubmit={(event) => {
-                                event.preventDefault();
-                                applyFilters({ q: searchInput.trim() }, true);
-                            }}
-                        >
-                            <div className="relative flex-1">
-                                <Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    value={searchInput}
-                                    onChange={(event) =>
-                                        setSearchInput(event.target.value)
-                                    }
-                                    placeholder={t(
-                                        'tasks_index.search_placeholder',
-                                        'Search tasks, notes, parents...',
-                                    )}
-                                    className="pl-8"
-                                />
-                            </div>
-                            <Button type="submit" variant="secondary" size="sm">
-                                {t('tasks_index.apply', 'Apply')}
-                            </Button>
-                            {localFilters.q.trim() !== '' ? (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                        setSearchInput('');
-                                        applyFilters({ q: '' }, true);
-                                    }}
-                                >
-                                    {t(
-                                        'tasks_index.clear_selection',
-                                        'Clear selection',
-                                    )}
-                                </Button>
-                            ) : null}
-                        </form>
-                        <p className="text-xs text-muted-foreground">
-                            {t(
-                                'tasks_index.search_auto_hint',
-                                `Auto-search from ${minSearchChars} characters.`,
-                            )}
-                        </p>
-                        <div className="grid grid-cols-1 gap-3 md:flex md:items-start md:justify-between md:gap-4">
+                        <div className="space-y-3">
                             <Popover>
                                 <div className="min-w-0">
                                     <PopoverTrigger asChild>

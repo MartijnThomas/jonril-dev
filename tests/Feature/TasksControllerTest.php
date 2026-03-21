@@ -79,20 +79,60 @@ test('tasks kanban renders board columns with mapped task statuses', function ()
         'hashtags' => [],
     ]);
 
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-checked-assigned',
+        'position' => 5,
+        'checked' => true,
+        'content_text' => 'Checked assigned task',
+        'task_status' => 'assigned',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-question',
+        'position' => 6,
+        'checked' => false,
+        'content_text' => 'Question backlog task',
+        'task_status' => 'question',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-in-progress-dash',
+        'position' => 7,
+        'checked' => false,
+        'content_text' => 'In progress dash task',
+        'task_status' => 'in-progress',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
     $this
         ->actingAs($user)
-        ->get('/tasks/kanban?status[]=open&status[]=assigned&status[]=backlog&status[]=completed')
+        ->get('/tasks/kanban?status[]=open&status[]=assigned&status[]=backlog&status[]=in_progress&status[]=completed&include_columns[]=done&include_columns[]=backlog&include_columns[]=new&include_columns[]=doing')
         ->assertInertia(fn (Assert $page) => $page
             ->component('tasks/kanban')
-            ->where('tasks.total', 4)
+            ->where('tasks.total', 7)
             ->where('kanbanColumns.0.key', 'backlog')
             ->where('kanbanColumns.0.tasks.0.content', 'Backlog task')
+            ->where('kanbanColumns.0.tasks.1.content', 'Question backlog task')
             ->where('kanbanColumns.1.key', 'new')
             ->where('kanbanColumns.1.tasks.0.content', 'Open task')
             ->where('kanbanColumns.2.key', 'doing')
             ->where('kanbanColumns.2.tasks.0.content', 'Doing task')
+            ->where('kanbanColumns.2.tasks.1.content', 'In progress dash task')
             ->where('kanbanColumns.3.key', 'done')
-            ->where('kanbanColumns.3.tasks.0.content', 'Done task'),
+            ->where('kanbanColumns.3.task_count', 2)
+            ->where('kanbanColumns.3.tasks.0.content', 'Done task')
+            ->where('kanbanColumns.3.tasks.1.content', 'Checked assigned task'),
         );
 });
 
@@ -121,6 +161,183 @@ test('tasks kanban keeps kanban route when applying default preset redirect', fu
 
     $response->assertRedirect();
     expect($response->headers->get('Location'))->toContain('/tasks/kanban?');
+});
+
+test('tasks kanban default status scope includes backlog and completed tasks', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace?->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Kanban default status note',
+        'slug' => 'kanban-default-status-note',
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-default-backlog',
+        'position' => 1,
+        'checked' => false,
+        'content_text' => 'Default backlog task',
+        'task_status' => 'backlog',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-default-completed',
+        'position' => 2,
+        'checked' => true,
+        'content_text' => 'Default completed task',
+        'task_status' => null,
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks/kanban')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/kanban')
+            ->where('includeColumnKeys.0', 'backlog')
+            ->where('includeColumnKeys.1', 'new')
+            ->where('includeColumnKeys.2', 'doing')
+            ->where('tasks.total', 2)
+            ->where('kanbanColumns.0.tasks.0.content', 'Default backlog task')
+            ->where('kanbanColumns.3.task_count', 1)
+            ->has('kanbanColumns.3.tasks', 0)
+            ->where('kanbanColumns.4.key', 'canceled')
+            ->where('kanbanColumns.4.task_count', 0)
+            ->has('kanbanColumns.4.tasks', 0),
+        );
+});
+
+test('tasks kanban loads done cards when done column is included', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace?->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Kanban include done note',
+        'slug' => 'kanban-include-done-note',
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-include-done-open',
+        'position' => 1,
+        'checked' => false,
+        'content_text' => 'Include done open task',
+        'task_status' => null,
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-include-done-completed',
+        'position' => 2,
+        'checked' => true,
+        'content_text' => 'Include done completed task',
+        'task_status' => null,
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks/kanban?include_columns[]=backlog&include_columns[]=new&include_columns[]=doing&include_columns[]=done')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/kanban')
+            ->where('includeColumnKeys.3', 'done')
+            ->where('kanbanColumns.3.task_count', 1)
+            ->where('kanbanColumns.3.tasks.0.content', 'Include done completed task'),
+        );
+});
+
+test('tasks kanban loads canceled cards only when canceled column is included', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace?->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Kanban canceled note',
+        'slug' => 'kanban-canceled-note',
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace?->id,
+        'note_id' => $note->id,
+        'block_id' => 'task-canceled',
+        'position' => 1,
+        'checked' => false,
+        'content_text' => 'Canceled task',
+        'task_status' => 'canceled',
+        'mentions' => [],
+        'hashtags' => [],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks/kanban?status[]=canceled')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/kanban')
+            ->where('kanbanColumns.4.key', 'canceled')
+            ->where('kanbanColumns.4.task_count', 1)
+            ->has('kanbanColumns.4.tasks', 0),
+        );
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks/kanban?status[]=canceled&include_columns[]=backlog&include_columns[]=new&include_columns[]=doing&include_columns[]=canceled')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/kanban')
+            ->where('kanbanColumns.4.task_count', 1)
+            ->where('kanbanColumns.4.tasks.0.content', 'Canceled task'),
+        );
+});
+
+test('tasks kanban columns use full filtered result set and not only first paginator page', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace?->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Kanban large backlog note',
+        'slug' => 'kanban-large-backlog-note',
+    ]);
+
+    foreach (range(1, 60) as $position) {
+        NoteTask::query()->create([
+            'workspace_id' => $workspace?->id,
+            'note_id' => $note->id,
+            'block_id' => 'task-backlog-'.$position,
+            'position' => $position,
+            'checked' => false,
+            'content_text' => 'Backlog item '.$position,
+            'task_status' => 'backlog',
+            'mentions' => [],
+            'hashtags' => [],
+        ]);
+    }
+
+    $this
+        ->actingAs($user)
+        ->get('/tasks/kanban?status[]=backlog')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('tasks/kanban')
+            ->where('tasks.total', 60)
+            ->has('kanbanColumns.0.tasks', 60),
+        );
 });
 
 test('tasks cannot be toggled by reference in migrated source workspace', function () {
@@ -1439,6 +1656,114 @@ test('backlog task promotion clears backlog status and stores promotion timestam
     expect($reindexedTask?->checked)->toBeFalse();
     expect($reindexedTask?->task_status)->toBeNull();
     expect($reindexedTask?->backlog_promoted_at)->not->toBeNull();
+});
+
+test('kanban status update by reference moves task to doing column state', function () {
+    $user = User::factory()->create();
+
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Kanban status note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'taskList',
+                    'content' => [
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'id' => 'task-kanban-doing-1',
+                                'checked' => false,
+                                'taskStatus' => 'backlog',
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [['type' => 'text', 'text' => 'Move to doing']],
+                            ]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch('/tasks/status', [
+            'note_id' => $note->id,
+            'block_id' => 'task-kanban-doing-1',
+            'position' => 1,
+            'target_column' => 'doing',
+        ])
+        ->assertRedirect();
+
+    $note->refresh();
+    $attrs = data_get($note->content, 'content.0.content.0.attrs', []);
+    $reindexedTask = NoteTask::query()
+        ->where('note_id', $note->id)
+        ->where('block_id', 'task-kanban-doing-1')
+        ->first();
+
+    expect(data_get($attrs, 'checked'))->toBeFalse();
+    expect(data_get($attrs, 'taskStatus'))->toBe('in_progress');
+    expect(data_get($attrs, 'canceledAt'))->toBeNull();
+    expect($reindexedTask?->checked)->toBeFalse();
+    expect($reindexedTask?->task_status)->toBe('in_progress');
+});
+
+test('kanban status update by reference can cancel task', function () {
+    $user = User::factory()->create();
+
+    $note = $user->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Kanban cancel note',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'taskList',
+                    'content' => [
+                        [
+                            'type' => 'taskItem',
+                            'attrs' => [
+                                'id' => 'task-kanban-cancel-1',
+                                'checked' => false,
+                            ],
+                            'content' => [[
+                                'type' => 'paragraph',
+                                'content' => [['type' => 'text', 'text' => 'Cancel me']],
+                            ]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->patch('/tasks/status', [
+            'note_id' => $note->id,
+            'block_id' => 'task-kanban-cancel-1',
+            'position' => 1,
+            'target_column' => 'canceled',
+        ])
+        ->assertRedirect();
+
+    $note->refresh();
+    $attrs = data_get($note->content, 'content.0.content.0.attrs', []);
+    $reindexedTask = NoteTask::query()
+        ->where('note_id', $note->id)
+        ->where('block_id', 'task-kanban-cancel-1')
+        ->first();
+
+    expect(data_get($attrs, 'checked'))->toBeFalse();
+    expect(data_get($attrs, 'taskStatus'))->toBe('canceled');
+    expect((string) data_get($attrs, 'canceledAt'))->not->toBe('');
+    expect($reindexedTask?->checked)->toBeFalse();
+    expect($reindexedTask?->task_status)->toBe('canceled');
+    expect($reindexedTask?->canceled_at)->not->toBeNull();
 });
 
 test('migrate targets endpoint returns journal presets and workspace notes', function () {

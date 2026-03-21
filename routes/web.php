@@ -224,6 +224,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('search.command');
     Route::patch('tasks/checked', [TasksController::class, 'updateCheckedByReference'])
         ->name('tasks.checked-by-reference');
+    Route::patch('tasks/status', [TasksController::class, 'updateStatusByReference'])
+        ->name('tasks.status-by-reference');
     Route::patch('tasks/cancel', [TasksController::class, 'cancelByReference'])
         ->name('tasks.cancel-by-reference');
     Route::patch('tasks/{task}/checked', [TasksController::class, 'updateChecked'])

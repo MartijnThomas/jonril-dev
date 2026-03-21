@@ -175,3 +175,36 @@ Phase 3:
 - Filters behave consistently between list and Kanban.
 - Tasks are grouped into Backlog/New/Doing/Done using the agreed mapping.
 - Design is aligned with current app style and shadcn-based patterns.
+
+## Current status (2026-03-21)
+
+Implemented:
+
+- Dedicated page and route: `/tasks/kanban`
+- Dedicated backend action and payload wiring for Kanban
+- Shared filter parsing/normalization via existing task filter logic
+- List <-> Kanban switch while preserving query parameters
+- Fixed default 4 columns rendered (Backlog, New, Doing, Done)
+- Workspace + note-tree filtering UI in Kanban (same interaction model as list)
+- Column-level scrolling in Kanban layout
+- Columns can be collapsed/expanded; collapsed columns show label + count
+- Added `Canceled` column (collapsed by default)
+- Collapsed columns are count-only; card payload is loaded only for expanded columns (`include_columns[]`)
+- Backend feature tests for Kanban route/mapping/filter behavior
+
+Behavior differences from initial draft:
+
+- Done mapping is currently based on checked/completed semantics used in-app.
+- Some status aliases/legacy values are normalized for Kanban grouping.
+- Grouping filter control is intentionally hidden on Kanban UI.
+
+## Open performance note
+
+- Query strategy must keep large `Done` sets efficient.
+- Current behavior:
+  - collapsed columns: backend returns `task_count` with no card payload
+  - expanded columns: frontend requests via `include_columns[]` and backend returns cards for those columns
+  - default expanded columns: `backlog`, `new`, `doing`
+  - default collapsed columns: `done`, `canceled`
+- Follow-up optimization:
+  - add optional pagination/windowing specifically for expanded `Done` cards on very large sets
