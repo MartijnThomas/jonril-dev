@@ -11,6 +11,28 @@ class NoteTask extends Model
 {
     use Searchable;
 
+    /**
+     * @var array<string, string>
+     */
+    public const STATUS_TO_TOKEN = [
+        'canceled' => '—',
+        'assigned' => '<',
+        'in_progress' => '/',
+        'starred' => '*',
+        'backlog' => '?',
+    ];
+
+    /**
+     * @var array<string, string>
+     */
+    public const TOKEN_TO_STATUS = [
+        '—' => 'canceled',
+        '<' => 'assigned',
+        '/' => 'in_progress',
+        '*' => 'starred',
+        '?' => 'backlog',
+    ];
+
     protected $fillable = [
         'workspace_id',
         'note_id',
@@ -202,5 +224,19 @@ class NoteTask extends Model
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
+    }
+
+    public static function statusFromToken(string $token): ?string
+    {
+        return self::TOKEN_TO_STATUS[$token] ?? null;
+    }
+
+    public static function tokenFromStatus(?string $status): ?string
+    {
+        if (! is_string($status)) {
+            return null;
+        }
+
+        return self::STATUS_TO_TOKEN[$status] ?? null;
     }
 }

@@ -776,14 +776,7 @@ class NoteTaskIndexer
 
     private function taskStatusFromToken(string $token): ?string
     {
-        return match ($token) {
-            '—' => 'canceled',
-            '<' => 'assigned',
-            '/' => 'in_progress',
-            '*' => 'starred',
-            '?' => 'backlog',
-            default => null,
-        };
+        return NoteTask::statusFromToken($token);
     }
 
     private function normalizeTaskStatus(mixed $value): ?string

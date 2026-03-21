@@ -1708,6 +1708,8 @@ test('kanban status update by reference moves task to doing column state', funct
     expect(data_get($attrs, 'checked'))->toBeFalse();
     expect(data_get($attrs, 'taskStatus'))->toBe('in_progress');
     expect(data_get($attrs, 'canceledAt'))->toBeNull();
+    expect((string) data_get($note->content, 'content.0.content.0.content.0.content.0.text'))
+        ->toBe('/ Move to doing');
     expect($reindexedTask?->checked)->toBeFalse();
     expect($reindexedTask?->task_status)->toBe('in_progress');
 });
@@ -1761,6 +1763,8 @@ test('kanban status update by reference can cancel task', function () {
     expect(data_get($attrs, 'checked'))->toBeFalse();
     expect(data_get($attrs, 'taskStatus'))->toBe('canceled');
     expect((string) data_get($attrs, 'canceledAt'))->not->toBe('');
+    expect((string) data_get($note->content, 'content.0.content.0.content.0.content.0.text'))
+        ->toBe('— Cancel me');
     expect($reindexedTask?->checked)->toBeFalse();
     expect($reindexedTask?->task_status)->toBe('canceled');
     expect($reindexedTask?->canceled_at)->not->toBeNull();

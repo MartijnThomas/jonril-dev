@@ -2228,6 +2228,7 @@ class TasksController extends Controller
         }
 
         $taskItem['attrs'] = $attrs;
+        $this->applyLeadingTaskStatusMarker($taskItem, $taskStatus);
     }
 
     /**
@@ -2263,7 +2264,7 @@ class TasksController extends Controller
 
                 if (($node['type'] ?? null) === 'text' && is_string($node['text'] ?? null)) {
                     $text = (string) $node['text'];
-                    $updated = preg_replace('/^(\s*)\?\s+/u', '$1', $text, 1, $count);
+                    $updated = preg_replace('/^(\s*)(?:—|<|\*|\?|\/)\s+/u', '$1', $text, 1, $count);
                     if ($count > 0 && is_string($updated)) {
                         $node['text'] = $updated;
                         $removed = true;
@@ -2388,5 +2389,61 @@ class TasksController extends Controller
         $attrs['taskStatus'] = 'canceled';
         $attrs['canceledAt'] = $canceledAt;
         $taskItem['attrs'] = $attrs;
+        $this->applyLeadingTaskStatusMarker($taskItem, 'canceled');
+    }
+
+    /**
+     * @param  array<string, mixed>  $taskItem
+     */
+    private function applyLeadingTaskStatusMarker(array &$taskItem, ?string $taskStatus): void
+    {
+        if (! isset($taskItem['content']) || ! is_array($taskItem['content'])) {
+            return;
+        }
+
+        $token = $this->taskStatusTokenForStatus($taskStatus);
+        $content = $taskItem['content'];
+        $updated = false;
+
+        $walk = function (array &$nodes) use (&$walk, &$updated, $token): void {
+            foreach ($nodes as &$node) {
+                if ($updated || ! is_array($node)) {
+                    continue;
+                }
+
+                if (($node['type'] ?? null) === 'text' && is_string($node['text'] ?? null)) {
+                    $text = (string) $node['text'];
+                    $withoutMarker = preg_replace('/^(\s*)(?:—|<|\*|\?|\/)\s+/u', '$1', $text) ?? $text;
+                    if ($token === null) {
+                        $node['text'] = $withoutMarker;
+                    } else {
+                        preg_match('/^(\s*)/u', $withoutMarker, $leadingMatch);
+                        $leadingWhitespace = (string) ($leadingMatch[1] ?? '');
+                        $remaining = ltrim($withoutMarker);
+                        $node['text'] = $remaining === ''
+                            ? "{$leadingWhitespace}{$token} "
+                            : "{$leadingWhitespace}{$token} {$remaining}";
+                    }
+
+                    $updated = true;
+
+                    return;
+                }
+
+                $children = $node['content'] ?? null;
+                if (is_array($children)) {
+                    $walk($children);
+                    $node['content'] = $children;
+                }
+            }
+        };
+
+        $walk($content);
+        $taskItem['content'] = $content;
+    }
+
+    private function taskStatusTokenForStatus(?string $taskStatus): ?string
+    {
+        return NoteTask::tokenFromStatus($taskStatus);
     }
 }
