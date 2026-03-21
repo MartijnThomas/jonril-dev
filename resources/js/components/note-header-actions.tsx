@@ -6,6 +6,7 @@ import {
     FilePlus,
     FolderInput,
     History,
+    Kanban,
     MoreVertical,
     Pencil,
     TableProperties,
@@ -55,6 +56,7 @@ type Props = {
     canOpenBlockPreview?: boolean;
     blockPreviewUrl?: string | null;
     historyUrl?: string | null;
+    kanbanUrl?: string | null;
     triggerClassName?: string;
     triggerIconClassName?: string;
     dropdownAlign?: 'start' | 'center' | 'end';
@@ -80,6 +82,7 @@ export function NoteHeaderActions({
     canOpenBlockPreview = false,
     blockPreviewUrl = null,
     historyUrl = null,
+    kanbanUrl = null,
     triggerClassName,
     triggerIconClassName = 'h-4 w-4',
     dropdownAlign = 'start',
@@ -355,6 +358,14 @@ export function NoteHeaderActions({
                                 </span>
                             </DropdownMenuItem>
                         </>
+                    ) : null}
+                    {kanbanUrl ? (
+                        <DropdownMenuItem onClick={() => router.visit(kanbanUrl)}>
+                            <span className="inline-flex flex-1 items-center gap-2">
+                                <Kanban className="h-4 w-4 shrink-0" />
+                                {t('note_actions.open_kanban_board', 'Kanban board')}
+                            </span>
+                        </DropdownMenuItem>
                     ) : null}
                 </DropdownMenuContent>
             </DropdownMenu>

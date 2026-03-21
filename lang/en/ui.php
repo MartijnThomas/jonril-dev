@@ -270,6 +270,7 @@ return [
         'delete_action' => 'Delete',
         'create_child' => 'New child note',
         'attach_to_event' => 'Attach to event',
+        'open_kanban_board' => 'Kanban board',
     ],
     'sidebar_events' => [
         'view_meeting_note' => 'View meeting note',

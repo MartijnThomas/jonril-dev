@@ -270,6 +270,7 @@ return [
         'delete_action' => 'Verwijderen',
         'create_child' => 'Nieuwe onderliggende notitie',
         'attach_to_event' => 'Koppelen aan evenement',
+        'open_kanban_board' => 'Kanban-bord',
     ],
     'sidebar_events' => [
         'view_meeting_note' => 'Vergadernotitie bekijken',

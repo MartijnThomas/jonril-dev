@@ -1569,7 +1569,8 @@ export default function TasksIndex({
                         querySuffix={querySuffix}
                         searchValue={searchInput}
                         onSearchChange={setSearchInput}
-                        onToggleFilters={() => setShowFiltersRow((current) => !current)}
+                        filterOpen={showFiltersRow}
+                        onFilterOpenChange={setShowFiltersRow}
                         activeFilterCount={activeFilterCount}
                         titleMeta={
                             <>
@@ -1721,143 +1722,213 @@ export default function TasksIndex({
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         }
-                    />
-
-                {showFiltersRow ? (
-                    <button
-                        type="button"
-                        className="fixed inset-0 z-20 cursor-default bg-transparent"
-                        aria-label={t('tasks_index.close_filters', 'Close filters')}
-                        onClick={() => setShowFiltersRow(false)}
-                    />
-                ) : null}
-
-                <section className="relative mx-auto w-full max-w-3xl rounded-xl px-4 pb-6 md:px-6">
-                    <div
-                        className={cn(
-                            'fixed right-4 top-28 z-30 w-[min(96vw,420px)] space-y-3 rounded-xl border border-border/60 bg-background p-3 shadow-xl md:right-6 md:top-32',
-                            showFiltersRow ? 'block' : 'hidden',
-                        )}
-                    >
-                        <div className="space-y-3">
-                            <Popover>
-                                <div className="min-w-0">
-                                    <PopoverTrigger asChild>
-                                        <button
-                                            type="button"
-                                            className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
-                                        >
-                                            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
-                                                <span className="truncate">
-                                                    {t('tasks_index.workspace_note_picker_trigger', 'Workspaces & notes')}
-                                                </span>
-                                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                            </span>
-                                        </button>
-                                    </PopoverTrigger>
-                                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                                        {showAllWorkspaceNotePill ? (
-                                            <span className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                                <span className="truncate">{t('tasks_index.all', 'All')}</span>
-                                            </span>
-                                        ) : null}
-                                        {visibleSelectionPills.map((pill) => (
-                                            <span
-                                                key={pill.key}
-                                                className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                                            >
-                                                <span className="truncate">{pill.label}</span>
-                                            </span>
-                                        ))}
-                                        {hiddenSelectionPills.length > 0 ? (
+                        filterPanel={
+                            <div className="space-y-3">
+                                <Popover>
+                                    <div className="min-w-0">
+                                        <PopoverTrigger asChild>
                                             <button
                                                 type="button"
-                                                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                                                onClick={() => setShowAllSelectionPills((current) => !current)}
+                                                className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
                                             >
-                                                + {hiddenSelectionPills.length}
-                                                {showAllSelectionPills ? (
-                                                    <ChevronDown className="h-3 w-3" />
-                                                ) : (
-                                                    <ChevronRight className="h-3 w-3" />
-                                                )}
+                                                <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                                                    <span className="truncate">
+                                                        {t('tasks_index.workspace_note_picker_trigger', 'Workspaces & notes')}
+                                                    </span>
+                                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                                </span>
                                             </button>
-                                        ) : null}
-                                    </div>
-                                    {hiddenSelectionPills.length > 0 ? (
-                                        <div className="mt-1">
-                                            {showAllSelectionPills ? (
-                                                <div className="flex flex-wrap gap-1">
-                                                    {hiddenSelectionPills.map((pill) => (
-                                                        <span
-                                                            key={pill.key}
-                                                            className="inline-flex max-w-[280px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                                                        >
-                                                            <span className="truncate">{pill.label}</span>
-                                                        </span>
-                                                    ))}
-                                                </div>
+                                        </PopoverTrigger>
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                            {showAllWorkspaceNotePill ? (
+                                                <span className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                                    <span className="truncate">{t('tasks_index.all', 'All')}</span>
+                                                </span>
+                                            ) : null}
+                                            {visibleSelectionPills.map((pill) => (
+                                                <span
+                                                    key={pill.key}
+                                                    className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                                                >
+                                                    <span className="truncate">{pill.label}</span>
+                                                </span>
+                                            ))}
+                                            {hiddenSelectionPills.length > 0 ? (
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                                                    onClick={() => setShowAllSelectionPills((current) => !current)}
+                                                >
+                                                    + {hiddenSelectionPills.length}
+                                                    {showAllSelectionPills ? (
+                                                        <ChevronDown className="h-3 w-3" />
+                                                    ) : (
+                                                        <ChevronRight className="h-3 w-3" />
+                                                    )}
+                                                </button>
                                             ) : null}
                                         </div>
-                                    ) : null}
-                                </div>
-                                <PopoverContent className="w-[420px] p-0" align="start">
-                                    <div className="p-1.5">
-                                        <div className="px-1 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                            {t('tasks_index.workspace_note_picker_placeholder', 'Filter workspace & notes')}
-                                        </div>
-                                        <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
-                                            {workspaces.map((workspace) => {
-                                                const roots = noteRootsByWorkspaceId.get(workspace.id) ?? [];
-                                                const hasChildren = roots.length > 0;
-                                                const isExpanded = expandedWorkspaceIds.has(workspace.id);
-                                                const checked = selectedWorkspaceSet.has(workspace.id);
-
-                                                return (
-                                                    <div key={workspace.id} className="space-y-0.5">
-                                                        <div className="flex items-center gap-1 rounded-sm px-1 py-1 text-sm hover:bg-accent">
-                                                            <button
-                                                                type="button"
-                                                                className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground"
-                                                                onClick={(event) => {
-                                                                    event.preventDefault();
-                                                                    event.stopPropagation();
-                                                                    if (hasChildren) {
-                                                                        toggleWorkspaceExpanded(workspace.id);
-                                                                    }
-                                                                }}
+                                        {hiddenSelectionPills.length > 0 ? (
+                                            <div className="mt-1">
+                                                {showAllSelectionPills ? (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {hiddenSelectionPills.map((pill) => (
+                                                            <span
+                                                                key={pill.key}
+                                                                className="inline-flex max-w-[280px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
                                                             >
-                                                                {hasChildren ? (
-                                                                    isExpanded ? (
-                                                                        <ChevronDown className="h-3.5 w-3.5" />
-                                                                    ) : (
-                                                                        <ChevronRight className="h-3.5 w-3.5" />
-                                                                    )
+                                                                <span className="truncate">{pill.label}</span>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                    <PopoverContent className="w-[420px] p-0" align="start">
+                                        <div className="p-1.5">
+                                            <div className="px-1 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                                {t('tasks_index.workspace_note_picker_placeholder', 'Filter workspace & notes')}
+                                            </div>
+                                            <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
+                                                {workspaces.map((workspace) => {
+                                                    const roots = noteRootsByWorkspaceId.get(workspace.id) ?? [];
+                                                    const hasChildren = roots.length > 0;
+                                                    const isExpanded = expandedWorkspaceIds.has(workspace.id);
+                                                    const checked = selectedWorkspaceSet.has(workspace.id);
+
+                                                    return (
+                                                        <div key={workspace.id} className="space-y-0.5">
+                                                            <div className="flex items-center gap-1 rounded-sm px-1 py-1 text-sm hover:bg-accent">
+                                                                <button
+                                                                    type="button"
+                                                                    className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground"
+                                                                    onClick={(event) => {
+                                                                        event.preventDefault();
+                                                                        event.stopPropagation();
+                                                                        if (hasChildren) {
+                                                                            toggleWorkspaceExpanded(workspace.id);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    {hasChildren ? (
+                                                                        isExpanded ? (
+                                                                            <ChevronDown className="h-3.5 w-3.5" />
+                                                                        ) : (
+                                                                            <ChevronRight className="h-3.5 w-3.5" />
+                                                                        )
+                                                                    ) : null}
+                                                                </button>
+
+                                                                <Checkbox
+                                                                    checked={checked}
+                                                                    className="h-4 w-4"
+                                                                    onCheckedChange={() => toggleWorkspaceSelection(workspace.id)}
+                                                                />
+
+                                                                <span className="min-w-0 flex-1 truncate font-medium">{workspace.name}</span>
+                                                                {checked ? (
+                                                                    <Check className="h-3.5 w-3.5 text-muted-foreground" />
                                                                 ) : null}
-                                                            </button>
+                                                            </div>
 
-                                                            <Checkbox
-                                                                checked={checked}
-                                                                className="h-4 w-4"
-                                                                onCheckedChange={() => toggleWorkspaceSelection(workspace.id)}
-                                                            />
-
-                                                            <span className="min-w-0 flex-1 truncate font-medium">{workspace.name}</span>
-                                                            {checked ? (
-                                                                <Check className="h-3.5 w-3.5 text-muted-foreground" />
+                                                            {hasChildren && isExpanded ? (
+                                                                <div className="space-y-0.5">
+                                                                    {roots.map((node) => renderNoteTreeNode(node, 1))}
+                                                                </div>
                                                             ) : null}
                                                         </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className="mt-1 border-t p-1">
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="w-full justify-center"
+                                                    onClick={() =>
+                                                        applyFilters(
+                                                            {
+                                                                workspace_ids: [],
+                                                                note_scope_ids: [],
+                                                            },
+                                                            true,
+                                                        )
+                                                    }
+                                                >
+                                                    {t('tasks_index.clear_selection', 'Clear selection')}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
 
-                                                        {hasChildren && isExpanded ? (
-                                                            <div className="space-y-0.5">
-                                                                {roots.map((node) => renderNoteTreeNode(node, 1))}
-                                                            </div>
+                                <Popover>
+                                    <div className="min-w-0">
+                                        <PopoverTrigger asChild>
+                                            <button
+                                                type="button"
+                                                className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
+                                            >
+                                                <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                                                    <span className="truncate">
+                                                        {t('tasks_index.status_filter_label', 'Status')}
+                                                    </span>
+                                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                                </span>
+                                            </button>
+                                        </PopoverTrigger>
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                            {statusSelectionLabels.map((label) => (
+                                                <span
+                                                    key={label}
+                                                    className="inline-flex max-w-[180px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                                                >
+                                                    <span className="truncate">{label}</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <PopoverContent className="w-[240px] p-0" align="start">
+                                        <div className="p-1">
+                                            {statusOptions.map((option) => {
+                                                if (option.value.startsWith('__divider_')) {
+                                                    return <hr key={option.value} className="-mx-1 my-1 border-border" />;
+                                                }
+
+                                                const checked = localFilters.status.includes(option.value);
+
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        className={cn(
+                                                            'flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
+                                                            checked ? 'bg-accent/60' : '',
+                                                        )}
+                                                        onClick={() => {
+                                                            const next = checked
+                                                                ? localFilters.status.filter((value) => value !== option.value)
+                                                                : [...localFilters.status, option.value];
+
+                                                            applyFilters(
+                                                                {
+                                                                    status: next.length > 0 ? next : ['open'],
+                                                                },
+                                                                true,
+                                                            );
+                                                        }}
+                                                    >
+                                                        <span>{option.label}</span>
+                                                        {checked ? (
+                                                            <Check className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
                                                         ) : null}
-                                                    </div>
+                                                    </button>
                                                 );
                                             })}
                                         </div>
-                                        <div className="mt-1 border-t p-1">
+                                        <div className="border-t p-1">
                                             <Button
                                                 type="button"
                                                 variant="ghost"
@@ -1866,8 +1937,7 @@ export default function TasksIndex({
                                                 onClick={() =>
                                                     applyFilters(
                                                         {
-                                                            workspace_ids: [],
-                                                            note_scope_ids: [],
+                                                            status: ['open'],
                                                         },
                                                         true,
                                                     )
@@ -1876,275 +1946,188 @@ export default function TasksIndex({
                                                 {t('tasks_index.clear_selection', 'Clear selection')}
                                             </Button>
                                         </div>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
+                                    </PopoverContent>
+                                </Popover>
 
-                            <Popover>
-                                <div className="min-w-0">
-                                    <PopoverTrigger asChild>
-                                        <button
-                                            type="button"
-                                            className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
-                                        >
-                                            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
-                                                <span className="truncate">
-                                                    {t('tasks_index.status_filter_label', 'Status')}
-                                                </span>
-                                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                            </span>
-                                        </button>
-                                    </PopoverTrigger>
-                                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                                        {statusSelectionLabels.map((label) => (
-                                            <span
-                                                key={label}
-                                                className="inline-flex max-w-[180px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                                <Popover>
+                                    <div className="min-w-0">
+                                        <PopoverTrigger asChild>
+                                            <button
+                                                type="button"
+                                                className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
                                             >
-                                                <span className="truncate">{label}</span>
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                                <PopoverContent className="w-[240px] p-0" align="start">
-                                    <div className="p-1">
-                                        {statusOptions.map((option) => {
-                                            if (option.value.startsWith('__divider_')) {
-                                                return <hr key={option.value} className="-mx-1 my-1 border-border" />;
-                                            }
-
-                                            const checked = localFilters.status.includes(option.value);
-
-                                            return (
-                                                <button
-                                                    key={option.value}
-                                                    type="button"
-                                                    className={cn(
-                                                        'flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
-                                                        checked ? 'bg-accent/60' : '',
-                                                    )}
-                                                    onClick={() => {
-                                                        const next = checked
-                                                            ? localFilters.status.filter((value) => value !== option.value)
-                                                            : [...localFilters.status, option.value];
-
-                                                        applyFilters(
-                                                            {
-                                                                status: next.length > 0 ? next : ['open'],
-                                                            },
-                                                            true,
-                                                        );
-                                                    }}
-                                                >
-                                                    <span>{option.label}</span>
-                                                    {checked ? (
-                                                        <Check className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
-                                                    ) : null}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="border-t p-1">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="w-full justify-center"
-                                            onClick={() =>
-                                                applyFilters(
-                                                    {
-                                                        status: ['open'],
-                                                    },
-                                                    true,
-                                                )
-                                            }
-                                        >
-                                            {t('tasks_index.clear_selection', 'Clear selection')}
-                                        </Button>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-
-                            <Popover>
-                                <div className="min-w-0">
-                                    <PopoverTrigger asChild>
-                                        <button
-                                            type="button"
-                                            className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
-                                        >
-                                            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
-                                                <span className="truncate">
-                                                    {t('tasks_index.period_label', 'Period')}
+                                                <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                                                    <span className="truncate">
+                                                        {t('tasks_index.period_label', 'Period')}
+                                                    </span>
+                                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                                 </span>
-                                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                            </button>
+                                        </PopoverTrigger>
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                            <span className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                                <span className="truncate">
+                                                    {hasDateFilterSelection
+                                                        ? formatDateRangeLabel()
+                                                        : t('tasks_index.all_dates', 'All dates')}
+                                                </span>
                                             </span>
-                                        </button>
-                                    </PopoverTrigger>
-                                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                                        <span className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                            <span className="truncate">
-                                                {hasDateFilterSelection
-                                                    ? formatDateRangeLabel()
-                                                    : t('tasks_index.all_dates', 'All dates')}
-                                            </span>
-                                        </span>
-                                    </div>
-                                </div>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="range"
-                                        locale={dateLocale}
-                                        selected={selectedDateRange}
-                                        onSelect={(range) => {
-                                            const from = range?.from
-                                                ? format(
-                                                      range.from,
-                                                      'yyyy-MM-dd',
-                                                  )
-                                                : '';
-                                            const to = range?.to
-                                                ? format(range.to, 'yyyy-MM-dd')
-                                                : from;
-
-                                            applyFilters(
-                                                {
-                                                    date_preset: '',
-                                                    date_from: from,
-                                                    date_to: to,
-                                                },
-                                                true,
-                                            );
-                                        }}
-                                        numberOfMonths={2}
-                                    />
-                                    <div className="border-t p-2">
-                                        <div className="grid grid-cols-2 gap-1.5">
-                                            {datePresetOptions.map((option) => {
-                                                const isActive = localFilters.date_preset === option.value;
-
-                                                return (
-                                                    <Button
-                                                        key={option.value}
-                                                        type="button"
-                                                        size="sm"
-                                                        variant={isActive ? 'secondary' : 'ghost'}
-                                                        className="justify-start"
-                                                        onClick={() => {
-                                                            const resolved = resolveDatePresetRange(option.value);
-                                                            applyFilters(
-                                                                {
-                                                                    date_preset: option.value,
-                                                                    date_from: resolved?.from ?? '',
-                                                                    date_to: resolved?.to ?? '',
-                                                                },
-                                                                true,
-                                                            );
-                                                        }}
-                                                    >
-                                                        {option.label}
-                                                    </Button>
-                                                );
-                                            })}
                                         </div>
                                     </div>
-                                    <div className="border-t p-1">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="w-full justify-center"
-                                            onClick={() =>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="range"
+                                            locale={dateLocale}
+                                            selected={selectedDateRange}
+                                            onSelect={(range) => {
+                                                const from = range?.from
+                                                    ? format(
+                                                          range.from,
+                                                          'yyyy-MM-dd',
+                                                      )
+                                                    : '';
+                                                const to = range?.to
+                                                    ? format(range.to, 'yyyy-MM-dd')
+                                                    : from;
+
                                                 applyFilters(
                                                     {
                                                         date_preset: '',
-                                                        date_from: '',
-                                                        date_to: '',
+                                                        date_from: from,
+                                                        date_to: to,
                                                     },
                                                     true,
-                                                )
-                                            }
-                                        >
-                                            {t('tasks_index.clear_selection', 'Clear selection')}
-                                        </Button>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
+                                                );
+                                            }}
+                                            numberOfMonths={2}
+                                        />
+                                        <div className="border-t p-2">
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                {datePresetOptions.map((option) => {
+                                                    const isActive = localFilters.date_preset === option.value;
 
-                            <Popover>
-                                <div className="min-w-0">
-                                    <PopoverTrigger asChild>
-                                        <button
-                                            type="button"
-                                            className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
-                                        >
-                                            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
-                                                <span className="truncate">
-                                                    {t('tasks_index.grouping_label', 'Grouping')}
+                                                    return (
+                                                        <Button
+                                                            key={option.value}
+                                                            type="button"
+                                                            size="sm"
+                                                            variant={isActive ? 'secondary' : 'ghost'}
+                                                            className="justify-start"
+                                                            onClick={() => {
+                                                                const resolved = resolveDatePresetRange(option.value);
+                                                                applyFilters(
+                                                                    {
+                                                                        date_preset: option.value,
+                                                                        date_from: resolved?.from ?? '',
+                                                                        date_to: resolved?.to ?? '',
+                                                                    },
+                                                                    true,
+                                                                );
+                                                            }}
+                                                        >
+                                                            {option.label}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        <div className="border-t p-1">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="w-full justify-center"
+                                                onClick={() =>
+                                                    applyFilters(
+                                                        {
+                                                            date_preset: '',
+                                                            date_from: '',
+                                                            date_to: '',
+                                                        },
+                                                        true,
+                                                    )
+                                                }
+                                            >
+                                                {t('tasks_index.clear_selection', 'Clear selection')}
+                                            </Button>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+
+                                <Popover>
+                                    <div className="min-w-0">
+                                        <PopoverTrigger asChild>
+                                            <button
+                                                type="button"
+                                                className="inline-flex items-center justify-between gap-1 whitespace-nowrap text-sm font-medium text-foreground/90 hover:text-foreground"
+                                            >
+                                                <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                                                    <span className="truncate">
+                                                        {t('tasks_index.grouping_label', 'Grouping')}
+                                                    </span>
+                                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                                 </span>
-                                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                            </button>
+                                        </PopoverTrigger>
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                            <span className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                                <span className="truncate">{groupingSelectionLabel}</span>
                                             </span>
-                                        </button>
-                                    </PopoverTrigger>
-                                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                                        <span className="inline-flex max-w-[220px] items-center rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                            <span className="truncate">{groupingSelectionLabel}</span>
-                                        </span>
+                                        </div>
                                     </div>
-                                </div>
-                                <PopoverContent className="w-[240px] p-0" align="start">
-                                    <div className="p-1">
-                                        {groupingOptions.map((option) => {
-                                            const checked = localFilters.group_by === option.value;
+                                    <PopoverContent className="w-[240px] p-0" align="start">
+                                        <div className="p-1">
+                                            {groupingOptions.map((option) => {
+                                                const checked = localFilters.group_by === option.value;
 
-                                            return (
-                                                <button
-                                                    key={option.value}
-                                                    type="button"
-                                                    className={cn(
-                                                        'flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
-                                                        checked ? 'bg-accent/60' : '',
-                                                    )}
-                                                    onClick={() =>
-                                                        applyFilters(
-                                                            {
-                                                                group_by: option.value,
-                                                            },
-                                                            true,
-                                                        )
-                                                    }
-                                                >
-                                                    <span>{option.label}</span>
-                                                    {checked ? (
-                                                        <Check className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
-                                                    ) : null}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="border-t p-1">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="w-full justify-center"
-                                            onClick={() =>
-                                                applyFilters(
-                                                    {
-                                                        group_by: 'none',
-                                                    },
-                                                    true,
-                                                )
-                                            }
-                                        >
-                                            {t('tasks_index.clear_selection', 'Clear selection')}
-                                        </Button>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-
-                    </div>
-                </section>
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        className={cn(
+                                                            'flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
+                                                            checked ? 'bg-accent/60' : '',
+                                                        )}
+                                                        onClick={() =>
+                                                            applyFilters(
+                                                                {
+                                                                    group_by: option.value,
+                                                                },
+                                                                true,
+                                                            )
+                                                        }
+                                                    >
+                                                        <span>{option.label}</span>
+                                                        {checked ? (
+                                                            <Check className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+                                                        ) : null}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="border-t p-1">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="w-full justify-center"
+                                                onClick={() =>
+                                                    applyFilters(
+                                                        {
+                                                            group_by: 'none',
+                                                        },
+                                                        true,
+                                                    )
+                                                }
+                                            >
+                                                {t('tasks_index.clear_selection', 'Clear selection')}
+                                            </Button>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        }
+                    />
 
                 <Dialog open={savePresetOpen} onOpenChange={setSavePresetOpen}>
                     <DialogContent>

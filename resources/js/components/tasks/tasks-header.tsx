@@ -10,6 +10,11 @@ import {
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +25,8 @@ type TasksHeaderProps = {
     querySuffix: string;
     searchValue: string;
     onSearchChange: (value: string) => void;
-    onToggleFilters: () => void;
+    filterOpen: boolean;
+    onFilterOpenChange: (open: boolean) => void;
     activeFilterCount: number;
     className?: string;
     titleMeta?: ReactNode;
@@ -36,7 +42,8 @@ export function TasksHeader({
     querySuffix,
     searchValue,
     onSearchChange,
-    onToggleFilters,
+    filterOpen,
+    onFilterOpenChange,
     activeFilterCount,
     className,
     titleMeta = null,
@@ -111,27 +118,33 @@ export function TasksHeader({
                             </Link>
                         </Button>
                     )}
-                    <div className="relative">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 rounded-xl"
-                            onClick={onToggleFilters}
-                        >
-                            <SlidersHorizontal className="h-4 w-4" />
-                            {t('tasks_kanban.filters', 'Filters')}
-                            {activeFilterCount > 0 ? (
-                                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">
-                                    {activeFilterCount}
-                                </span>
-                            ) : null}
-                        </Button>
+                    <Popover open={filterOpen} onOpenChange={onFilterOpenChange}>
+                        <PopoverTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 rounded-xl"
+                            >
+                                <SlidersHorizontal className="h-4 w-4" />
+                                {t('tasks_kanban.filters', 'Filters')}
+                                {activeFilterCount > 0 ? (
+                                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">
+                                        {activeFilterCount}
+                                    </span>
+                                ) : null}
+                            </Button>
+                        </PopoverTrigger>
                         {filterPanel ? (
-                            <div className="absolute right-0 top-full z-40 mt-2">
+                            <PopoverContent
+                                align="end"
+                                side="bottom"
+                                sideOffset={8}
+                                className="w-[min(96vw,420px)] rounded-xl border border-border/60 bg-background p-3 shadow-xl"
+                            >
                                 {filterPanel}
-                            </div>
+                            </PopoverContent>
                         ) : null}
-                    </div>
+                    </Popover>
                     {rightActions}
                 </div>
             </div>

@@ -63,6 +63,25 @@ function MobileNotePath({ breadcrumbs }: { breadcrumbs: BreadcrumbItemType[] }) 
     );
 }
 
+function buildNoteKanbanUrl(noteId: string): string {
+    const params = new URLSearchParams();
+    params.append('note_scope_ids[]', noteId);
+    for (const status of [
+        'open',
+        'backlog',
+        'in_progress',
+        'starred',
+        'assigned',
+        'migrated',
+        'canceled',
+        'completed',
+    ]) {
+        params.append('status[]', status);
+    }
+
+    return `/tasks/kanban?${params.toString()}`;
+}
+
 type JournalPageProps = {
     noteType?: string;
     journalGranularity?: string | null;
@@ -332,6 +351,7 @@ export function AppSidebarHeader({
                                 pageProps.noteActions.blockPreviewUrl ?? null
                             }
                             historyUrl={pageProps.noteActions.historyUrl ?? null}
+                            kanbanUrl={buildNoteKanbanUrl(pageProps.noteActions.id)}
                             dropdownSide="left"
                             enablePropertiesToggle
                             triggerIconClassName={headerIconClassName}
