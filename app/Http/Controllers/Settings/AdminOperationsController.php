@@ -23,11 +23,58 @@ class AdminOperationsController extends Controller
     {
         $this->assertAdmin($request);
 
+        return Inertia::render('settings/admin-operations', [
+            'scheduledHealth' => Inertia::defer(
+                fn (): array => $this->scheduledHealth(),
+                'operations-scheduled',
+            ),
+            'backupProfiles' => Inertia::defer(
+                fn (): array => $this->backupProfiles(),
+                'operations-backups',
+            ),
+            'timeblockSyncMetrics' => Inertia::defer(
+                fn (): array => $this->timeblockSyncMetrics(),
+                'operations-metrics',
+            ),
+            'calendarMetrics' => Inertia::defer(
+                fn (): array => $this->calendarMetrics(),
+                'operations-metrics',
+            ),
+            'noteImageMetrics' => Inertia::defer(
+                fn (): array => $this->noteImageMetrics(),
+                'operations-metrics',
+            ),
+            'telescopeMetrics' => Inertia::defer(
+                fn (): array => $this->telescopeMetrics(),
+                'operations-metrics',
+            ),
+        ]);
+    }
+
+    /**
+     * @return array<int, array{
+     *     key: string,
+     *     label: string,
+     *     command: string,
+     *     timezone: string,
+     *     health_state: string,
+     *     stale_after_minutes: int,
+     *     last_status: string,
+     *     last_started_at: string|null,
+     *     last_finished_at: string|null,
+     *     last_success_at: string|null,
+     *     last_failure_at: string|null,
+     *     last_duration_seconds: int|float|null,
+     *     last_output: string|null
+     * }>
+     */
+    private function scheduledHealth(): array
+    {
         $scheduledDefinitions = collect(config('system-health.scheduled_commands', []))
             ->filter(fn ($item): bool => is_array($item))
             ->all();
 
-        $scheduledHealth = collect($scheduledDefinitions)
+        return collect($scheduledDefinitions)
             ->map(function (array $definition, string $key): array {
                 $state = ScheduledCommandHealthStore::get($key);
                 $staleAfterMinutes = max(1, (int) ($definition['stale_after_minutes'] ?? 60));
@@ -55,8 +102,14 @@ class AdminOperationsController extends Controller
             })
             ->values()
             ->all();
+    }
 
-        $backupProfiles = collect(config('system-health.backup_profiles', []))
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function backupProfiles(): array
+    {
+        return collect(config('system-health.backup_profiles', []))
             ->filter(fn ($item): bool => is_array($item))
             ->map(function (array $profile, string $key): array {
                 $configKey = (string) ($profile['config'] ?? 'backup');
@@ -143,15 +196,6 @@ class AdminOperationsController extends Controller
             })
             ->values()
             ->all();
-
-        return Inertia::render('settings/admin-operations', [
-            'scheduledHealth' => $scheduledHealth,
-            'backupProfiles' => $backupProfiles,
-            'timeblockSyncMetrics' => $this->timeblockSyncMetrics(),
-            'calendarMetrics' => $this->calendarMetrics(),
-            'noteImageMetrics' => $this->noteImageMetrics(),
-            'telescopeMetrics' => $this->telescopeMetrics(),
-        ]);
     }
 
     /**

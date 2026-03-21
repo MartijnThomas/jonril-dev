@@ -5,7 +5,7 @@
     "scripts": {
         "build": "vite build",
         "build:ssr": "vite build && vite build --ssr",
-        "dev": "vite",
+        "dev": "concurrently -c \"#fb7185,#93c5fd\" --names=vite,scheduler \"vite\" \"php artisan schedule:work --no-interaction\" --kill-others",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",

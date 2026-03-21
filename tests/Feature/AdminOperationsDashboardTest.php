@@ -77,13 +77,18 @@ test('admin can view operations dashboard with metrics', function (): void {
         ->get(route('settings.admin.operations', absolute: false))
         ->assertInertia(fn (Assert $page) => $page
             ->component('settings/admin-operations')
-            ->has('backupProfiles', 2)
-            ->has('scheduledHealth')
-            ->where('timeblockSyncMetrics.pending', 1)
-            ->where('calendarMetrics.total', 1)
-            ->where('noteImageMetrics.total', 2)
-            ->where('noteImageMetrics.total_size_bytes', 3072)
-            ->where('telescopeMetrics.enabled', true));
+            ->loadDeferredProps('operations-backups', fn (Assert $deferred) => $deferred
+                ->has('backupProfiles', 2)
+            )
+            ->loadDeferredProps('operations-scheduled', fn (Assert $deferred) => $deferred
+                ->has('scheduledHealth')
+            )
+            ->loadDeferredProps('operations-metrics', fn (Assert $deferred) => $deferred
+                ->where('timeblockSyncMetrics.pending', 1)
+                ->where('calendarMetrics.total', 1)
+                ->where('noteImageMetrics.total', 2)
+                ->where('noteImageMetrics.total_size_bytes', 3072)
+                ->where('telescopeMetrics.enabled', true)));
 });
 
 test('non admin cannot view operations dashboard', function (): void {
@@ -167,17 +172,18 @@ test('scheduled command health states are derived correctly', function (): void 
         ->actingAs($admin)
         ->get(route('settings.admin.operations', absolute: false))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('scheduledHealth', function ($items): bool {
-                $states = collect($items)->mapWithKeys(
-                    fn (array $item): array => [(string) $item['key'] => (string) $item['health_state']]
-                );
+            ->loadDeferredProps('operations-scheduled', fn (Assert $deferred) => $deferred
+                ->where('scheduledHealth', function ($items): bool {
+                    $states = collect($items)->mapWithKeys(
+                        fn (array $item): array => [(string) $item['key'] => (string) $item['health_state']]
+                    );
 
-                return $states->get('healthy_command') === 'healthy'
-                    && $states->get('stale_command') === 'stale'
-                    && $states->get('failed_command') === 'failed'
-                    && $states->get('running_command') === 'running'
-                    && $states->get('unknown_command') === 'unknown';
-            }));
+                    return $states->get('healthy_command') === 'healthy'
+                        && $states->get('stale_command') === 'stale'
+                        && $states->get('failed_command') === 'failed'
+                        && $states->get('running_command') === 'running'
+                        && $states->get('unknown_command') === 'unknown';
+                })));
 });
 
 test('backup profile health states are derived correctly', function (): void {
@@ -218,13 +224,14 @@ test('backup profile health states are derived correctly', function (): void {
         ->actingAs($admin)
         ->get(route('settings.admin.operations', absolute: false))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('backupProfiles', function ($profiles): bool {
-                $states = collect($profiles)->mapWithKeys(
-                    fn (array $profile): array => [(string) $profile['key'] => (string) $profile['health_state']]
-                );
+            ->loadDeferredProps('operations-backups', fn (Assert $deferred) => $deferred
+                ->where('backupProfiles', function ($profiles): bool {
+                    $states = collect($profiles)->mapWithKeys(
+                        fn (array $profile): array => [(string) $profile['key'] => (string) $profile['health_state']]
+                    );
 
-                return $states->get('healthy') === 'healthy'
-                    && $states->get('stale') === 'stale'
-                    && $states->get('error') === 'error';
-            }));
+                    return $states->get('healthy') === 'healthy'
+                        && $states->get('stale') === 'stale'
+                        && $states->get('error') === 'error';
+                })));
 });
