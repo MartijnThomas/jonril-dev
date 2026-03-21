@@ -131,6 +131,62 @@ test('updateTimeblockEvent uses remote href and if-match etag header', function 
     expect($result['etag'])->toBe('etag-new');
 });
 
+test('updateTimeblockEvent retries once without if-match on 412 and returns new etag', function () {
+    [$calendar, $timeblock, $event] = makeOutboundSyncModels();
+
+    $link = TimeblockCalendarLink::query()->create([
+        'workspace_id' => $calendar->workspace_id,
+        'calendar_id' => $calendar->id,
+        'note_id' => (string) str()->uuid(),
+        'event_id' => $event->id,
+        'timeblock_id' => $timeblock->id,
+        'remote_uid' => 'uid-412',
+        'remote_href' => 'https://caldav.example.com/user/primary/uid-412.ics',
+        'remote_etag' => 'etag-stale',
+        'sync_status' => TimeblockCalendarLink::STATUS_PENDING_UPDATE,
+    ]);
+
+    $client = Mockery::mock(Client::class);
+    $client->shouldReceive('request')
+        ->once()
+        ->withArgs(function (string $method, string $href, string $body, array $headers): bool {
+            expect($method)->toBe('PUT');
+            expect($href)->toBe('https://caldav.example.com/user/primary/uid-412.ics');
+            expect($headers['If-Match'] ?? null)->toBe('etag-stale');
+            expect($body)->toContain('UID:uid-412');
+
+            return true;
+        })
+        ->andReturn([
+            'statusCode' => 412,
+            'headers' => [],
+            'body' => '',
+        ]);
+    $client->shouldReceive('request')
+        ->once()
+        ->withArgs(function (string $method, string $href, string $body, array $headers): bool {
+            expect($method)->toBe('PUT');
+            expect($href)->toBe('https://caldav.example.com/user/primary/uid-412.ics');
+            expect(array_key_exists('If-Match', $headers))->toBeFalse();
+            expect($body)->toContain('UID:uid-412');
+
+            return true;
+        })
+        ->andReturn([
+            'statusCode' => 200,
+            'headers' => ['ETag' => ['"etag-after-retry"']],
+            'body' => '',
+        ]);
+
+    $service = new TestableCalDavService($client);
+
+    $result = $service->updateTimeblockEvent($calendar, $link, $event, $timeblock);
+
+    expect($result['uid'])->toBe('uid-412');
+    expect($result['href'])->toBe('https://caldav.example.com/user/primary/uid-412.ics');
+    expect($result['etag'])->toBe('etag-after-retry');
+});
+
 test('deleteTimeblockEvent skips request when remote href is missing', function () {
     [$calendar, $timeblock, $event] = makeOutboundSyncModels();
 

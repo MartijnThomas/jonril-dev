@@ -457,80 +457,11 @@ export default function TasksKanban({
 
     const [searchInput, setSearchInput] = useState(filters.q ?? '');
     const [showFiltersRow, setShowFiltersRow] = useState(false);
-    const [boardColumns, setBoardColumns] = useState<KanbanColumn[]>(kanbanColumns);
     const [activeDragTask, setActiveDragTask] = useState<DragTaskMeta | null>(null);
-    const [movingTaskIds, setMovingTaskIds] = useState<number[]>([]);
-    const [pendingMoveTargets, setPendingMoveTargets] = useState<Record<number, string>>({});
+    const [optimisticMoves, setOptimisticMoves] = useState<
+        Record<number, { fromColumnKey: string; targetColumnKey: string; task: TaskItem }>
+    >({});
     const minSearchChars = 3;
-
-    useEffect(() => {
-        const pendingEntries = Object.entries(pendingMoveTargets);
-        if (pendingEntries.length === 0) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setBoardColumns(kanbanColumns);
-            return;
-        }
-
-        const movedTaskById = new Map<number, TaskItem>();
-        boardColumns.forEach((column) => {
-            column.tasks.forEach((task) => {
-                if (pendingMoveTargets[task.id]) {
-                    movedTaskById.set(task.id, task);
-                }
-            });
-        });
-
-        const nextColumns = kanbanColumns.map((column) => ({
-            ...column,
-            tasks: [...column.tasks],
-            task_count: column.tasks.length,
-        }));
-
-        pendingEntries.forEach(([taskIdRaw, targetColumnKey]) => {
-            const taskId = Number(taskIdRaw);
-            const movedTask = movedTaskById.get(taskId);
-            if (!movedTask) {
-                return;
-            }
-
-            nextColumns.forEach((column) => {
-                column.tasks = column.tasks.filter((task) => task.id !== taskId);
-                column.task_count = column.tasks.length;
-            });
-
-            const targetColumn = nextColumns.find((column) => column.key === targetColumnKey);
-            if (!targetColumn) {
-                return;
-            }
-
-            targetColumn.tasks = [movedTask, ...targetColumn.tasks];
-            targetColumn.task_count = targetColumn.tasks.length;
-        });
-
-        setBoardColumns(nextColumns);
-    }, [boardColumns, kanbanColumns, pendingMoveTargets]);
-
-    useEffect(() => {
-        if (Object.keys(pendingMoveTargets).length === 0) {
-            return;
-        }
-
-        const nextPending = { ...pendingMoveTargets };
-        for (const [taskIdRaw, targetColumnKey] of Object.entries(pendingMoveTargets)) {
-            const taskId = Number(taskIdRaw);
-            const confirmedInTarget = kanbanColumns.some(
-                (column) => column.key === targetColumnKey && column.tasks.some((task) => task.id === taskId),
-            );
-            if (confirmedInTarget) {
-                delete nextPending[taskId];
-            }
-        }
-
-        if (Object.keys(nextPending).length !== Object.keys(pendingMoveTargets).length) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setPendingMoveTargets(nextPending);
-        }
-    }, [kanbanColumns, pendingMoveTargets]);
 
     const noteTree = useMemo<NoteTreeNode[]>(() => {
         const roots: NoteTreeNode[] = [];
@@ -684,16 +615,6 @@ export default function TasksKanban({
         [includeColumnKeys],
     );
 
-    const taskById = useMemo(() => {
-        const map = new Map<number, TaskItem>();
-        boardColumns.forEach((column) => {
-            column.tasks.forEach((task) => {
-                map.set(task.id, task);
-            });
-        });
-        return map;
-    }, [boardColumns]);
-
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
@@ -707,25 +628,25 @@ export default function TasksKanban({
         taskId: number,
         fromColumnKey: string,
         targetColumnKey: string,
+        fallbackTask: TaskItem | null = null,
     ): KanbanColumn[] => {
         if (fromColumnKey === targetColumnKey) {
             return columns;
         }
 
-        let movedTask: TaskItem | null = null;
+        let movedTask: TaskItem | null = fallbackTask;
 
         const withoutTask = columns.map((column) => {
-            if (column.key !== fromColumnKey) {
-                return column;
-            }
-
             const remaining = column.tasks.filter((task) => {
-                if (task.id === taskId) {
-                    movedTask = task;
-                    return false;
+                if (task.id !== taskId) {
+                    return true;
                 }
 
-                return true;
+                if (!movedTask || column.key === fromColumnKey) {
+                    movedTask = task;
+                }
+
+                return false;
             });
 
             return {
@@ -744,7 +665,7 @@ export default function TasksKanban({
                 return column;
             }
 
-            const nextTasks = [movedTask, ...column.tasks];
+            const nextTasks = [movedTask, ...column.tasks.filter((task) => task.id !== taskId)];
 
             return {
                 ...column,
@@ -753,6 +674,42 @@ export default function TasksKanban({
             };
         });
     };
+
+    const boardColumns = useMemo(() => {
+        let nextColumns = kanbanColumns.map((column) => ({
+            ...column,
+            tasks: [...column.tasks],
+            task_count: column.tasks.length,
+        }));
+
+        for (const [taskIdRaw, move] of Object.entries(optimisticMoves)) {
+            const taskId = Number(taskIdRaw);
+            nextColumns = moveTaskBetweenColumns(
+                nextColumns,
+                taskId,
+                move.fromColumnKey,
+                move.targetColumnKey,
+                move.task,
+            );
+        }
+
+        return nextColumns;
+    }, [kanbanColumns, optimisticMoves]);
+
+    const movingTaskIds = useMemo(
+        () => Object.keys(optimisticMoves).map((taskIdRaw) => Number(taskIdRaw)),
+        [optimisticMoves],
+    );
+
+    const taskById = useMemo(() => {
+        const map = new Map<number, TaskItem>();
+        boardColumns.forEach((column) => {
+            column.tasks.forEach((task) => {
+                map.set(task.id, task);
+            });
+        });
+        return map;
+    }, [boardColumns]);
 
     const applyDropToColumn = (dragTask: DragTaskMeta, targetColumnKey: string): void => {
         if (dragTask.fromColumnKey === targetColumnKey) {
@@ -764,14 +721,13 @@ export default function TasksKanban({
             return;
         }
 
-        const previousColumns = boardColumns;
-        setBoardColumns((current) =>
-            moveTaskBetweenColumns(current, task.id, dragTask.fromColumnKey, targetColumnKey),
-        );
-        setMovingTaskIds((current) => [...current, task.id]);
-        setPendingMoveTargets((current) => ({
+        setOptimisticMoves((current) => ({
             ...current,
-            [task.id]: targetColumnKey,
+            [task.id]: {
+                fromColumnKey: dragTask.fromColumnKey,
+                targetColumnKey,
+                task,
+            },
         }));
 
         router.patch(
@@ -787,8 +743,7 @@ export default function TasksKanban({
                 preserveScroll: true,
                 replace: true,
                 onError: () => {
-                    setBoardColumns(previousColumns);
-                    setPendingMoveTargets((current) => {
+                    setOptimisticMoves((current) => {
                         const next = { ...current };
                         delete next[task.id];
 
@@ -796,7 +751,12 @@ export default function TasksKanban({
                     });
                 },
                 onFinish: () => {
-                    setMovingTaskIds((current) => current.filter((id) => id !== task.id));
+                    setOptimisticMoves((current) => {
+                        const next = { ...current };
+                        delete next[task.id];
+
+                        return next;
+                    });
                 },
             },
         );

@@ -190,6 +190,13 @@ class CalDavService
         $response = $client->request('PUT', $href, $ical, $headers);
 
         $status = (int) ($response['statusCode'] ?? 0);
+        if ($status === 412 && isset($headers['If-Match'])) {
+            // Stale ETag: retry once without If-Match so we can re-establish remote_etag.
+            unset($headers['If-Match']);
+            $response = $client->request('PUT', $href, $ical, $headers);
+            $status = (int) ($response['statusCode'] ?? 0);
+        }
+
         if (! in_array($status, [200, 201, 204], true)) {
             throw new \RuntimeException("CalDAV update failed with status {$status}");
         }

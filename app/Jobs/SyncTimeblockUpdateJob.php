@@ -77,7 +77,9 @@ class SyncTimeblockUpdateJob implements ShouldQueue
                 'last_error' => $e->getMessage(),
             ]);
 
-            throw $e;
+            if ((string) config('queue.default') !== 'sync') {
+                throw $e;
+            }
         } finally {
             $lock->release();
         }
