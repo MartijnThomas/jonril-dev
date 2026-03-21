@@ -6,5 +6,7 @@ Schedule::command('telescope:prune --hours=48')->daily();
 
 Schedule::command('backup:clean')->daily()->at('05:45')->timezone('Europe/Amsterdam');
 Schedule::command('backup:run')->daily()->at('06:00')->timezone('Europe/Amsterdam');
+Schedule::command('backup:run --only-db --config=backup_hourly_db')->hourlyAt(15)->timezone('Europe/Amsterdam');
+Schedule::command('backup:clean --config=backup_hourly_db')->hourlyAt(25)->timezone('Europe/Amsterdam');
 Schedule::command('notes:prune-images')->daily()->at('04:45')->timezone('Europe/Amsterdam');
 Schedule::command('timeblocks:sync-outbound --limit=100')->everyMinute();
