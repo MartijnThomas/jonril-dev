@@ -7,6 +7,7 @@ import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import { Plus } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 
 import { MeetingNotesSidebar } from '@/components/meeting-notes-sidebar';
 import {
@@ -354,6 +355,55 @@ function SimpleEditorComponent({
     useEffect(() => {
         setMeetingParticipantOptions(mentionSuggestions);
     }, [mentionSuggestions]);
+    const [mobileKeyboardInset, setMobileKeyboardInset] = useState(0);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
+        if (!isMobileViewport) {
+            setMobileKeyboardInset(0);
+            return;
+        }
+
+        const updateKeyboardInset = () => {
+            const viewport = window.visualViewport;
+            if (!viewport) {
+                setMobileKeyboardInset(0);
+                return;
+            }
+
+            const viewportBottom = viewport.height + viewport.offsetTop;
+            const keyboardInset = Math.max(0, Math.round(window.innerHeight - viewportBottom));
+            setMobileKeyboardInset(keyboardInset > 32 ? keyboardInset : 0);
+        };
+
+        updateKeyboardInset();
+        window.visualViewport?.addEventListener('resize', updateKeyboardInset);
+        window.visualViewport?.addEventListener('scroll', updateKeyboardInset);
+        window.addEventListener('orientationchange', updateKeyboardInset);
+
+        return () => {
+            window.visualViewport?.removeEventListener('resize', updateKeyboardInset);
+            window.visualViewport?.removeEventListener('scroll', updateKeyboardInset);
+            window.removeEventListener('orientationchange', updateKeyboardInset);
+        };
+    }, []);
+
+    const mobileScrollInsetStyle = useMemo<CSSProperties>(() => {
+        if (mobileKeyboardInset <= 0) {
+            return {};
+        }
+
+        const inset = mobileKeyboardInset + 96;
+
+        return {
+            paddingBottom: `${inset}px`,
+            scrollPaddingBottom: `${inset}px`,
+        };
+    }, [mobileKeyboardInset]);
 
     const getCookie = (name: string): string | null => {
         const match = document.cookie
@@ -881,7 +931,7 @@ function SimpleEditorComponent({
 
     return (
         <div className="flex h-full w-full min-h-0 overflow-hidden">
-            <div className="flex-1 min-w-0 overflow-y-auto">
+            <div className="flex-1 min-w-0 overflow-y-auto" style={mobileScrollInsetStyle}>
                 <EditorContext.Provider value={{ editor }}>
                     {!readOnly ? blockUi : null}
                     {showRelatedPanel ? (

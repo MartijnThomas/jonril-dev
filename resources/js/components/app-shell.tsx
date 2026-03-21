@@ -1,7 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import { Loader2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import type { EditorVersion } from '@/contexts/editor-version-context';
 import { EditorVersionContext } from '@/contexts/editor-version-context';
@@ -28,6 +28,7 @@ export function AppShell({ children, variant = 'header' }: Props) {
     const [editorVersion, setEditorVersion] = useState<EditorVersion>(null);
     const { isChecking } = useSessionGuard(editorVersion);
     const isMobile = useIsMobile();
+    const [mobileViewportHeight, setMobileViewportHeight] = useState<number | null>(null);
     const isOpen = usePage().props.sidebarOpen;
     const cookieOpen = useMemo(() => {
         if (typeof document === 'undefined') {
@@ -48,6 +49,33 @@ export function AppShell({ children, variant = 'header' }: Props) {
         isMobile ? false : (cookieOpen ?? isOpen),
     );
 
+    useEffect(() => {
+        if (!isMobile) {
+            return;
+        }
+
+        const updateViewportHeight = () => {
+            const viewport = window.visualViewport;
+            if (!viewport) {
+                setMobileViewportHeight(window.innerHeight);
+                return;
+            }
+
+            setMobileViewportHeight(Math.round(viewport.height));
+        };
+
+        updateViewportHeight();
+        window.visualViewport?.addEventListener('resize', updateViewportHeight);
+        window.visualViewport?.addEventListener('scroll', updateViewportHeight);
+        window.addEventListener('orientationchange', updateViewportHeight);
+
+        return () => {
+            window.visualViewport?.removeEventListener('resize', updateViewportHeight);
+            window.visualViewport?.removeEventListener('scroll', updateViewportHeight);
+            window.removeEventListener('orientationchange', updateViewportHeight);
+        };
+    }, [isMobile]);
+
     if (variant === 'header') {
         return (
             <EditorVersionContext.Provider value={{ version: editorVersion, setVersion: setEditorVersion }}>
@@ -60,7 +88,12 @@ export function AppShell({ children, variant = 'header' }: Props) {
     return (
         <EditorVersionContext.Provider value={{ version: editorVersion, setVersion: setEditorVersion }}>
             {isChecking && <SessionCheckOverlay />}
-            <SidebarProvider className="h-svh overflow-hidden" open={leftSidebarOpen} onOpenChange={setLeftSidebarOpen}>
+            <SidebarProvider
+                className="overflow-hidden"
+                style={{ height: mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh' }}
+                open={leftSidebarOpen}
+                onOpenChange={setLeftSidebarOpen}
+            >
                 {children}
             </SidebarProvider>
         </EditorVersionContext.Provider>

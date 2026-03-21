@@ -1,7 +1,7 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import { parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
-import { RotateCcw } from 'lucide-react';
+import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { SimpleEditor } from '@/components/tiptap-templates/simple/simple-editor';
@@ -143,6 +143,15 @@ export default function NoteRevisions({
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                     {/* Toolbar */}
                     <div className="flex h-10 shrink-0 items-center gap-3 border-b px-4">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="md:hidden"
+                            onClick={() => router.visit(noteUrl)}
+                        >
+                            <ArrowLeft className="mr-1.5 size-3.5" />
+                            Back to note
+                        </Button>
                         <span className="text-sm text-muted-foreground">
                             {isCurrentVersion
                                 ? 'Current version'

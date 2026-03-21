@@ -172,7 +172,7 @@ export default function AppSidebarLayout({
                 setRightSidebarOpen={setIsRightSidebarOpen}
             />
             <AppSidebar />
-            <AppContent variant="sidebar" className="overflow-hidden">
+            <AppContent variant="sidebar" className="h-full min-h-0 overflow-hidden">
                 <LeftSidebarEdgeToggle />
                 <RightSidebarEdgeToggle
                     open={isRightSidebarOpen}
