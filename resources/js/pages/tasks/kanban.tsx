@@ -460,11 +460,77 @@ export default function TasksKanban({
     const [boardColumns, setBoardColumns] = useState<KanbanColumn[]>(kanbanColumns);
     const [activeDragTask, setActiveDragTask] = useState<DragTaskMeta | null>(null);
     const [movingTaskIds, setMovingTaskIds] = useState<number[]>([]);
+    const [pendingMoveTargets, setPendingMoveTargets] = useState<Record<number, string>>({});
     const minSearchChars = 3;
 
     useEffect(() => {
-        setBoardColumns(kanbanColumns);
-    }, [kanbanColumns]);
+        const pendingEntries = Object.entries(pendingMoveTargets);
+        if (pendingEntries.length === 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setBoardColumns(kanbanColumns);
+            return;
+        }
+
+        const movedTaskById = new Map<number, TaskItem>();
+        boardColumns.forEach((column) => {
+            column.tasks.forEach((task) => {
+                if (pendingMoveTargets[task.id]) {
+                    movedTaskById.set(task.id, task);
+                }
+            });
+        });
+
+        const nextColumns = kanbanColumns.map((column) => ({
+            ...column,
+            tasks: [...column.tasks],
+            task_count: column.tasks.length,
+        }));
+
+        pendingEntries.forEach(([taskIdRaw, targetColumnKey]) => {
+            const taskId = Number(taskIdRaw);
+            const movedTask = movedTaskById.get(taskId);
+            if (!movedTask) {
+                return;
+            }
+
+            nextColumns.forEach((column) => {
+                column.tasks = column.tasks.filter((task) => task.id !== taskId);
+                column.task_count = column.tasks.length;
+            });
+
+            const targetColumn = nextColumns.find((column) => column.key === targetColumnKey);
+            if (!targetColumn) {
+                return;
+            }
+
+            targetColumn.tasks = [movedTask, ...targetColumn.tasks];
+            targetColumn.task_count = targetColumn.tasks.length;
+        });
+
+        setBoardColumns(nextColumns);
+    }, [boardColumns, kanbanColumns, pendingMoveTargets]);
+
+    useEffect(() => {
+        if (Object.keys(pendingMoveTargets).length === 0) {
+            return;
+        }
+
+        const nextPending = { ...pendingMoveTargets };
+        for (const [taskIdRaw, targetColumnKey] of Object.entries(pendingMoveTargets)) {
+            const taskId = Number(taskIdRaw);
+            const confirmedInTarget = kanbanColumns.some(
+                (column) => column.key === targetColumnKey && column.tasks.some((task) => task.id === taskId),
+            );
+            if (confirmedInTarget) {
+                delete nextPending[taskId];
+            }
+        }
+
+        if (Object.keys(nextPending).length !== Object.keys(pendingMoveTargets).length) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setPendingMoveTargets(nextPending);
+        }
+    }, [kanbanColumns, pendingMoveTargets]);
 
     const noteTree = useMemo<NoteTreeNode[]>(() => {
         const roots: NoteTreeNode[] = [];
@@ -703,6 +769,10 @@ export default function TasksKanban({
             moveTaskBetweenColumns(current, task.id, dragTask.fromColumnKey, targetColumnKey),
         );
         setMovingTaskIds((current) => [...current, task.id]);
+        setPendingMoveTargets((current) => ({
+            ...current,
+            [task.id]: targetColumnKey,
+        }));
 
         router.patch(
             '/tasks/status',
@@ -718,6 +788,12 @@ export default function TasksKanban({
                 replace: true,
                 onError: () => {
                     setBoardColumns(previousColumns);
+                    setPendingMoveTargets((current) => {
+                        const next = { ...current };
+                        delete next[task.id];
+
+                        return next;
+                    });
                 },
                 onFinish: () => {
                     setMovingTaskIds((current) => current.filter((id) => id !== task.id));
