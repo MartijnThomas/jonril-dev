@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Note;
 use App\Models\NoteTask;
 use App\Models\User;
+use App\Services\TimeblockCalendarSyncService;
 use App\Support\Notes\NoteHeadingIndexer;
 use App\Support\Notes\NoteTaskIndexer;
 use App\Support\Notes\TimeblockIndexer;
@@ -26,6 +27,7 @@ class ReindexNoteJob implements ShouldQueue
         NoteTaskIndexer $taskIndexer,
         NoteHeadingIndexer $headingIndexer,
         TimeblockIndexer $timeblockIndexer,
+        TimeblockCalendarSyncService $timeblockCalendarSyncService,
     ): void {
         $note = Note::withTrashed()->find($this->noteId);
 
@@ -42,7 +44,8 @@ class ReindexNoteJob implements ShouldQueue
 
         $taskIndexer->reindexNote($note);
         $headingIndexer->reindexNote($note);
-        $timeblockIndexer->reindexNote($note, $defaultDurationMinutes, $userTimezone);
+        $timeblockDelta = $timeblockIndexer->reindexNote($note, $defaultDurationMinutes, $userTimezone);
+        $timeblockCalendarSyncService->queueNoteTimeblockChanges($note, $user, $timeblockDelta);
 
         // Sync freshly inserted tasks to the search index
         NoteTask::query()->where('note_id', $note->id)->searchable();

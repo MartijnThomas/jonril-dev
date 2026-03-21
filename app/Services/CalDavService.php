@@ -7,6 +7,8 @@ use App\Models\CalendarItem;
 use App\Models\CalendarSyncedRange;
 use App\Models\Event;
 use App\Models\Note;
+use App\Models\Timeblock;
+use App\Models\TimeblockCalendarLink;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Sabre\DAV\Client;
@@ -65,7 +67,8 @@ class CalDavService
      */
     public function sync(Calendar $calendar): void
     {
-        $client = $this->makeClient($calendar->url, $calendar->username, $calendar->password);
+        $credentials = $this->credentialsForCalendar($calendar);
+        $client = $this->makeClient($calendar->url, $credentials['username'], $credentials['password']);
 
         $rangeStart = now()->subDays(7)->startOfDay();
         $rangeEnd = now()->addDays(30)->endOfDay();
@@ -103,7 +106,8 @@ class CalDavService
      */
     public function syncPeriod(Calendar $calendar, string $period): void
     {
-        $client = $this->makeClient($calendar->url, $calendar->username, $calendar->password);
+        $credentials = $this->credentialsForCalendar($calendar);
+        $client = $this->makeClient($calendar->url, $credentials['username'], $credentials['password']);
 
         $month = Carbon::createFromFormat('Y-m', $period);
         $rangeStart = $month->copy()->startOfMonth()->startOfDay();
@@ -125,6 +129,99 @@ class CalDavService
             ['calendar_id' => $calendar->id, 'period' => $period],
             ['synced_at' => now()],
         );
+    }
+
+    /**
+     * @return array{uid: string, href: string, etag: string|null}
+     */
+    public function createTimeblockEvent(
+        Calendar $calendar,
+        Event $event,
+        Timeblock $timeblock,
+        string $uid,
+    ): array {
+        $credentials = $this->credentialsForCalendar($calendar);
+        $client = $this->makeClient($calendar->url, $credentials['username'], $credentials['password']);
+        $href = $this->buildTimeblockHref($calendar->url, $uid);
+        $ical = $this->buildTimeblockIcal($uid, $event, $timeblock);
+
+        $response = $client->request('PUT', $href, $ical, [
+            'Content-Type' => 'text/calendar; charset=utf-8',
+        ]);
+
+        $status = (int) ($response['statusCode'] ?? 0);
+        if (! in_array($status, [200, 201, 204], true)) {
+            throw new \RuntimeException("CalDAV create failed with status {$status}");
+        }
+
+        return [
+            'uid' => $uid,
+            'href' => $href,
+            'etag' => $this->extractResponseEtag($response),
+        ];
+    }
+
+    /**
+     * @return array{uid: string, href: string, etag: string|null}
+     */
+    public function updateTimeblockEvent(
+        Calendar $calendar,
+        TimeblockCalendarLink $link,
+        Event $event,
+        Timeblock $timeblock,
+    ): array {
+        $credentials = $this->credentialsForCalendar($calendar);
+        $client = $this->makeClient($calendar->url, $credentials['username'], $credentials['password']);
+        $uid = is_string($link->remote_uid) && trim($link->remote_uid) !== ''
+            ? trim($link->remote_uid)
+            : "jonril-timeblock-{$event->id}";
+        $href = is_string($link->remote_href) && trim($link->remote_href) !== ''
+            ? trim($link->remote_href)
+            : $this->buildTimeblockHref($calendar->url, $uid);
+        $ical = $this->buildTimeblockIcal($uid, $event, $timeblock);
+
+        $headers = [
+            'Content-Type' => 'text/calendar; charset=utf-8',
+        ];
+        if (is_string($link->remote_etag) && trim($link->remote_etag) !== '') {
+            $headers['If-Match'] = trim($link->remote_etag);
+        }
+
+        $response = $client->request('PUT', $href, $ical, $headers);
+
+        $status = (int) ($response['statusCode'] ?? 0);
+        if (! in_array($status, [200, 201, 204], true)) {
+            throw new \RuntimeException("CalDAV update failed with status {$status}");
+        }
+
+        return [
+            'uid' => $uid,
+            'href' => $href,
+            'etag' => $this->extractResponseEtag($response),
+        ];
+    }
+
+    public function deleteTimeblockEvent(Calendar $calendar, TimeblockCalendarLink $link): void
+    {
+        $href = is_string($link->remote_href) && trim($link->remote_href) !== ''
+            ? trim($link->remote_href)
+            : null;
+        if (! $href) {
+            return;
+        }
+
+        $credentials = $this->credentialsForCalendar($calendar);
+        $client = $this->makeClient($calendar->url, $credentials['username'], $credentials['password']);
+        $headers = [];
+        if (is_string($link->remote_etag) && trim($link->remote_etag) !== '') {
+            $headers['If-Match'] = trim($link->remote_etag);
+        }
+
+        $response = $client->request('DELETE', $href, null, $headers);
+        $status = (int) ($response['statusCode'] ?? 0);
+        if (! in_array($status, [200, 202, 204, 404], true)) {
+            throw new \RuntimeException("CalDAV delete failed with status {$status}");
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -481,12 +578,105 @@ class CalDavService
         );
     }
 
-    private function makeClient(string $url, string $username, string $password): Client
+    protected function makeClient(string $url, string $username, string $password): Client
     {
         return new Client([
             'baseUri' => $url,
             'userName' => $username,
             'password' => $password,
         ]);
+    }
+
+    /**
+     * @return array{username: string, password: string}
+     */
+    private function credentialsForCalendar(Calendar $calendar): array
+    {
+        $connection = $calendar->connection()->first();
+        if (! $connection) {
+            throw new \RuntimeException("Calendar {$calendar->id} has no connection.");
+        }
+
+        return [
+            'username' => (string) $connection->username,
+            'password' => (string) $connection->password,
+        ];
+    }
+
+    private function buildTimeblockHref(string $calendarUrl, string $uid): string
+    {
+        $base = rtrim($calendarUrl, '/');
+        $safeUid = rawurlencode($uid);
+
+        return "{$base}/{$safeUid}.ics";
+    }
+
+    private function extractResponseEtag(array $response): ?string
+    {
+        $headers = $response['headers'] ?? [];
+        if (! is_array($headers)) {
+            return null;
+        }
+
+        $etag = $headers['etag'] ?? $headers['ETag'] ?? null;
+        if (is_array($etag)) {
+            $etag = $etag[0] ?? null;
+        }
+
+        if (! is_string($etag) || trim($etag) === '') {
+            return null;
+        }
+
+        return trim($etag, "\" \t\n\r\0\x0B");
+    }
+
+    private function buildTimeblockIcal(string $uid, Event $event, Timeblock $timeblock): string
+    {
+        $startUtc = $event->starts_at?->copy()->utc();
+        $endUtc = $event->ends_at?->copy()->utc();
+        if (! $startUtc || ! $endUtc) {
+            throw new \RuntimeException('Timeblock event is missing start or end time.');
+        }
+
+        $now = now()->utc()->format('Ymd\THis\Z');
+        $dtStart = $startUtc->format('Ymd\THis\Z');
+        $dtEnd = $endUtc->format('Ymd\THis\Z');
+        $summary = $this->escapeIcalText((string) $event->title);
+        $location = $this->escapeIcalText((string) ($timeblock->location ?? ''));
+        $description = $this->escapeIcalText('Created by Jonril timeblock sync');
+
+        $lines = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Jonril//Timeblock Sync//EN',
+            'CALSCALE:GREGORIAN',
+            'BEGIN:VEVENT',
+            "UID:{$uid}",
+            "DTSTAMP:{$now}",
+            "DTSTART:{$dtStart}",
+            "DTEND:{$dtEnd}",
+            "SUMMARY:{$summary}",
+            "DESCRIPTION:{$description}",
+            'X-JONRIL-SOURCE:TIMEBLOCK',
+            "X-JONRIL-EVENT-ID:{$event->id}",
+        ];
+
+        if ($location !== '') {
+            $lines[] = "LOCATION:{$location}";
+        }
+
+        $lines[] = 'END:VEVENT';
+        $lines[] = 'END:VCALENDAR';
+
+        return implode("\r\n", $lines)."\r\n";
+    }
+
+    private function escapeIcalText(string $value): string
+    {
+        return str_replace(
+            ['\\', ';', ',', "\r\n", "\n", "\r"],
+            ['\\\\', '\;', '\,', '\n', '\n', '\n'],
+            $value,
+        );
     }
 }

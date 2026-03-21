@@ -28,6 +28,7 @@ type Props = {
     noteType: string | null;
     journalGranularity: string | null;
     journalDate: string | null;
+    timeblockSyncByBlockId?: Record<string, 'pending' | 'failed'>;
     defaultTimeblockDurationMinutes: number;
     editorMode: 'legacy' | 'block';
     editorReadOnly?: boolean;
@@ -107,6 +108,7 @@ export default function Dashboard({
     noteType,
     journalGranularity,
     journalDate,
+    timeblockSyncByBlockId = {},
     defaultTimeblockDurationMinutes,
     editorMode,
     editorReadOnly = false,
@@ -229,6 +231,7 @@ export default function Dashboard({
                 noteType={noteType}
                 journalGranularity={journalGranularity}
                 journalDate={journalDate}
+                timeblockSyncByBlockId={timeblockSyncByBlockId}
                 defaultTimeblockDurationMinutes={defaultTimeblockDurationMinutes}
                 editorMode={editorMode}
                 readOnly={editorReadOnly}

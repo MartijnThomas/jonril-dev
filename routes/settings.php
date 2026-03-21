@@ -46,6 +46,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('workspaces.settings.data');
     Route::patch('settings/workspaces/{workspace}', [WorkspaceController::class, 'update'])
         ->name('workspaces.settings.update');
+    Route::patch('settings/workspaces/{workspace}/timeblock-sync-target', [WorkspaceController::class, 'updateTimeblockSyncTarget'])
+        ->name('workspaces.settings.timeblock-sync-target.update');
+    Route::post('settings/workspaces/{workspace}/timeblock-sync-retry-failed', [WorkspaceController::class, 'retryFailedTimeblockSync'])
+        ->name('workspaces.settings.timeblock-sync.retry-failed');
     Route::post('settings/workspaces/{workspace}/clear', [WorkspaceController::class, 'clear'])
         ->name('workspaces.settings.clear');
     Route::delete('settings/workspaces/{workspace}', [WorkspaceController::class, 'destroy'])
@@ -63,6 +67,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('settings/workspaces/{workspace}/calendars', [CalendarController::class, 'store'])
         ->name('workspaces.settings.calendars.store');
+    Route::post('settings/workspaces/{workspace}/calendars/connections/{connectionId}/sync', [CalendarController::class, 'syncConnection'])
+        ->name('workspaces.settings.calendars.connections.sync');
+    Route::patch('settings/workspaces/{workspace}/calendars/connections/{connectionId}/password', [CalendarController::class, 'updateConnectionPassword'])
+        ->name('workspaces.settings.calendars.connections.password');
+    Route::delete('settings/workspaces/{workspace}/calendars/connections/{connectionId}', [CalendarController::class, 'destroyConnection'])
+        ->name('workspaces.settings.calendars.connections.destroy');
     Route::delete('settings/workspaces/{workspace}/calendars/{calendar}', [CalendarController::class, 'destroy'])
         ->name('workspaces.settings.calendars.destroy');
     Route::post('settings/workspaces/{workspace}/calendars/{calendar}/sync', [CalendarController::class, 'sync'])

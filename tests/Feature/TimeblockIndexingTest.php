@@ -1,11 +1,17 @@
 <?php
 
+use App\Jobs\SyncTimeblockCreateJob;
+use App\Jobs\SyncTimeblockDeleteJob;
+use App\Jobs\SyncTimeblockUpdateJob;
+use App\Models\Calendar;
 use App\Models\Event;
 use App\Models\Note;
 use App\Models\Timeblock;
+use App\Models\TimeblockCalendarLink;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
 
@@ -168,4 +174,305 @@ it('anchors daily timeblocks to journal_date while storing utc times for user ti
         ->and($event->timezone)->toBe('Europe/Amsterdam')
         ->and($event->starts_at?->format('Y-m-d H:i:s'))->toBe('2026-03-11 23:30:00')
         ->and($event->ends_at?->format('Y-m-d H:i:s'))->toBe('2026-03-12 00:00:00');
+});
+
+it('keeps event and timeblock ids stable when a timeblock is edited', function (): void {
+    $workspace = Workspace::factory()->create();
+    $blockId = (string) str()->uuid();
+
+    $note = Note::factory()
+        ->for($workspace)
+        ->create([
+            'type' => Note::TYPE_JOURNAL,
+            'journal_granularity' => Note::JOURNAL_DAILY,
+            'journal_date' => '2026-03-12',
+            'content' => [
+                'type' => 'doc',
+                'content' => [[
+                    'type' => 'paragraph',
+                    'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                    'content' => [
+                        ['type' => 'text', 'text' => '10:00-11:00 Planning @ Office'],
+                    ],
+                ]],
+            ],
+        ]);
+
+    $originalEvent = Event::query()
+        ->where('eventable_type', Timeblock::class)
+        ->where('note_id', $note->id)
+        ->where('block_id', $blockId)
+        ->firstOrFail();
+    $originalTimeblockId = (string) $originalEvent->eventable_id;
+
+    $note->update([
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                'content' => [
+                    ['type' => 'text', 'text' => '10:00-11:00 Planning refined @ HQ'],
+                ],
+            ]],
+        ],
+    ]);
+
+    $updatedEvent = Event::query()
+        ->where('eventable_type', Timeblock::class)
+        ->where('note_id', $note->id)
+        ->where('block_id', $blockId)
+        ->firstOrFail();
+    $updatedTimeblock = Timeblock::query()->findOrFail($updatedEvent->eventable_id);
+
+    expect((string) $updatedEvent->id)->toBe((string) $originalEvent->id)
+        ->and((string) $updatedEvent->eventable_id)->toBe($originalTimeblockId)
+        ->and($updatedEvent->title)->toBe('Planning refined')
+        ->and($updatedTimeblock->location)->toBe('HQ');
+});
+
+it('does not create duplicate events for repeated saves of the same timeblock block id', function (): void {
+    $workspace = Workspace::factory()->create();
+    $blockId = (string) str()->uuid();
+
+    $note = Note::factory()
+        ->for($workspace)
+        ->create([
+            'type' => Note::TYPE_JOURNAL,
+            'journal_granularity' => Note::JOURNAL_DAILY,
+            'journal_date' => '2026-03-12',
+            'content' => [
+                'type' => 'doc',
+                'content' => [[
+                    'type' => 'paragraph',
+                    'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                    'content' => [
+                        ['type' => 'text', 'text' => '10:00-11:00 Planning @ Office'],
+                    ],
+                ]],
+            ],
+        ]);
+
+    $note->update([
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                'content' => [
+                    ['type' => 'text', 'text' => '10:00-11:00 Planning @ Office'],
+                ],
+            ]],
+        ],
+    ]);
+
+    $note->update([
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                'content' => [
+                    ['type' => 'text', 'text' => '10:00-11:00 Planning changed @ Office'],
+                ],
+            ]],
+        ],
+    ]);
+
+    expect(
+        Event::query()
+            ->where('eventable_type', Timeblock::class)
+            ->where('note_id', $note->id)
+            ->where('block_id', $blockId)
+            ->count()
+    )->toBe(1);
+});
+
+it('queues outbound calendar intents for create update and delete when a target calendar is selected', function (): void {
+    config()->set('timeblocks.outbound.dispatch', 'scheduled');
+
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Primary',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.test/user/primary/',
+        'username' => 'user@example.test',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    $user->forceFill([
+        'settings' => array_merge(
+            is_array($user->settings) ? $user->settings : [],
+            ['calendar' => ['outbound_timeblock_calendar_id' => $calendar->id]],
+        ),
+    ])->save();
+
+    $this->actingAs($user);
+
+    $blockId = (string) str()->uuid();
+
+    $note = Note::factory()
+        ->for($workspace)
+        ->create([
+            'type' => Note::TYPE_JOURNAL,
+            'journal_granularity' => Note::JOURNAL_DAILY,
+            'journal_date' => '2026-03-12',
+            'content' => [
+                'type' => 'doc',
+                'content' => [[
+                    'type' => 'paragraph',
+                    'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                    'content' => [
+                        ['type' => 'text', 'text' => '10:00-11:00 Planning @ Office'],
+                    ],
+                ]],
+            ],
+        ]);
+
+    $event = Event::query()
+        ->where('eventable_type', Timeblock::class)
+        ->where('note_id', $note->id)
+        ->where('block_id', $blockId)
+        ->firstOrFail();
+
+    $link = TimeblockCalendarLink::query()
+        ->where('event_id', $event->id)
+        ->where('calendar_id', $calendar->id)
+        ->firstOrFail();
+
+    expect($link->sync_status)->toBe(TimeblockCalendarLink::STATUS_PENDING_CREATE);
+
+    $link->update([
+        'sync_status' => TimeblockCalendarLink::STATUS_SYNCED,
+        'remote_uid' => 'uid-1',
+    ]);
+
+    $note->update([
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                'content' => [
+                    ['type' => 'text', 'text' => '10:00-11:00 Planning refined @ HQ'],
+                ],
+            ]],
+        ],
+    ]);
+
+    $link->refresh();
+    expect($link->sync_status)->toBe(TimeblockCalendarLink::STATUS_PENDING_UPDATE);
+
+    $link->update([
+        'sync_status' => TimeblockCalendarLink::STATUS_SYNCED,
+    ]);
+
+    $note->update([
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $link->refresh();
+    expect($link->sync_status)->toBe(TimeblockCalendarLink::STATUS_PENDING_DELETE);
+});
+
+it('dispatches outbound sync jobs immediately when dispatch policy is immediate', function (): void {
+    config()->set('timeblocks.outbound.dispatch', 'immediate');
+    Queue::fake([SyncTimeblockCreateJob::class]);
+
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Primary',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.test/user/primary/',
+        'username' => 'user@example.test',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    $settings = is_array($user->settings) ? $user->settings : [];
+    data_set($settings, 'calendar.outbound_timeblock_calendar_id', $calendar->id);
+    $user->forceFill(['settings' => $settings])->save();
+
+    $this->actingAs($user);
+
+    $blockId = (string) str()->uuid();
+
+    Note::factory()
+        ->for($workspace)
+        ->create([
+            'type' => Note::TYPE_JOURNAL,
+            'journal_granularity' => Note::JOURNAL_DAILY,
+            'journal_date' => '2026-03-12',
+            'content' => [
+                'type' => 'doc',
+                'content' => [[
+                    'type' => 'paragraph',
+                    'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                    'content' => [
+                        ['type' => 'text', 'text' => '10:00-11:00 Planning @ Office'],
+                    ],
+                ]],
+            ],
+        ]);
+
+    Queue::assertPushed(SyncTimeblockCreateJob::class);
+});
+
+it('does not dispatch outbound sync jobs immediately when dispatch policy is scheduled', function (): void {
+    config()->set('timeblocks.outbound.dispatch', 'scheduled');
+    Queue::fake([
+        SyncTimeblockCreateJob::class,
+        SyncTimeblockUpdateJob::class,
+        SyncTimeblockDeleteJob::class,
+    ]);
+
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Primary',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.test/user/primary/',
+        'username' => 'user@example.test',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    $settings = is_array($user->settings) ? $user->settings : [];
+    data_set($settings, 'calendar.outbound_timeblock_calendar_id', $calendar->id);
+    $user->forceFill(['settings' => $settings])->save();
+
+    $this->actingAs($user);
+
+    $blockId = (string) str()->uuid();
+
+    Note::factory()
+        ->for($workspace)
+        ->create([
+            'type' => Note::TYPE_JOURNAL,
+            'journal_granularity' => Note::JOURNAL_DAILY,
+            'journal_date' => '2026-03-12',
+            'content' => [
+                'type' => 'doc',
+                'content' => [[
+                    'type' => 'paragraph',
+                    'attrs' => ['id' => $blockId, 'blockStyle' => 'bullet'],
+                    'content' => [
+                        ['type' => 'text', 'text' => '10:00-11:00 Planning @ Office'],
+                    ],
+                ]],
+            ],
+        ]);
+
+    Queue::assertNotPushed(SyncTimeblockCreateJob::class);
+    Queue::assertNotPushed(SyncTimeblockUpdateJob::class);
+    Queue::assertNotPushed(SyncTimeblockDeleteJob::class);
 });

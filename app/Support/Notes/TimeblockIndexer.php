@@ -11,90 +11,230 @@ use Illuminate\Support\Facades\DB;
 
 class TimeblockIndexer
 {
+    /**
+     * @return array{
+     *   created_event_ids: array<int, string>,
+     *   updated_event_ids: array<int, string>,
+     *   deleted_event_ids: array<int, string>
+     * }
+     */
     public function reindexNote(
         Note $note,
         int $defaultDurationMinutes = 60,
         ?string $userTimezone = null,
-    ): void
-    {
+    ): array {
         $resolvedTimezone = $this->resolveTimezone($userTimezone);
 
-        DB::transaction(function () use ($note, $defaultDurationMinutes, $resolvedTimezone): void {
-            $this->deleteNoteTimeblocks($note);
+        return DB::transaction(function () use ($note, $defaultDurationMinutes, $resolvedTimezone): array {
+            $createdEventIds = [];
+            $updatedEventIds = [];
+            $deletedEventIds = [];
 
             if (
                 $note->type !== Note::TYPE_JOURNAL
                 || $note->journal_granularity !== Note::JOURNAL_DAILY
                 || ! $note->journal_date
             ) {
-                return;
+                $deletedEventIds = $this->deleteNoteTimeblocksAndReturnEventIds($note);
+
+                return [
+                    'created_event_ids' => $createdEventIds,
+                    'updated_event_ids' => $updatedEventIds,
+                    'deleted_event_ids' => $deletedEventIds,
+                ];
             }
 
             $content = $this->normalizeContent($note->content);
             if (! $content) {
-                return;
+                $deletedEventIds = $this->deleteNoteTimeblocksAndReturnEventIds($note);
+
+                return [
+                    'created_event_ids' => $createdEventIds,
+                    'updated_event_ids' => $updatedEventIds,
+                    'deleted_event_ids' => $deletedEventIds,
+                ];
             }
 
-            $timeblocks = [];
-            $events = [];
+            $parsedByBlockId = [];
 
             $this->walkNodes(
                 Arr::get($content, 'content', []),
-                function (array $node) use ($note, $defaultDurationMinutes, $resolvedTimezone, &$timeblocks, &$events): void {
+                function (array $node) use ($note, $defaultDurationMinutes, $resolvedTimezone, &$parsedByBlockId): void {
                     $parsed = $this->parseTimeblockNode($node, $note, $defaultDurationMinutes, $resolvedTimezone);
                     if ($parsed === null) {
                         return;
                     }
 
-                    $timeblockId = (string) str()->uuid();
+                    $blockId = is_string($parsed['block_id'] ?? null)
+                        ? trim((string) $parsed['block_id'])
+                        : '';
 
-                    $timeblocks[] = [
-                        'id' => $timeblockId,
-                        'location' => $parsed['location'],
-                        'task_block_id' => $parsed['task_block_id'],
-                        'task_checked' => $parsed['task_checked'],
-                        'task_status' => $parsed['task_status'],
-                        'meta' => $parsed['meta'],
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
+                    if ($blockId === '') {
+                        return;
+                    }
 
-                    $events[] = [
-                        'id' => (string) str()->uuid(),
-                        'workspace_id' => $note->workspace_id,
-                        'note_id' => $note->id,
-                        'block_id' => $parsed['block_id'],
-                        'eventable_type' => Timeblock::class,
-                        'eventable_id' => $timeblockId,
-                        'title' => $parsed['title'],
-                        'starts_at' => $parsed['starts_at'],
-                        'ends_at' => $parsed['ends_at'],
-                        'timezone' => $parsed['timezone'],
-                        'journal_date' => $parsed['journal_date'],
-                        'meta' => json_encode([
-                            'source' => 'editor',
-                            'has_explicit_end' => $parsed['has_explicit_end'],
-                        ]),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
+                    $parsed['block_id'] = $blockId;
+                    $parsedByBlockId[$blockId] = $parsed;
                 },
             );
 
-            if ($timeblocks === []) {
-                return;
+            $existingEvents = Event::query()
+                ->where('note_id', $note->id)
+                ->where('eventable_type', Timeblock::class)
+                ->orderByDesc('updated_at')
+                ->get([
+                    'id',
+                    'workspace_id',
+                    'note_id',
+                    'block_id',
+                    'eventable_id',
+                ]);
+
+            $existingByBlockId = [];
+            $eventIdsToDelete = [];
+            $timeblockIdsToDelete = [];
+
+            foreach ($existingEvents as $existingEvent) {
+                $existingBlockId = is_string($existingEvent->block_id)
+                    ? trim($existingEvent->block_id)
+                    : '';
+
+                if ($existingBlockId === '' || isset($existingByBlockId[$existingBlockId])) {
+                    $eventIdsToDelete[] = $existingEvent->id;
+                    if (is_string($existingEvent->eventable_id) && trim($existingEvent->eventable_id) !== '') {
+                        $timeblockIdsToDelete[] = $existingEvent->eventable_id;
+                    }
+
+                    continue;
+                }
+
+                $existingByBlockId[$existingBlockId] = $existingEvent;
             }
 
-            Timeblock::query()->insert($timeblocks);
-            Event::query()->insert($events);
+            foreach ($parsedByBlockId as $blockId => $parsed) {
+                $existingEvent = $existingByBlockId[$blockId] ?? null;
+
+                if ($existingEvent) {
+                    $timeblock = Timeblock::query()->find($existingEvent->eventable_id);
+                    if (! $timeblock) {
+                        $timeblock = Timeblock::query()->create([
+                            'id' => (string) str()->uuid(),
+                            'location' => $parsed['location'],
+                            'task_block_id' => $parsed['task_block_id'],
+                            'task_checked' => $parsed['task_checked'],
+                            'task_status' => $parsed['task_status'],
+                            'meta' => $parsed['meta'],
+                        ]);
+                    } else {
+                        $timeblock->update([
+                            'location' => $parsed['location'],
+                            'task_block_id' => $parsed['task_block_id'],
+                            'task_checked' => $parsed['task_checked'],
+                            'task_status' => $parsed['task_status'],
+                            'meta' => $parsed['meta'],
+                        ]);
+                    }
+
+                    Event::query()
+                        ->where('id', $existingEvent->id)
+                        ->update([
+                            'workspace_id' => $note->workspace_id,
+                            'note_id' => $note->id,
+                            'block_id' => $blockId,
+                            'eventable_type' => Timeblock::class,
+                            'eventable_id' => $timeblock->id,
+                            'title' => $parsed['title'],
+                            'starts_at' => $parsed['starts_at'],
+                            'ends_at' => $parsed['ends_at'],
+                            'timezone' => $parsed['timezone'],
+                            'journal_date' => $parsed['journal_date'],
+                            'meta' => [
+                                'source' => 'editor',
+                                'has_explicit_end' => $parsed['has_explicit_end'],
+                            ],
+                            'updated_at' => now(),
+                        ]);
+
+                    $updatedEventIds[] = $existingEvent->id;
+                    unset($existingByBlockId[$blockId]);
+
+                    continue;
+                }
+
+                $timeblock = Timeblock::query()->create([
+                    'id' => (string) str()->uuid(),
+                    'location' => $parsed['location'],
+                    'task_block_id' => $parsed['task_block_id'],
+                    'task_checked' => $parsed['task_checked'],
+                    'task_status' => $parsed['task_status'],
+                    'meta' => $parsed['meta'],
+                ]);
+
+                $createdEvent = Event::query()->create([
+                    'id' => (string) str()->uuid(),
+                    'workspace_id' => $note->workspace_id,
+                    'note_id' => $note->id,
+                    'block_id' => $blockId,
+                    'eventable_type' => Timeblock::class,
+                    'eventable_id' => $timeblock->id,
+                    'title' => $parsed['title'],
+                    'starts_at' => $parsed['starts_at'],
+                    'ends_at' => $parsed['ends_at'],
+                    'timezone' => $parsed['timezone'],
+                    'journal_date' => $parsed['journal_date'],
+                    'meta' => [
+                        'source' => 'editor',
+                        'has_explicit_end' => $parsed['has_explicit_end'],
+                    ],
+                ]);
+
+                $createdEventIds[] = (string) $createdEvent->id;
+            }
+
+            foreach ($existingByBlockId as $obsoleteEvent) {
+                $eventIdsToDelete[] = $obsoleteEvent->id;
+                if (is_string($obsoleteEvent->eventable_id) && trim($obsoleteEvent->eventable_id) !== '') {
+                    $timeblockIdsToDelete[] = $obsoleteEvent->eventable_id;
+                }
+            }
+
+            if ($eventIdsToDelete !== []) {
+                $uniqueEventIdsToDelete = array_values(array_unique($eventIdsToDelete));
+                Event::query()->whereIn('id', $uniqueEventIdsToDelete)->delete();
+                $deletedEventIds = array_merge($deletedEventIds, $uniqueEventIdsToDelete);
+            }
+
+            if ($timeblockIdsToDelete !== []) {
+                Timeblock::query()->whereIn('id', array_values(array_unique($timeblockIdsToDelete)))->delete();
+            }
+
+            return [
+                'created_event_ids' => array_values(array_filter(array_unique($createdEventIds))),
+                'updated_event_ids' => array_values(array_filter(array_unique($updatedEventIds))),
+                'deleted_event_ids' => array_values(array_filter(array_unique($deletedEventIds))),
+            ];
         });
     }
 
     public function deleteNoteTimeblocks(Note $note): void
     {
+        $this->deleteNoteTimeblocksAndReturnEventIds($note);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function deleteNoteTimeblocksAndReturnEventIds(Note $note): array
+    {
         $eventQuery = Event::query()
             ->where('note_id', $note->id)
             ->where('eventable_type', Timeblock::class);
+
+        $eventIds = (clone $eventQuery)
+            ->pluck('id')
+            ->filter(fn (mixed $id): bool => is_string($id) && $id !== '')
+            ->values()
+            ->all();
 
         $timeblockIds = (clone $eventQuery)
             ->pluck('eventable_id')
@@ -107,6 +247,8 @@ class TimeblockIndexer
         if ($timeblockIds !== []) {
             Timeblock::query()->whereIn('id', $timeblockIds)->delete();
         }
+
+        return $eventIds;
     }
 
     /**
@@ -145,8 +287,7 @@ class TimeblockIndexer
         Note $note,
         int $defaultDurationMinutes,
         string $timezone,
-    ): ?array
-    {
+    ): ?array {
         $fragments = $this->nodeInlineFragments($node);
         if ($fragments === []) {
             return null;

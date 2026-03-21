@@ -1,8 +1,12 @@
 <?php
 
+use App\Models\Calendar;
+use App\Models\Event;
 use App\Models\Note;
 use App\Models\NoteRevision;
 use App\Models\NoteTask;
+use App\Models\Timeblock;
+use App\Models\TimeblockCalendarLink;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Carbon;
@@ -524,6 +528,113 @@ test('show includes the user language for the editor', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('notes/show')
             ->where('language', 'en'),
+        );
+});
+
+test('show includes timeblock sync status per block id for selected outbound calendar', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Primary',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/user/primary/',
+        'username' => 'user@example.com',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    $settings = is_array($user->settings) ? $user->settings : [];
+    data_set($settings, 'calendar.outbound_timeblock_calendar_id', $calendar->id);
+    $user->forceFill(['settings' => $settings])->save();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'title' => 'Daily',
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-21',
+        'slug' => 'journal/daily/2026-03-21',
+    ]);
+
+    $pendingBlockId = (string) str()->uuid();
+    $failedBlockId = (string) str()->uuid();
+    $syncedBlockId = (string) str()->uuid();
+
+    $pendingTimeblock = Timeblock::query()->create([]);
+    $failedTimeblock = Timeblock::query()->create([]);
+    $syncedTimeblock = Timeblock::query()->create([]);
+
+    $pendingEvent = Event::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => $pendingBlockId,
+        'eventable_type' => Timeblock::class,
+        'eventable_id' => $pendingTimeblock->id,
+        'title' => 'Pending',
+        'starts_at' => '2026-03-21 09:00:00',
+        'ends_at' => '2026-03-21 10:00:00',
+        'timezone' => 'UTC',
+    ]);
+
+    $failedEvent = Event::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => $failedBlockId,
+        'eventable_type' => Timeblock::class,
+        'eventable_id' => $failedTimeblock->id,
+        'title' => 'Failed',
+        'starts_at' => '2026-03-21 10:00:00',
+        'ends_at' => '2026-03-21 11:00:00',
+        'timezone' => 'UTC',
+    ]);
+
+    $syncedEvent = Event::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $note->id,
+        'block_id' => $syncedBlockId,
+        'eventable_type' => Timeblock::class,
+        'eventable_id' => $syncedTimeblock->id,
+        'title' => 'Synced',
+        'starts_at' => '2026-03-21 11:00:00',
+        'ends_at' => '2026-03-21 12:00:00',
+        'timezone' => 'UTC',
+    ]);
+
+    TimeblockCalendarLink::query()->create([
+        'workspace_id' => $workspace->id,
+        'calendar_id' => $calendar->id,
+        'note_id' => $note->id,
+        'event_id' => $pendingEvent->id,
+        'timeblock_id' => $pendingTimeblock->id,
+        'sync_status' => TimeblockCalendarLink::STATUS_PENDING_UPDATE,
+    ]);
+
+    TimeblockCalendarLink::query()->create([
+        'workspace_id' => $workspace->id,
+        'calendar_id' => $calendar->id,
+        'note_id' => $note->id,
+        'event_id' => $failedEvent->id,
+        'timeblock_id' => $failedTimeblock->id,
+        'sync_status' => TimeblockCalendarLink::STATUS_FAILED,
+    ]);
+
+    TimeblockCalendarLink::query()->create([
+        'workspace_id' => $workspace->id,
+        'calendar_id' => $calendar->id,
+        'note_id' => $note->id,
+        'event_id' => $syncedEvent->id,
+        'timeblock_id' => $syncedTimeblock->id,
+        'sync_status' => TimeblockCalendarLink::STATUS_SYNCED,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(scoped_note_url($workspace, $note->id))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where("timeblockSyncByBlockId.{$pendingBlockId}", 'pending')
+            ->where("timeblockSyncByBlockId.{$failedBlockId}", 'failed')
+            ->where('timeblockSyncByBlockId', fn ($map) => ! collect($map)->contains('synced')),
         );
 });
 

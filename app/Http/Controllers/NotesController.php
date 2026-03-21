@@ -8,6 +8,7 @@ use App\Models\Note;
 use App\Models\NoteRevision;
 use App\Models\NoteTask;
 use App\Models\Timeblock;
+use App\Models\TimeblockCalendarLink;
 use App\Models\Workspace;
 use App\Support\Notes\JournalNoteService;
 use App\Support\Notes\LegacyToBlockNoteConverter;
@@ -930,6 +931,52 @@ class NotesController extends Controller
             }
         }
 
+        $timeblockSyncByBlockId = [];
+        $selectedTimeblockSyncCalendarId = data_get(Auth::user()?->settings, 'calendar.outbound_timeblock_calendar_id');
+        if (
+            is_string($selectedTimeblockSyncCalendarId) &&
+            trim($selectedTimeblockSyncCalendarId) !== '' &&
+            $note->workspace_id === $workspace->id
+        ) {
+            $timeblockEvents = Event::query()
+                ->where('note_id', $note->id)
+                ->where('eventable_type', Timeblock::class)
+                ->whereNotNull('block_id')
+                ->get(['id', 'block_id']);
+
+            if ($timeblockEvents->isNotEmpty()) {
+                $statusByEventId = TimeblockCalendarLink::query()
+                    ->where('calendar_id', trim($selectedTimeblockSyncCalendarId))
+                    ->whereIn('event_id', $timeblockEvents->pluck('id')->all())
+                    ->pluck('sync_status', 'event_id');
+
+                foreach ($timeblockEvents as $event) {
+                    $status = (string) ($statusByEventId[$event->id] ?? '');
+                    if (
+                        $status === TimeblockCalendarLink::STATUS_FAILED &&
+                        is_string($event->block_id) &&
+                        trim($event->block_id) !== ''
+                    ) {
+                        $timeblockSyncByBlockId[$event->block_id] = 'failed';
+
+                        continue;
+                    }
+
+                    if (
+                        in_array($status, [
+                            TimeblockCalendarLink::STATUS_PENDING_CREATE,
+                            TimeblockCalendarLink::STATUS_PENDING_UPDATE,
+                            TimeblockCalendarLink::STATUS_PENDING_DELETE,
+                        ], true) &&
+                        is_string($event->block_id) &&
+                        trim($event->block_id) !== ''
+                    ) {
+                        $timeblockSyncByBlockId[$event->block_id] = 'pending';
+                    }
+                }
+            }
+        }
+
         return Inertia::render('notes/show', [
             'content' => $editorContent,
             'contentHash' => $this->resolveContentHash($note),
@@ -947,6 +994,7 @@ class NotesController extends Controller
             'noteType' => $note->type,
             'journalGranularity' => $note->journal_granularity,
             'journalDate' => $note->journal_date?->toDateString(),
+            'timeblockSyncByBlockId' => $timeblockSyncByBlockId,
             'journalPeriod' => ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity && $note->journal_date)
                 ? $this->journalNoteService->periodFor($note->journal_granularity, $note->journal_date)
                 : null,

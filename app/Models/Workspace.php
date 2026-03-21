@@ -227,6 +227,11 @@ class Workspace extends Model
         return $this->hasMany(Calendar::class);
     }
 
+    public function calendarConnections(): HasMany
+    {
+        return $this->hasMany(CalendarConnection::class);
+    }
+
     public function images(): HasMany
     {
         return $this->hasMany(NoteImage::class);

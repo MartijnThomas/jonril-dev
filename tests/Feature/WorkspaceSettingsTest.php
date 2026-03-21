@@ -1,10 +1,15 @@
 <?php
 
+use App\Jobs\SyncTimeblockCreateJob;
+use App\Jobs\SyncTimeblockUpdateJob;
 use App\Models\Calendar;
+use App\Models\CalendarConnection;
 use App\Models\Note;
+use App\Models\TimeblockCalendarLink;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('workspace owner can view workspace settings page', function () {
@@ -272,6 +277,222 @@ test('non-owner cannot trigger workspace migration', function () {
         ->actingAs($member)
         ->post(route('workspaces.settings.migrate', ['workspace' => $workspace?->id], absolute: false))
         ->assertForbidden();
+});
+
+test('workspace owner can set active calendar as timeblock sync target in personal workspace', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+    Queue::fake([SyncTimeblockUpdateJob::class]);
+    config()->set('timeblocks.outbound.dispatch', 'immediate');
+
+    $connection = CalendarConnection::query()->create([
+        'workspace_id' => $workspace->id,
+        'provider' => 'caldav',
+        'server_url' => 'https://caldav.example.com',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+    ]);
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'calendar_connection_id' => $connection->id,
+        'name' => 'Personal',
+        'url' => 'https://caldav.example.com/personal',
+        'is_active' => true,
+    ]);
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace->id,
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-21',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'attrs' => ['id' => (string) str()->uuid(), 'blockStyle' => 'bullet'],
+                'content' => [['type' => 'text', 'text' => '10:00-11:00 Reconnect link test @ HQ']],
+            ]],
+        ],
+    ]);
+    $event = \App\Models\Event::query()
+        ->where('note_id', $note->id)
+        ->where('eventable_type', \App\Models\Timeblock::class)
+        ->firstOrFail();
+
+    $this
+        ->actingAs($owner)
+        ->patch(route('workspaces.settings.timeblock-sync-target.update', ['workspace' => $workspace->id], absolute: false), [
+            'calendar_id' => $calendar->id,
+        ])
+        ->assertRedirect();
+
+    expect(data_get($owner->fresh()?->settings, 'calendar.outbound_timeblock_calendar_id'))
+        ->toBe($calendar->id);
+    $link = TimeblockCalendarLink::query()
+        ->where('calendar_id', $calendar->id)
+        ->where('event_id', $event->id)
+        ->first();
+    expect($link)->not->toBeNull();
+    expect($link?->remote_uid)->toBe("jonril-timeblock-{$event->id}");
+    expect($link?->remote_href)->toBe("https://caldav.example.com/personal/jonril-timeblock-{$event->id}.ics");
+    expect($link?->sync_status)->toBe(TimeblockCalendarLink::STATUS_PENDING_UPDATE);
+    Queue::assertPushed(SyncTimeblockUpdateJob::class);
+});
+
+test('workspace settings payload includes timeblock sync stats for selected target calendar', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Personal',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/personal',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    $settings = is_array($owner->settings) ? $owner->settings : [];
+    data_set($settings, 'calendar.outbound_timeblock_calendar_id', $calendar->id);
+    $owner->forceFill(['settings' => $settings])->save();
+
+    TimeblockCalendarLink::query()->create([
+        'workspace_id' => $workspace->id,
+        'calendar_id' => $calendar->id,
+        'note_id' => (string) str()->uuid(),
+        'event_id' => (string) str()->uuid(),
+        'timeblock_id' => (string) str()->uuid(),
+        'sync_status' => TimeblockCalendarLink::STATUS_FAILED,
+    ]);
+    TimeblockCalendarLink::query()->create([
+        'workspace_id' => $workspace->id,
+        'calendar_id' => $calendar->id,
+        'note_id' => (string) str()->uuid(),
+        'event_id' => (string) str()->uuid(),
+        'timeblock_id' => (string) str()->uuid(),
+        'sync_status' => TimeblockCalendarLink::STATUS_PENDING_UPDATE,
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->get(route('workspaces.settings.edit', ['workspace' => $workspace->id], absolute: false))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('timeblockSync.selected_calendar_id', $calendar->id)
+            ->where('timeblockSync.stats.failed', 1)
+            ->where('timeblockSync.stats.pending', 1)
+            ->where('timeblockSync.stats.total', 2),
+        );
+});
+
+test('workspace owner cannot set inactive calendar as timeblock sync target', function () {
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Inactive',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/inactive',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+        'is_active' => false,
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->patch(route('workspaces.settings.timeblock-sync-target.update', ['workspace' => $workspace->id], absolute: false), [
+            'calendar_id' => $calendar->id,
+        ])
+        ->assertSessionHasErrors('calendar_id');
+});
+
+test('workspace owner cannot set timeblock sync target for non personal workspace', function () {
+    $owner = User::factory()->create();
+    $workspace = Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'is_personal' => false,
+    ]);
+    $workspace->users()->syncWithoutDetaching([
+        $owner->id => ['role' => 'owner'],
+    ]);
+
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Shared',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/shared',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->patch(route('workspaces.settings.timeblock-sync-target.update', ['workspace' => $workspace->id], absolute: false), [
+            'calendar_id' => $calendar->id,
+        ])
+        ->assertStatus(409);
+});
+
+test('workspace owner can retry failed timeblock sync for selected target calendar', function () {
+    config()->set('timeblocks.outbound.dispatch', 'immediate');
+    Queue::fake([SyncTimeblockCreateJob::class]);
+
+    $owner = User::factory()->create();
+    $workspace = $owner->currentWorkspace();
+
+    $calendar = Calendar::query()->create([
+        'workspace_id' => $workspace->id,
+        'name' => 'Personal',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/personal',
+        'username' => 'owner@example.com',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    $settings = is_array($owner->settings) ? $owner->settings : [];
+    data_set($settings, 'calendar.outbound_timeblock_calendar_id', $calendar->id);
+    $owner->forceFill(['settings' => $settings])->save();
+
+    $note = Note::factory()->create([
+        'workspace_id' => $workspace->id,
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-21',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'paragraph',
+                'attrs' => ['id' => (string) str()->uuid(), 'blockStyle' => 'bullet'],
+                'content' => [['type' => 'text', 'text' => '10:00-11:00 Sync test @ HQ']],
+            ]],
+        ],
+    ]);
+
+    $event = \App\Models\Event::query()
+        ->where('note_id', $note->id)
+        ->where('eventable_type', \App\Models\Timeblock::class)
+        ->firstOrFail();
+
+    $link = TimeblockCalendarLink::query()->create([
+        'workspace_id' => $workspace->id,
+        'calendar_id' => $calendar->id,
+        'note_id' => $note->id,
+        'event_id' => $event->id,
+        'timeblock_id' => (string) $event->eventable_id,
+        'sync_status' => TimeblockCalendarLink::STATUS_FAILED,
+    ]);
+
+    $this
+        ->actingAs($owner)
+        ->post(route('workspaces.settings.timeblock-sync.retry-failed', ['workspace' => $workspace->id], absolute: false))
+        ->assertRedirect()
+        ->assertSessionHas('status', 'timeblock-sync-retry-dispatched');
+
+    expect($link->fresh()?->sync_status)->toBe(TimeblockCalendarLink::STATUS_PENDING_CREATE);
+    Queue::assertPushed(SyncTimeblockCreateJob::class);
 });
 
 test('workspace settings payload includes migration summary when migrated block copy exists', function () {
