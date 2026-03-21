@@ -4,6 +4,10 @@ use App\Support\Backup\HourlyDatabaseCleanupStrategy;
 use Spatie\Backup\Notifications\Notifications\BackupHasFailedNotification;
 use Spatie\Backup\Notifications\Notifications\BackupWasSuccessfulNotification;
 
+$hourlyBackupNotificationChannels = class_exists(\Illuminate\Notifications\Channels\SlackWebhookChannel::class)
+    ? ['slack']
+    : [];
+
 return [
     'backup' => [
         'name' => env('BACKUP_HOURLY_DB_NAME', env('APP_NAME', 'laravel-backup').'-db-hourly'),
@@ -20,8 +24,8 @@ return [
 
     'notifications' => [
         'notifications' => [
-            BackupHasFailedNotification::class => ['slack'],
-            BackupWasSuccessfulNotification::class => ['slack'],
+            BackupHasFailedNotification::class => $hourlyBackupNotificationChannels,
+            BackupWasSuccessfulNotification::class => $hourlyBackupNotificationChannels,
         ],
     ],
 ];

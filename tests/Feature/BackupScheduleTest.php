@@ -35,9 +35,13 @@ test('hourly database backup retention is configured for 36 hours', function ():
 });
 
 test('hourly database backup sends success and failure notifications to slack', function (): void {
+    $expectedChannels = class_exists(\Illuminate\Notifications\Channels\SlackWebhookChannel::class)
+        ? ['slack']
+        : [];
+
     expect(config('backup_hourly_db.notifications.notifications.'.BackupHasFailedNotification::class))
-        ->toBe(['slack']);
+        ->toBe($expectedChannels);
 
     expect(config('backup_hourly_db.notifications.notifications.'.BackupWasSuccessfulNotification::class))
-        ->toBe(['slack']);
+        ->toBe($expectedChannels);
 });

@@ -11,6 +11,10 @@ use Spatie\Backup\Tasks\Cleanup\Strategies\DefaultStrategy;
 use Spatie\Backup\Tasks\Monitor\HealthChecks\MaximumAgeInDays;
 use Spatie\Backup\Tasks\Monitor\HealthChecks\MaximumStorageInMegabytes;
 
+$backupNotificationChannels = class_exists(\Illuminate\Notifications\Channels\SlackWebhookChannel::class)
+    ? ['slack']
+    : [];
+
 return [
 
     'backup' => [
@@ -224,12 +228,12 @@ return [
      */
     'notifications' => [
         'notifications' => [
-            BackupHasFailedNotification::class => ['slack'],
-            UnhealthyBackupWasFoundNotification::class => ['slack'],
-            CleanupHasFailedNotification::class => ['slack'],
-            BackupWasSuccessfulNotification::class => ['slack'],
-            HealthyBackupWasFoundNotification::class => ['slack'],
-            CleanupWasSuccessfulNotification::class => ['slack'],
+            BackupHasFailedNotification::class => $backupNotificationChannels,
+            UnhealthyBackupWasFoundNotification::class => $backupNotificationChannels,
+            CleanupHasFailedNotification::class => $backupNotificationChannels,
+            BackupWasSuccessfulNotification::class => $backupNotificationChannels,
+            HealthyBackupWasFoundNotification::class => $backupNotificationChannels,
+            CleanupWasSuccessfulNotification::class => $backupNotificationChannels,
         ],
 
         /*

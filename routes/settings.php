@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\Settings\AdminOperationsController;
 use App\Http\Controllers\Settings\EditorPreferencesController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
@@ -39,6 +40,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
+    Route::get('settings/admin/operations', [AdminOperationsController::class, 'show'])
+        ->name('settings.admin.operations');
 
     Route::get('settings/workspaces/{workspace}', [WorkspaceController::class, 'edit'])
         ->name('workspaces.settings.edit');

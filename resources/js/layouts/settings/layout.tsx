@@ -23,6 +23,11 @@ type SharedWorkspace = {
 };
 
 type PageProps = {
+    auth?: {
+        user?: {
+            role?: string | null;
+        } | null;
+    } | null;
     workspaces?: SharedWorkspace[];
     currentWorkspace?: {
         id: string;
@@ -34,6 +39,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
     const page = usePage<PageProps>();
     const { workspaces = [], currentWorkspace = null } = page.props;
+    const isAdmin = page.props.auth?.user?.role === 'admin';
     const currentUrl = new URL(page.url, window.location.origin);
     const currentPath = currentUrl.pathname;
     const currentSection = currentUrl.searchParams.get('section') ?? 'general';
@@ -73,6 +79,14 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             title: t('settings_nav.task_filters', 'Task filters'),
             href: '/settings/task-filters',
         },
+        ...(isAdmin
+            ? [
+                  {
+                      title: t('settings_nav.operations', 'Operations'),
+                      href: '/settings/admin/operations',
+                  },
+              ]
+            : []),
     ];
 
     if (typeof window === 'undefined') {
