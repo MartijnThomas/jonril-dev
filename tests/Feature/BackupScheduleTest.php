@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Console\Scheduling\Schedule;
+use Spatie\Backup\Notifications\Notifications\BackupHasFailedNotification;
+use Spatie\Backup\Notifications\Notifications\BackupWasSuccessfulNotification;
 
 test('backup schedule includes daily full backup and hourly database backup with cleanup', function (): void {
     $events = collect(app(Schedule::class)->events());
@@ -30,4 +32,12 @@ test('backup schedule includes daily full backup and hourly database backup with
 
 test('hourly database backup retention is configured for 36 hours', function (): void {
     expect(config('backup_hourly_db.cleanup.keep_backups_for_hours'))->toBe(36);
+});
+
+test('hourly database backup sends success and failure notifications to slack', function (): void {
+    expect(config('backup_hourly_db.notifications.notifications.'.BackupHasFailedNotification::class))
+        ->toBe(['slack']);
+
+    expect(config('backup_hourly_db.notifications.notifications.'.BackupWasSuccessfulNotification::class))
+        ->toBe(['slack']);
 });
