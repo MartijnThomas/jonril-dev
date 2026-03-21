@@ -550,6 +550,51 @@
     display: none;
 }
 
+[data-editor-mode='block'] .tiptap.ProseMirror .md-timeblock-sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.32rem;
+    min-width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 1;
+    vertical-align: baseline;
+    pointer-events: none;
+}
+
+[data-editor-mode='block']
+    .tiptap.ProseMirror
+    .md-timeblock-sync-indicator--pending {
+    color: color-mix(in srgb, rgb(14 116 144) 76%, transparent);
+    background: color-mix(in srgb, rgb(14 116 144) 11%, transparent);
+}
+
+[data-editor-mode='block']
+    .tiptap.ProseMirror
+    .md-timeblock-sync-indicator--failed {
+    color: color-mix(in srgb, rgb(220 38 38) 84%, transparent);
+    background: color-mix(in srgb, rgb(220 38 38) 12%, transparent);
+}
+
+.dark
+    [data-editor-mode='block']
+    .tiptap.ProseMirror
+    .md-timeblock-sync-indicator--pending {
+    color: color-mix(in srgb, rgb(125 211 252) 88%, transparent);
+    background: color-mix(in srgb, rgb(125 211 252) 12%, transparent);
+}
+
+.dark
+    [data-editor-mode='block']
+    .tiptap.ProseMirror
+    .md-timeblock-sync-indicator--failed {
+    color: color-mix(in srgb, rgb(252 165 165) 90%, transparent);
+    background: color-mix(in srgb, rgb(252 165 165) 14%, transparent);
+}
+
 [data-editor-mode='block'] .tiptap.ProseMirror {
     --bt-indent-step: 1.7rem;
     --bt-ordered-marker-width: 2.4rem;

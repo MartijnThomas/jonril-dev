@@ -317,6 +317,7 @@ function SimpleEditorComponent({
     noteType,
     journalGranularity = null,
     journalDate = null,
+    timeblockSyncByBlockId = {},
     defaultTimeblockDurationMinutes = 60,
 }: SimpleEditorProps) {
     const { setVersion } = useEditorVersion();
@@ -450,6 +451,7 @@ function SimpleEditorComponent({
                 noteType,
                 journalGranularity,
                 journalDate,
+                timeblockSyncByBlockId,
                 defaultTimeblockDurationMinutes,
                 imageUploadHandler,
             }),
@@ -458,6 +460,7 @@ function SimpleEditorComponent({
             noteType,
             journalGranularity,
             journalDate,
+            timeblockSyncByBlockId,
             defaultTimeblockDurationMinutes,
             linkableNotes,
             mentionSuggestions,

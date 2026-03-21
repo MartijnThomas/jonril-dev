@@ -308,6 +308,7 @@ export function createBlockTreeEditorExtensions(
                 typeof options.journalDate === 'string' &&
                 options.journalDate.trim() !== '',
             journalDate: options.journalDate ?? null,
+            syncStatusByBlockId: options.timeblockSyncByBlockId ?? {},
             defaultDurationMinutes: options.defaultTimeblockDurationMinutes ?? 60,
         }),
         BlockTreeDocument,

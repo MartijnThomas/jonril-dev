@@ -22,6 +22,7 @@ export type CreateBlockTreeEditorExtensionsOptions = {
     noteType?: string | null;
     journalGranularity?: string | null;
     journalDate?: string | null;
+    timeblockSyncByBlockId?: Record<string, 'pending' | 'failed'>;
     defaultTimeblockDurationMinutes?: number;
     imageUploadHandler?: UploadFunction;
 };

@@ -121,6 +121,7 @@ export type SimpleEditorProps = {
     noteType?: string | null;
     journalGranularity?: string | null;
     journalDate?: string | null;
+    timeblockSyncByBlockId?: Record<string, 'pending' | 'failed'>;
     defaultTimeblockDurationMinutes?: number;
     editorMode?: 'legacy' | 'block';
     readOnly?: boolean;

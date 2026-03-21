@@ -21,6 +21,7 @@ export type BlockTimeblockEntry = {
 type BlockTimeblockOptions = {
     enabled: boolean;
     journalDate: string | null;
+    syncStatusByBlockId: Record<string, 'pending' | 'failed'>;
     defaultDurationMinutes: number;
 };
 
@@ -252,6 +253,38 @@ function collectBlockTimeblocks(
             );
         }
 
+        if (
+            typeof parsed.blockId === 'string' &&
+            parsed.blockId.trim() !== '' &&
+            (options.syncStatusByBlockId[parsed.blockId] === 'pending' ||
+                options.syncStatusByBlockId[parsed.blockId] === 'failed')
+        ) {
+            const syncStatus = options.syncStatusByBlockId[parsed.blockId];
+            const indicatorLabel = syncStatus === 'failed' ? '!' : '…';
+            const indicatorTitle =
+                syncStatus === 'failed' ? 'Timeblock sync failed' : 'Timeblock sync pending';
+
+            decorations.push(
+                Decoration.widget(
+                    tokenEnd,
+                    () => {
+                        const element = document.createElement('span');
+                        element.className = `md-timeblock-sync-indicator md-timeblock-sync-indicator--${syncStatus}`;
+                        element.textContent = indicatorLabel;
+                        element.setAttribute('title', indicatorTitle);
+                        element.setAttribute('aria-label', indicatorTitle);
+                        element.setAttribute('data-timeblock-sync-status', syncStatus);
+
+                        return element;
+                    },
+                    {
+                        side: 1,
+                        ignoreSelection: true,
+                    },
+                ),
+            );
+        }
+
         timeblocks.push({
             blockId: parsed.blockId,
             startsAt: parsed.startsAt,
@@ -288,6 +321,7 @@ export const BlockTimeblockExtension = Extension.create<BlockTimeblockOptions>({
         return {
             enabled: false,
             journalDate: null,
+            syncStatusByBlockId: {},
             defaultDurationMinutes: 60,
         };
     },

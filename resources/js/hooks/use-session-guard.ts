@@ -9,22 +9,30 @@ export function useSessionGuard(editorVersion: EditorVersion): { isChecking: boo
     const [isChecking, setIsChecking] = useState(false);
     const hiddenAtRef = useRef<number | null>(null);
     const editorVersionRef = useRef(editorVersion);
+    const checkInFlightRef = useRef(false);
 
     useEffect(() => {
         editorVersionRef.current = editorVersion;
     }, [editorVersion]);
 
     useEffect(() => {
-        const handleVisibilityChange = async () => {
-            if (document.visibilityState === 'hidden') {
-                hiddenAtRef.current = Date.now();
+        const runSessionAndContentCheck = async (force = false) => {
+            if (checkInFlightRef.current) {
                 return;
             }
 
-            const hiddenAt = hiddenAtRef.current;
-            hiddenAtRef.current = null;
+            if (!force) {
+                const hiddenAt = hiddenAtRef.current;
+                hiddenAtRef.current = null;
 
-            if (hiddenAt === null || Date.now() - hiddenAt < IDLE_THRESHOLD_MS) {
+                if (hiddenAt === null || Date.now() - hiddenAt < IDLE_THRESHOLD_MS) {
+                    return;
+                }
+            }
+
+            checkInFlightRef.current = true;
+            if (document.visibilityState === 'hidden') {
+                checkInFlightRef.current = false;
                 return;
             }
 
@@ -62,14 +70,38 @@ export function useSessionGuard(editorVersion: EditorVersion): { isChecking: boo
             } catch {
                 // Network error — don't block the user, let them retry naturally.
             } finally {
+                checkInFlightRef.current = false;
                 setIsChecking(false);
             }
         };
 
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                hiddenAtRef.current = Date.now();
+                return;
+            }
+
+            void runSessionAndContentCheck(false);
+        };
+
+        const handlePopState = () => {
+            void runSessionAndContentCheck(true);
+        };
+
+        const handlePageShow = (event: PageTransitionEvent) => {
+            if (event.persisted) {
+                void runSessionAndContentCheck(true);
+            }
+        };
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('popstate', handlePopState);
+        window.addEventListener('pageshow', handlePageShow);
 
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('popstate', handlePopState);
+            window.removeEventListener('pageshow', handlePageShow);
         };
     }, []);
 
