@@ -73,17 +73,6 @@ declare module '@inertiajs/core' {
                 calendar_color?: string | null;
             }>;
             todayEventsDate?: string | null;
-            workspaceLinkableNotes?: Array<{
-                id: string;
-                title: string;
-                path: string | null;
-            }>;
-            workspaceMeetingParentOptions?: Array<{
-                id: string;
-                title: string;
-                path: string | null;
-                is_journal: boolean;
-            }>;
             [key: string]: unknown;
         };
     }

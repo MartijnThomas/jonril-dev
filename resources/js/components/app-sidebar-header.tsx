@@ -137,7 +137,6 @@ type JournalPageProps = {
         blockPreviewUrl?: string | null;
         historyUrl?: string | null;
     } | null;
-    moveParentOptions?: Array<{ id: string; title: string; path: string }>;
     currentWorkspace?: {
         slug?: string | null;
     };
@@ -402,15 +401,15 @@ export function AppSidebarHeader({
                     {pageProps.noteActions ? (
                         <NoteHeaderActions
                             noteId={pageProps.noteActions.id}
+                            workspaceSlug={
+                                pageProps.currentWorkspace?.slug ?? ''
+                            }
                             title={pageProps.noteActions.title}
                             currentLocation={
                                 pageProps.noteActions.parent_path ?? null
                             }
                             currentParentId={
                                 pageProps.noteActions.parent_id ?? null
-                            }
-                            moveParentOptions={
-                                pageProps.moveParentOptions ?? []
                             }
                             canMove={Boolean(pageProps.noteActions.canMove)}
                             canRename={Boolean(pageProps.noteActions.canRename)}

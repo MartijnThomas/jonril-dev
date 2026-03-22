@@ -1,7 +1,8 @@
 import { router } from '@inertiajs/react';
 import { Check, ChevronsUpDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { loadNoteOptions } from '@/lib/note-options';
 import { Button } from '@/components/ui/button';
 import {
     Command,
@@ -34,9 +35,9 @@ type Props = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     noteId: string;
+    workspaceSlug: string;
     currentLocation: string | null;
     currentParentId: string | null;
-    options: MoveParentOption[];
 };
 
 const ROOT_VALUE = '__root__';
@@ -45,16 +46,41 @@ export function MoveNoteDialog({
     open,
     onOpenChange,
     noteId,
+    workspaceSlug,
     currentLocation,
     currentParentId,
-    options,
 }: Props) {
     const { t } = useI18n();
     const [pickerOpen, setPickerOpen] = useState(false);
     const [processing, setProcessing] = useState(false);
+    const [options, setOptions] = useState<MoveParentOption[]>([]);
     const [selectedParentId, setSelectedParentId] = useState<string>(
         currentParentId ?? ROOT_VALUE,
     );
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+
+        let cancelled = false;
+        void loadNoteOptions({
+            workspaceSlug,
+            scope: 'move_parent',
+            noteId,
+            limit: 1000,
+        }).then((loaded) => {
+            if (cancelled) {
+                return;
+            }
+
+            setOptions(loaded as MoveParentOption[]);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [noteId, open, workspaceSlug]);
 
     const normalizedOptions = useMemo(
         () =>

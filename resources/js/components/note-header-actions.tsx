@@ -41,10 +41,10 @@ import { useI18n } from '@/lib/i18n';
 
 type Props = {
     noteId: string;
+    workspaceSlug: string;
     title: string;
     currentLocation?: string | null;
     currentParentId?: string | null;
-    moveParentOptions?: Array<{ id: string; title: string; path: string }>;
     canMove: boolean;
     canRename: boolean;
     canDelete: boolean;
@@ -67,10 +67,10 @@ type Props = {
 
 export function NoteHeaderActions({
     noteId,
+    workspaceSlug,
     title,
     currentLocation,
     currentParentId,
-    moveParentOptions = [],
     canMove,
     canRename,
     canDelete,
@@ -375,9 +375,9 @@ export function NoteHeaderActions({
                     open={moveOpen}
                     onOpenChange={setMoveOpen}
                     noteId={noteId}
+                    workspaceSlug={workspaceSlug}
                     currentLocation={currentLocation ?? null}
                     currentParentId={currentParentId ?? null}
-                    options={moveParentOptions}
                 />
             ) : null}
 
@@ -396,6 +396,7 @@ export function NoteHeaderActions({
                     onOpenChange={setAttachToEventOpen}
                     noteId={noteId}
                     noteParentId={currentParentId ?? null}
+                    workspaceSlug={workspaceSlug}
                 />
             ) : null}
 

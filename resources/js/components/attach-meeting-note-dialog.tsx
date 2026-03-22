@@ -10,6 +10,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { loadNoteOptions } from '@/lib/note-options';
 
 type NoteOption = {
     id: string;
@@ -45,17 +46,12 @@ export function AttachMeetingNoteDialog({
     noteTitle = null,
 }: AttachMeetingNoteDialogProps) {
     const pageProps = usePage().props as {
-        workspaceLinkableNotes?: NoteOption[];
-        workspaceMeetingParentOptions?: ParentOption[];
+        currentWorkspace?: { slug?: string | null } | null;
     };
-
-    const allNoteOptions = useMemo(
-        () => pageProps.workspaceLinkableNotes ?? [],
-        [pageProps.workspaceLinkableNotes],
-    );
-    const allParentOptions = useMemo(
-        () => pageProps.workspaceMeetingParentOptions ?? [],
-        [pageProps.workspaceMeetingParentOptions],
+    const workspaceSlug = pageProps.currentWorkspace?.slug?.trim() ?? '';
+    const [allNoteOptions, setAllNoteOptions] = useState<NoteOption[]>([]);
+    const [allParentOptions, setAllParentOptions] = useState<ParentOption[]>(
+        [],
     );
 
     const [selectedNoteId, setSelectedNoteId] = useState<string>(noteId ?? '');
@@ -67,6 +63,7 @@ export function AttachMeetingNoteDialog({
             return;
         }
 
+        let cancelled = false;
         setSelectedNoteId(noteId ?? '');
 
         if (noteId) {
@@ -75,7 +72,41 @@ export function AttachMeetingNoteDialog({
         } else {
             setParentId('');
         }
-    }, [open, noteId, allNoteOptions]);
+        if (workspaceSlug === '') {
+            setAllNoteOptions([]);
+            setAllParentOptions([]);
+            return;
+        }
+
+        void Promise.all([
+            loadNoteOptions({
+                workspaceSlug,
+                scope: 'workspace_linkable',
+                limit: 1000,
+            }),
+            loadNoteOptions({
+                workspaceSlug,
+                scope: 'meeting_parent',
+                limit: 1000,
+            }),
+        ]).then(([noteOptions, parentOptions]) => {
+            if (cancelled) {
+                return;
+            }
+
+            const loadedNoteOptions = noteOptions as NoteOption[];
+            setAllNoteOptions(loadedNoteOptions);
+            setAllParentOptions(parentOptions as ParentOption[]);
+            if (noteId) {
+                const option = loadedNoteOptions.find((o) => o.id === noteId);
+                setParentId(option?.parent_id ?? '');
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open, noteId, workspaceSlug]);
 
     const resolvedNoteId = noteId ?? selectedNoteId;
 

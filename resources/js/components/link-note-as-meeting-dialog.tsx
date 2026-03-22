@@ -1,5 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NoteLocationCombobox } from '@/components/note-location-combobox';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +10,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { loadNoteOptions } from '@/lib/note-options';
 
 type NoteOption = {
     id: string;
@@ -31,16 +32,36 @@ export function LinkNoteAsMeetingDialog({
     eventTitle = '',
 }: LinkNoteAsMeetingDialogProps) {
     const pageProps = usePage().props as {
-        workspaceLinkableNotes?: NoteOption[];
-        moveParentOptions?: NoteOption[];
+        currentWorkspace?: { slug?: string | null } | null;
     };
+    const workspaceSlug = pageProps.currentWorkspace?.slug?.trim() ?? '';
 
-    const noteOptions: NoteOption[] = (
-        pageProps.workspaceLinkableNotes ?? pageProps.moveParentOptions ?? []
-    ).slice();
-
+    const [noteOptions, setNoteOptions] = useState<NoteOption[]>([]);
     const [noteId, setNoteId] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (!open || workspaceSlug === '') {
+            return;
+        }
+
+        let cancelled = false;
+        void loadNoteOptions({
+            workspaceSlug,
+            scope: 'workspace_linkable',
+            limit: 1000,
+        }).then((options) => {
+            if (cancelled) {
+                return;
+            }
+
+            setNoteOptions(options as NoteOption[]);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open, workspaceSlug]);
 
     const handleLink = () => {
         if (!noteId) {

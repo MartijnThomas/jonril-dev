@@ -144,6 +144,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('sidebar-events.indicators');
     Route::get('w/{workspace:slug}/attachable-events', [SidebarEventsController::class, 'attachable'])
         ->name('sidebar-events.attachable');
+    Route::get('w/{workspace:slug}/notes/options', [NotesController::class, 'options'])
+        ->name('notes.options');
     Route::post('w/{workspace:slug}/images', [NoteImageController::class, 'store'])
         ->name('workspace.images.store');
     Route::get('w/{workspace:slug}/images/{image}', [NoteImageController::class, 'show'])

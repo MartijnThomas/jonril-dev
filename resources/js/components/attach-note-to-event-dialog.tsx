@@ -29,6 +29,7 @@ import {
     PopoverTrigger,
 } from '@/components/ui/popover';
 import { useI18n } from '@/lib/i18n';
+import { loadNoteOptions } from '@/lib/note-options';
 import { cn } from '@/lib/utils';
 
 type AttachableEvent = {
@@ -46,6 +47,7 @@ type AttachNoteToEventDialogProps = {
     onOpenChange: (open: boolean) => void;
     noteId: string;
     noteParentId?: string | null;
+    workspaceSlug: string;
 };
 
 function formatEventSecondLine(event: AttachableEvent, locale: Locale): string {
@@ -81,17 +83,15 @@ export function AttachNoteToEventDialog({
     onOpenChange,
     noteId,
     noteParentId = null,
+    workspaceSlug,
 }: AttachNoteToEventDialogProps) {
     const pageProps = usePage().props as {
-        currentWorkspace?: { slug: string };
-        workspaceMeetingParentOptions?: NoteLocationOption[];
         locale?: string;
     };
 
     const { t } = useI18n();
-    const workspaceSlug = pageProps.currentWorkspace?.slug ?? '';
     const locale = pageProps.locale === 'nl' ? nl : enUS;
-    const parentOptions: NoteLocationOption[] = pageProps.workspaceMeetingParentOptions ?? [];
+    const [parentOptions, setParentOptions] = useState<NoteLocationOption[]>([]);
 
     const [events, setEvents] = useState<AttachableEvent[]>([]);
     const [eventsLoading, setEventsLoading] = useState(false);
@@ -124,11 +124,28 @@ export function AttachNoteToEventDialog({
             return;
         }
 
+        let cancelled = false;
         setSelectedBlockId('');
         setParentId(noteParentId ?? '');
         setEventQuery('');
         fetchEvents();
-    }, [open, noteParentId, fetchEvents]);
+        void loadNoteOptions({
+            workspaceSlug,
+            scope: 'meeting_parent',
+            search: '',
+            limit: 1000,
+        }).then((options) => {
+            if (cancelled) {
+                return;
+            }
+
+            setParentOptions(options as NoteLocationOption[]);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open, noteParentId, fetchEvents, workspaceSlug]);
 
     const filteredEvents = useMemo(() => {
         const q = eventQuery.trim().toLowerCase();

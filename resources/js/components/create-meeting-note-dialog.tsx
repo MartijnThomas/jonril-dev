@@ -1,5 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NoteLocationCombobox } from '@/components/note-location-combobox';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +10,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { loadNoteOptions } from '@/lib/note-options';
 
 type ParentOption = {
     id: string;
@@ -31,16 +32,36 @@ export function CreateMeetingNoteDialog({
     eventId,
 }: CreateMeetingNoteDialogProps) {
     const pageProps = usePage().props as {
-        linkableNotes?: ParentOption[];
-        moveParentOptions?: ParentOption[];
+        currentWorkspace?: { slug?: string | null } | null;
     };
+    const workspaceSlug = pageProps.currentWorkspace?.slug?.trim() ?? '';
 
-    const parentOptions: ParentOption[] = (
-        pageProps.moveParentOptions ?? pageProps.linkableNotes ?? []
-    ).slice();
-
+    const [parentOptions, setParentOptions] = useState<ParentOption[]>([]);
     const [parentId, setParentId] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (!open || workspaceSlug === '') {
+            return;
+        }
+
+        let cancelled = false;
+        void loadNoteOptions({
+            workspaceSlug,
+            scope: 'meeting_parent',
+            limit: 1000,
+        }).then((options) => {
+            if (cancelled) {
+                return;
+            }
+
+            setParentOptions(options as ParentOption[]);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open, workspaceSlug]);
 
     const handleCreate = () => {
         if (!parentId) {

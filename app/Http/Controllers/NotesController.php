@@ -207,6 +207,61 @@ class NotesController extends Controller
         ]);
     }
 
+    public function options(Request $request, Workspace $workspace): JsonResponse
+    {
+        $this->assertWorkspaceMembership($workspace);
+
+        $validated = $request->validate([
+            'for' => ['required', Rule::in(['wikilink', 'move_parent', 'workspace_linkable', 'meeting_parent'])],
+            'q' => ['nullable', 'string', 'max:120'],
+            'note_id' => ['nullable', 'uuid'],
+            'cross_workspace' => ['nullable', 'boolean'],
+            'include_headings' => ['nullable', 'boolean'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:2000'],
+        ]);
+
+        $scopeNote = null;
+        if (is_string($validated['note_id'] ?? null) && trim($validated['note_id']) !== '') {
+            $scopeNote = Note::query()
+                ->where('workspace_id', $workspace->id)
+                ->where('id', $validated['note_id'])
+                ->first();
+        }
+
+        $options = match ($validated['for']) {
+            'wikilink' => $this->noteOptionsForWikiLink(
+                workspace: $workspace,
+                scopeNote: $scopeNote,
+                search: (string) ($validated['q'] ?? ''),
+                crossWorkspace: (bool) ($validated['cross_workspace'] ?? false),
+                includeHeadings: (bool) ($validated['include_headings'] ?? true),
+                limit: (int) ($validated['limit'] ?? 500),
+            ),
+            'move_parent' => $this->noteOptionsForMoveParent(
+                workspace: $workspace,
+                scopeNote: $scopeNote,
+                search: (string) ($validated['q'] ?? ''),
+                limit: (int) ($validated['limit'] ?? 500),
+            ),
+            'workspace_linkable' => $this->noteOptionsForWorkspaceLinkable(
+                workspace: $workspace,
+                search: (string) ($validated['q'] ?? ''),
+                limit: (int) ($validated['limit'] ?? 500),
+            ),
+            'meeting_parent' => $this->noteOptionsForMeetingParent(
+                request: $request,
+                workspace: $workspace,
+                search: (string) ($validated['q'] ?? ''),
+                limit: (int) ($validated['limit'] ?? 500),
+            ),
+            default => [],
+        };
+
+        return response()->json([
+            'options' => $options,
+        ]);
+    }
+
     public function show(string $note)
     {
         $resolved = $this->resolveNoteOrFail($note);
@@ -810,35 +865,6 @@ class NotesController extends Controller
             return array_reverse($trail);
         };
 
-        $crossWorkspaceWikiScope = in_array($note->type, [Note::TYPE_JOURNAL, Note::TYPE_MEETING], true);
-        $linkableWorkspaceIds = [$workspaceId];
-        if ($crossWorkspaceWikiScope) {
-            $linkableWorkspaceIds = Auth::user()?->workspaces()
-                ->whereNull('workspaces.migrated_at')
-                ->pluck('workspaces.id')
-                ->filter(fn ($id) => is_string($id) && trim($id) !== '')
-                ->values()
-                ->all() ?: [$workspaceId];
-        }
-
-        $workspaceNotes = Note::query()
-            ->where('workspace_id', $workspaceId)
-            ->orderBy('created_at')
-            ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity', 'journal_date']);
-
-        $linkableNotes = Note::query()
-            ->whereIn('workspace_id', $linkableWorkspaceIds)
-            ->orderBy('created_at')
-            ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity', 'journal_date']);
-        $linkableNotesPathById = [];
-        $linkableNotesById = $linkableNotes->keyBy('id');
-        $resolveLinkablePath = fn (string $id) => $this->resolveNotePath($id, $linkableNotesById, $linkableNotesPathById);
-
-        $workspaceMetaById = Workspace::query()
-            ->whereIn('id', $linkableWorkspaceIds)
-            ->get(['id', 'name', 'slug'])
-            ->keyBy('id');
-
         $noteTrail = $buildTrail($note->id);
         if ($noteTrail === []) {
             $noteTrail = [[
@@ -1037,82 +1063,6 @@ class NotesController extends Controller
                 'historyUrl' => route('notes.revisions', ['noteId' => $note->id]),
             ],
             'properties' => $note->properties ?? [],
-            'linkableNotes' => $linkableNotes
-                ->map(function (Note $linkableNote) use ($crossWorkspaceWikiScope, $note, $workspaceMetaById, $resolveLinkablePath): array {
-                    $workspacePrefix = null;
-                    if ($crossWorkspaceWikiScope && $linkableNote->workspace_id !== $note->workspace_id) {
-                        $workspaceEntry = $workspaceMetaById->get($linkableNote->workspace_id);
-                        $workspacePrefix = trim((string) ($workspaceEntry?->name ?: $workspaceEntry?->slug ?: ''));
-                    }
-
-                    $parentPath = $linkableNote->parent_id
-                        ? $resolveLinkablePath($linkableNote->parent_id)
-                        : null;
-                    $displayPath = trim(implode(' / ', array_values(array_filter([
-                        $parentPath,
-                    ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
-
-                    $editableBasePath = $linkableNote->type === Note::TYPE_JOURNAL
-                        ? (
-                            $linkableNote->journalSearchPath($this->userLanguage())
-                            ?: ($linkableNote->title ?? 'Untitled')
-                        )
-                        : trim(implode(' / ', array_values(array_filter([
-                            $parentPath,
-                            $linkableNote->title ?? 'Untitled',
-                        ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
-
-                    $editablePath = trim(implode(' / ', array_values(array_filter([
-                        $editableBasePath,
-                    ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
-
-                    return [
-                        'id' => $linkableNote->id,
-                        'title' => $linkableNote->title ?? 'Untitled',
-                        'path' => $displayPath !== '' ? $displayPath : null,
-                        'editablePath' => $editablePath,
-                        'workspaceName' => $workspacePrefix !== '' ? $workspacePrefix : null,
-                        'isCrossWorkspace' => $workspacePrefix !== null && $workspacePrefix !== '',
-                        'href' => $this->noteSlugService->urlFor($linkableNote),
-                        'headings' => $this->extractLinkableHeadings($linkableNote),
-                    ];
-                })
-                ->values(),
-            'moveParentOptions' => (function () use ($workspaceNotes, $note): \Illuminate\Support\Collection {
-                $workspaceNotesPathById = [];
-                $workspaceNotesById = $workspaceNotes->keyBy('id');
-                $resolveWorkspacePath = fn (string $id) => $this->resolveNotePath($id, $workspaceNotesById, $workspaceNotesPathById);
-
-                $childrenByParent = $workspaceNotes
-                    ->filter(fn (Note $candidate) => $candidate->parent_id !== null)
-                    ->groupBy('parent_id');
-                $excludedMoveTargetIds = [$note->id => true];
-                $queue = [$note->id];
-
-                while ($queue !== []) {
-                    $parentId = array_shift($queue);
-                    $children = $childrenByParent->get($parentId, collect());
-                    foreach ($children as $child) {
-                        if (isset($excludedMoveTargetIds[$child->id])) {
-                            continue;
-                        }
-
-                        $excludedMoveTargetIds[$child->id] = true;
-                        $queue[] = $child->id;
-                    }
-                }
-
-                return $workspaceNotes
-                    ->filter(fn (Note $candidate) => ! isset($excludedMoveTargetIds[$candidate->id]))
-                    ->filter(fn (Note $candidate) => $candidate->type === Note::TYPE_NOTE)
-                    ->map(fn (Note $candidate) => [
-                        'id' => $candidate->id,
-                        'title' => $candidate->display_title,
-                        'path' => $candidate->parent_id ? $resolveWorkspacePath($candidate->parent_id) : null,
-                    ])
-                    ->sortBy(fn (array $candidate) => strtolower((string) $candidate['path'].' '.$candidate['title']))
-                    ->values();
-            })(),
             'meetingChildren' => $meetingChildren,
             'meetingEvent' => $meetingEvent,
             'breadcrumbs' => $breadcrumbs,
@@ -1954,6 +1904,340 @@ class NotesController extends Controller
             ->all();
 
         return $combined;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function noteOptionsForWikiLink(
+        Workspace $workspace,
+        ?Note $scopeNote,
+        string $search,
+        bool $crossWorkspace,
+        bool $includeHeadings,
+        int $limit,
+    ): array {
+        $workspaceIds = [$workspace->id];
+        if ($crossWorkspace) {
+            $workspaceIds = Auth::user()?->workspaces()
+                ->whereNull('workspaces.migrated_at')
+                ->pluck('workspaces.id')
+                ->filter(fn ($id) => is_string($id) && trim($id) !== '')
+                ->values()
+                ->all() ?: [$workspace->id];
+        }
+
+        $notes = Note::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->orderBy('created_at')
+            ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity', 'journal_date']);
+        $pathById = [];
+        $notesById = $notes->keyBy('id');
+        $resolvePath = fn (string $id) => $this->resolveNotePath($id, $notesById, $pathById);
+
+        $workspaceMetaById = Workspace::query()
+            ->whereIn('id', $workspaceIds)
+            ->get(['id', 'name', 'slug'])
+            ->keyBy('id');
+
+        $language = $this->userLanguage();
+        $normalizedSearch = mb_strtolower(trim($search));
+
+        return $notes
+            ->map(function (Note $candidate) use (
+                $workspace,
+                $scopeNote,
+                $workspaceMetaById,
+                $resolvePath,
+                $includeHeadings,
+                $language,
+            ): array {
+                $workspacePrefix = null;
+                if ($scopeNote && $candidate->workspace_id !== $scopeNote->workspace_id) {
+                    $workspaceEntry = $workspaceMetaById->get($candidate->workspace_id);
+                    $workspacePrefix = trim((string) ($workspaceEntry?->name ?: $workspaceEntry?->slug ?: ''));
+                } elseif (! $scopeNote && $candidate->workspace_id !== $workspace->id) {
+                    $workspaceEntry = $workspaceMetaById->get($candidate->workspace_id);
+                    $workspacePrefix = trim((string) ($workspaceEntry?->name ?: $workspaceEntry?->slug ?: ''));
+                }
+
+                $parentPath = $candidate->parent_id
+                    ? $resolvePath($candidate->parent_id)
+                    : null;
+                $displayPath = trim(implode(' / ', array_values(array_filter([
+                    $parentPath,
+                ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
+
+                $editableBasePath = $candidate->type === Note::TYPE_JOURNAL
+                    ? (
+                        $candidate->journalSearchPath($language)
+                        ?: ($candidate->title ?? 'Untitled')
+                    )
+                    : trim(implode(' / ', array_values(array_filter([
+                        $parentPath,
+                        $candidate->title ?? 'Untitled',
+                    ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
+
+                $editablePath = trim(implode(' / ', array_values(array_filter([
+                    $editableBasePath,
+                ], fn ($segment) => is_string($segment) && trim($segment) !== ''))));
+
+                return [
+                    'id' => $candidate->id,
+                    'title' => $candidate->title ?? 'Untitled',
+                    'path' => $displayPath !== '' ? $displayPath : null,
+                    'editablePath' => $editablePath,
+                    'workspaceName' => $workspacePrefix !== '' ? $workspacePrefix : null,
+                    'isCrossWorkspace' => $workspacePrefix !== null && $workspacePrefix !== '',
+                    'href' => $this->noteSlugService->urlFor($candidate),
+                    'headings' => $includeHeadings ? $this->extractLinkableHeadings($candidate) : [],
+                ];
+            })
+            ->filter(function (array $option) use ($normalizedSearch): bool {
+                if ($normalizedSearch === '') {
+                    return true;
+                }
+
+                $headingText = collect($option['headings'] ?? [])
+                    ->map(fn (array $heading): string => (string) ($heading['title'] ?? ''))
+                    ->implode(' ');
+
+                $haystack = mb_strtolower(trim(implode(' ', array_filter([
+                    (string) ($option['title'] ?? ''),
+                    (string) ($option['path'] ?? ''),
+                    (string) ($option['editablePath'] ?? ''),
+                    (string) ($option['workspaceName'] ?? ''),
+                    $headingText,
+                ]))));
+
+                return $haystack !== '' && str_contains($haystack, $normalizedSearch);
+            })
+            ->sortBy(fn (array $option) => strtolower((string) ($option['path'] ?? '').' '.$option['title']))
+            ->values()
+            ->take($limit)
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{id: string, title: string, path: string|null}>
+     */
+    private function noteOptionsForMoveParent(
+        Workspace $workspace,
+        ?Note $scopeNote,
+        string $search,
+        int $limit,
+    ): array {
+        $notes = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->orderBy('created_at')
+            ->get(['id', 'workspace_id', 'slug', 'title', 'meta', 'parent_id', 'type', 'journal_granularity', 'journal_date']);
+
+        $excludedIds = [];
+        if ($scopeNote) {
+            $childrenByParent = $notes
+                ->filter(fn (Note $candidate) => $candidate->parent_id !== null)
+                ->groupBy('parent_id');
+            $excludedIds = [$scopeNote->id => true];
+            $queue = [$scopeNote->id];
+
+            while ($queue !== []) {
+                $parentId = array_shift($queue);
+                $children = $childrenByParent->get($parentId, collect());
+                foreach ($children as $child) {
+                    if (isset($excludedIds[$child->id])) {
+                        continue;
+                    }
+
+                    $excludedIds[$child->id] = true;
+                    $queue[] = $child->id;
+                }
+            }
+        }
+
+        $pathById = [];
+        $notesById = $notes->keyBy('id');
+        $resolvePath = fn (string $id) => $this->resolveNotePath($id, $notesById, $pathById);
+        $normalizedSearch = mb_strtolower(trim($search));
+
+        return $notes
+            ->filter(fn (Note $candidate) => ! isset($excludedIds[$candidate->id]))
+            ->filter(fn (Note $candidate) => $candidate->type === Note::TYPE_NOTE)
+            ->map(fn (Note $candidate) => [
+                'id' => $candidate->id,
+                'title' => $candidate->display_title,
+                'path' => $candidate->parent_id ? $resolvePath($candidate->parent_id) : null,
+            ])
+            ->filter(function (array $option) use ($normalizedSearch): bool {
+                if ($normalizedSearch === '') {
+                    return true;
+                }
+
+                $haystack = mb_strtolower(trim((string) ($option['path'] ?? '').' '.(string) ($option['title'] ?? '')));
+
+                return $haystack !== '' && str_contains($haystack, $normalizedSearch);
+            })
+            ->sortBy(fn (array $option) => strtolower((string) ($option['path'] ?? '').' '.$option['title']))
+            ->values()
+            ->take($limit)
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{id: string, title: string, path: string|null, parent_id: string|null}>
+     */
+    private function noteOptionsForWorkspaceLinkable(
+        Workspace $workspace,
+        string $search,
+        int $limit,
+    ): array {
+        $meetingParentIds = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('type', Note::TYPE_MEETING)
+            ->whereNotNull('parent_id')
+            ->pluck('parent_id')
+            ->unique()
+            ->all();
+
+        $notes = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->whereIn('type', [Note::TYPE_NOTE, null])
+            ->whereNotIn('id', $meetingParentIds)
+            ->get(['id', 'title', 'parent_id', 'properties']);
+
+        /** @var \Illuminate\Support\Collection<string, array{id: string, title: string, parent_id: string|null}> $byId */
+        $byId = $notes->keyBy('id');
+
+        $resolvePath = function (string $noteId) use ($byId): ?string {
+            $segments = [];
+            $visited = [];
+            $cursor = $byId->get($noteId);
+
+            while ($cursor !== null && ! isset($visited[$cursor['id']])) {
+                $visited[$cursor['id']] = true;
+                array_unshift($segments, $cursor['title'] ?? 'Untitled');
+
+                if (! $cursor['parent_id']) {
+                    break;
+                }
+
+                $cursor = $byId->get($cursor['parent_id']);
+            }
+
+            return count($segments) > 0 ? implode(' / ', $segments) : null;
+        };
+
+        $normalizedSearch = mb_strtolower(trim($search));
+
+        return $notes
+            ->map(fn (Note $note) => [
+                'id' => $note->id,
+                'title' => $note->display_title,
+                'path' => $note->parent_id ? $resolvePath($note->parent_id) : null,
+                'parent_id' => $note->parent_id,
+            ])
+            ->filter(function (array $option) use ($normalizedSearch): bool {
+                if ($normalizedSearch === '') {
+                    return true;
+                }
+
+                $haystack = mb_strtolower(trim((string) ($option['path'] ?? '').' '.(string) ($option['title'] ?? '')));
+
+                return $haystack !== '' && str_contains($haystack, $normalizedSearch);
+            })
+            ->sortBy(fn (array $n) => strtolower((string) ($n['path'] ?? '').' '.$n['title']))
+            ->values()
+            ->take($limit)
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{id: string, title: string, path: string|null, is_journal: bool}>
+     */
+    private function noteOptionsForMeetingParent(
+        Request $request,
+        Workspace $workspace,
+        string $search,
+        int $limit,
+    ): array {
+        $userTimezone = $this->resolveUserTimezoneForOptions($request);
+        $todayDate = now($userTimezone)->toDateString();
+
+        $todayJournal = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->where('journal_granularity', Note::JOURNAL_DAILY)
+            ->whereDate('journal_date', $todayDate)
+            ->first(['id', 'journal_date']);
+
+        $notes = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->whereIn('type', [Note::TYPE_NOTE, null])
+            ->get(['id', 'title', 'parent_id', 'properties']);
+
+        /** @var \Illuminate\Support\Collection<string, array{id: string, title: string, parent_id: string|null}> $byId */
+        $byId = $notes->keyBy('id');
+
+        $resolvePath = function (string $noteId) use ($byId): ?string {
+            $segments = [];
+            $visited = [];
+            $cursor = $byId->get($noteId);
+
+            while ($cursor !== null && ! isset($visited[$cursor['id']])) {
+                $visited[$cursor['id']] = true;
+                array_unshift($segments, $cursor['title'] ?? 'Untitled');
+
+                if (! $cursor['parent_id']) {
+                    break;
+                }
+
+                $cursor = $byId->get($cursor['parent_id']);
+            }
+
+            return count($segments) > 0 ? implode(' / ', $segments) : null;
+        };
+
+        $normalizedSearch = mb_strtolower(trim($search));
+        $options = $notes
+            ->map(fn (Note $note) => [
+                'id' => $note->id,
+                'title' => $note->display_title,
+                'path' => $note->parent_id ? $resolvePath($note->parent_id) : null,
+                'is_journal' => false,
+            ])
+            ->filter(function (array $option) use ($normalizedSearch): bool {
+                if ($normalizedSearch === '') {
+                    return true;
+                }
+
+                $haystack = mb_strtolower(trim((string) ($option['path'] ?? '').' '.(string) ($option['title'] ?? '')));
+
+                return $haystack !== '' && str_contains($haystack, $normalizedSearch);
+            })
+            ->sortBy(fn (array $n) => strtolower((string) ($n['path'] ?? '').' '.$n['title']))
+            ->values()
+            ->take($limit)
+            ->all();
+
+        if ($todayJournal) {
+            array_unshift($options, [
+                'id' => $todayJournal->id,
+                'title' => "Daily note · {$todayDate}",
+                'path' => null,
+                'is_journal' => true,
+            ]);
+        }
+
+        return $options;
+    }
+
+    private function resolveUserTimezoneForOptions(Request $request): string
+    {
+        $user = $request->user();
+        if ($user && method_exists($user, 'timezonePreference')) {
+            return $user->timezonePreference();
+        }
+
+        return config('app.timezone', 'UTC');
     }
 
     /**

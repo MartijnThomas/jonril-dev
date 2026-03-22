@@ -1,8 +1,9 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { useCallback, useEffect, useState } from 'react';
 import { StatusBarTaskCounter } from '@/components/status-bar-task-counter';
 import { SimpleEditor } from '@/components/tiptap-templates/simple/simple-editor';
 import AppLayout from '@/layouts/app-layout';
+import { loadNoteOptions } from '@/lib/note-options';
 import type { BreadcrumbItem, EditorSaveStatus } from '@/types';
 
 type Props = {
@@ -13,7 +14,7 @@ type Props = {
     noteHashUrl: string;
     noteImageUploadUrl: string;
     properties: any;
-    linkableNotes: {
+    linkableNotes?: {
         id: string;
         title: string;
         path?: string;
@@ -102,7 +103,6 @@ export default function Dashboard({
     noteHashUrl,
     noteImageUploadUrl,
     properties,
-    linkableNotes,
     breadcrumbs,
     language,
     noteType,
@@ -118,6 +118,11 @@ export default function Dashboard({
     meetingChildren = [],
     meetingEvent = null,
 }: Props) {
+    const page = usePage();
+    const sharedProps = page.props as {
+        currentWorkspace?: { slug?: string | null } | null;
+    };
+    const currentWorkspaceSlug = sharedProps.currentWorkspace?.slug?.trim() ?? '';
     const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('ready');
     const [saveLastSavedAt, setSaveLastSavedAt] = useState<number | null>(null);
     const [contentStats, setContentStats] = useState<{
@@ -145,6 +150,38 @@ export default function Dashboard({
         position: 0,
         kind: 'paragraph',
     });
+    const [linkableNotes, setLinkableNotes] = useState<Props['linkableNotes']>(
+        [],
+    );
+
+    useEffect(() => {
+        if (currentWorkspaceSlug === '') {
+            setLinkableNotes([]);
+            return;
+        }
+
+        let cancelled = false;
+        void loadNoteOptions({
+            workspaceSlug: currentWorkspaceSlug,
+            scope: 'wikilink',
+            noteId,
+            crossWorkspace: noteType === 'journal' || noteType === 'meeting',
+            includeHeadings: true,
+            limit: 1200,
+        }).then((options) => {
+            if (cancelled) {
+                return;
+            }
+
+            setLinkableNotes(
+                options as NonNullable<Props['linkableNotes']>,
+            );
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [currentWorkspaceSlug, noteId, noteType]);
     useEffect(() => {
         const handler = () => router.reload({ only: ['meetingChildren'] });
         window.addEventListener('sarth:note-saved', handler);

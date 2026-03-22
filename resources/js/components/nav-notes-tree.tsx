@@ -35,6 +35,7 @@ type NotesTreeProps = {
     allOptions: CreateNoteParentOption[];
     parentPath: string | null;
     parentId: string | null;
+    workspaceSlug: string;
     workspaceReadOnly: boolean;
 };
 
@@ -49,27 +50,19 @@ function hasActiveInBranch(
     return item.children.some((child) => hasActiveInBranch(child, isCurrentUrl));
 }
 
-function collectDescendantIds(items: SidebarNoteTreeItem[]): string[] {
-    const ids: string[] = [];
-    for (const item of items) {
-        ids.push(item.id);
-        ids.push(...collectDescendantIds(item.children));
-    }
-
-    return ids;
-}
-
 function RootNoteItem({
     item,
     allOptions,
     parentPath,
     parentId,
+    workspaceSlug,
     workspaceReadOnly,
 }: {
     item: SidebarNoteTreeItem;
     allOptions: CreateNoteParentOption[];
     parentPath: string | null;
     parentId: string | null;
+    workspaceSlug: string;
     workspaceReadOnly: boolean;
 }) {
     const { isCurrentUrl } = useCurrentUrl();
@@ -87,14 +80,6 @@ function RootNoteItem({
         : FileText;
     const iconColorClass = getColorTextClass(item.icon_color ?? null);
     const iconBgClass = getColorBgClass(item.icon_bg ?? null);
-    const excludedMoveTargetIds = useMemo(
-        () => new Set([item.id, ...collectDescendantIds(item.children)]),
-        [item.id, item.children],
-    );
-    const moveParentOptions = useMemo(
-        () => allOptions.filter((option) => !excludedMoveTargetIds.has(option.id)),
-        [allOptions, excludedMoveTargetIds],
-    );
     const currentPath = parentPath ? `${parentPath} / ${item.title}` : item.title;
 
     if (!hasChildren) {
@@ -125,10 +110,10 @@ function RootNoteItem({
                     <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
                         <NoteHeaderActions
                             noteId={item.id}
+                            workspaceSlug={workspaceSlug}
                             title={item.title}
                             currentLocation={parentPath}
                             currentParentId={parentId}
-                            moveParentOptions={moveParentOptions}
                             canMove={!workspaceReadOnly}
                             canRename={!workspaceReadOnly}
                             canDelete={!workspaceReadOnly}
@@ -180,10 +165,10 @@ function RootNoteItem({
                     <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
                         <NoteHeaderActions
                             noteId={item.id}
+                            workspaceSlug={workspaceSlug}
                             title={item.title}
                             currentLocation={parentPath}
                             currentParentId={parentId}
-                            moveParentOptions={moveParentOptions}
                             canMove={!workspaceReadOnly}
                             canRename={!workspaceReadOnly}
                             canDelete={!workspaceReadOnly}
@@ -204,6 +189,7 @@ function RootNoteItem({
                         allOptions={allOptions}
                         parentPath={currentPath}
                         parentId={item.id}
+                        workspaceSlug={workspaceSlug}
                         workspaceReadOnly={workspaceReadOnly}
                     />
                 </CollapsibleContent>
@@ -212,7 +198,7 @@ function RootNoteItem({
     );
 }
 
-function NoteSubTree({ items, allOptions, parentPath, parentId, workspaceReadOnly }: NotesTreeProps) {
+function NoteSubTree({ items, allOptions, parentPath, parentId, workspaceSlug, workspaceReadOnly }: NotesTreeProps) {
     const { isCurrentUrl } = useCurrentUrl();
 
     return (
@@ -225,6 +211,7 @@ function NoteSubTree({ items, allOptions, parentPath, parentId, workspaceReadOnl
                     allOptions={allOptions}
                     parentPath={parentPath}
                     parentId={parentId}
+                    workspaceSlug={workspaceSlug}
                     workspaceReadOnly={workspaceReadOnly}
                 />
             ))}
@@ -238,6 +225,7 @@ function SubTreeNode({
     allOptions,
     parentPath,
     parentId,
+    workspaceSlug,
     workspaceReadOnly,
 }: {
     item: SidebarNoteTreeItem;
@@ -245,6 +233,7 @@ function SubTreeNode({
     allOptions: CreateNoteParentOption[];
     parentPath: string | null;
     parentId: string | null;
+    workspaceSlug: string;
     workspaceReadOnly: boolean;
 }) {
     const isActive = isCurrentUrl(item.href);
@@ -261,14 +250,6 @@ function SubTreeNode({
         : FileText;
     const iconColorClass = getColorTextClass(item.icon_color ?? null);
     const iconBgClass = getColorBgClass(item.icon_bg ?? null);
-    const excludedMoveTargetIds = useMemo(
-        () => new Set([item.id, ...collectDescendantIds(item.children)]),
-        [item.id, item.children],
-    );
-    const moveParentOptions = useMemo(
-        () => allOptions.filter((option) => !excludedMoveTargetIds.has(option.id)),
-        [allOptions, excludedMoveTargetIds],
-    );
     const currentPath = parentPath ? `${parentPath} / ${item.title}` : item.title;
 
     if (!hasChildren) {
@@ -299,10 +280,10 @@ function SubTreeNode({
                     <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
                         <NoteHeaderActions
                             noteId={item.id}
+                            workspaceSlug={workspaceSlug}
                             title={item.title}
                             currentLocation={parentPath}
                             currentParentId={parentId}
-                            moveParentOptions={moveParentOptions}
                             canMove={!workspaceReadOnly}
                             canRename={!workspaceReadOnly}
                             canDelete={!workspaceReadOnly}
@@ -354,10 +335,10 @@ function SubTreeNode({
                     <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
                         <NoteHeaderActions
                             noteId={item.id}
+                            workspaceSlug={workspaceSlug}
                             title={item.title}
                             currentLocation={parentPath}
                             currentParentId={parentId}
-                            moveParentOptions={moveParentOptions}
                             canMove={!workspaceReadOnly}
                             canRename={!workspaceReadOnly}
                             canDelete={!workspaceReadOnly}
@@ -378,6 +359,7 @@ function SubTreeNode({
                         allOptions={allOptions}
                         parentPath={currentPath}
                         parentId={item.id}
+                        workspaceSlug={workspaceSlug}
                         workspaceReadOnly={workspaceReadOnly}
                     />
                 </CollapsibleContent>
@@ -390,6 +372,7 @@ export function NavNotesTree() {
     const { notesTree, currentWorkspace } = usePage().props as {
         notesTree?: SidebarNoteTreeItem[];
         currentWorkspace?: {
+            slug?: string | null;
             is_migrated_source?: boolean;
         } | null;
     };
@@ -398,6 +381,7 @@ export function NavNotesTree() {
         () => (notesTree ?? []) as SidebarNoteTreeItem[],
         [notesTree],
     );
+    const workspaceSlug = currentWorkspace?.slug ?? '';
     const workspaceReadOnly = currentWorkspace?.is_migrated_source === true;
     const [createOpen, setCreateOpen] = useState(false);
 
@@ -523,6 +507,7 @@ export function NavNotesTree() {
                         allOptions={parentOptions}
                         parentPath={null}
                         parentId={null}
+                        workspaceSlug={workspaceSlug}
                         workspaceReadOnly={workspaceReadOnly}
                     />
                 ))}
