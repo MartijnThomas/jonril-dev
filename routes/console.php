@@ -61,14 +61,14 @@ if ($shouldScheduleBackups) {
     );
 
     $track(
-        Schedule::command('backup:run')->daily()->at('06:00')->timezone('Europe/Amsterdam'),
+        Schedule::command('backup:run')->daily()->at('06:00')->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmaw027pcpjbcr6798emgv5e/ping'),
         'backup_run_full',
         'Backup run (full)',
         'backup:run',
     );
 
     $track(
-        Schedule::command('backup:run --only-db --config=backup_hourly_db')->hourlyAt(15)->timezone('Europe/Amsterdam'),
+        Schedule::command('backup:run --only-db --config=backup_hourly_db')->hourlyAt(15)->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmavy4hb265bxc60tvk1rsn4/ping'),
         'backup_run_hourly_db',
         'Backup run (hourly database)',
         'backup:run --only-db --config=backup_hourly_db',
