@@ -50,8 +50,12 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const currentUrl = new URL(page.url, window.location.origin);
     const currentPath = currentUrl.pathname;
     const currentSection = currentUrl.searchParams.get('section') ?? 'general';
-    const workspaceMatch = currentPath.match(/^\/settings\/workspaces\/([^/]+)$/);
-    const currentSettingsWorkspaceId = workspaceMatch ? workspaceMatch[1] : null;
+    const workspaceMatch = currentPath.match(
+        /^\/settings\/workspaces\/([^/]+)$/,
+    );
+    const currentSettingsWorkspaceId = workspaceMatch
+        ? workspaceMatch[1]
+        : null;
 
     const ownerWorkspaces = useMemo(() => {
         const owned = workspaces
@@ -59,8 +63,12 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             .sort((a, b) => a.name.localeCompare(b.name));
 
         return {
-            active: owned.filter((workspace) => workspace.is_migrated_source !== true),
-            migrated: owned.filter((workspace) => workspace.is_migrated_source === true),
+            active: owned.filter(
+                (workspace) => workspace.is_migrated_source !== true,
+            ),
+            migrated: owned.filter(
+                (workspace) => workspace.is_migrated_source === true,
+            ),
         };
     }, [workspaces]);
     const profileNavItems = [
@@ -94,11 +102,21 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const workspaceNavItems = [
         { key: 'general', label: t('workspace_settings.general', 'General') },
         { key: 'members', label: t('workspace_settings.members', 'Members') },
-        { key: 'calendars', label: t('workspace_settings.calendars', 'Calendars') },
-        { key: 'advanced', label: t('workspace_settings.advanced', 'Advanced') },
+        {
+            key: 'calendars',
+            label: t('workspace_settings.calendars', 'Calendars'),
+        },
+        {
+            key: 'advanced',
+            label: t('workspace_settings.advanced', 'Advanced'),
+        },
     ] as const;
     const workspaceTabTargetId =
-        currentSettingsWorkspaceId ?? currentWorkspace?.id ?? ownerWorkspaces.active[0]?.id ?? ownerWorkspaces.migrated[0]?.id ?? null;
+        currentSettingsWorkspaceId ??
+        currentWorkspace?.id ??
+        ownerWorkspaces.active[0]?.id ??
+        ownerWorkspaces.migrated[0]?.id ??
+        null;
     const workspaceTabHref = workspaceTabTargetId
         ? `/settings/workspaces/${workspaceTabTargetId}`
         : '/settings/profile';
@@ -107,17 +125,19 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             key: 'profile',
             label: t('settings_nav.tab_profile', 'Profile'),
             href: edit(),
-            active: currentPath.startsWith('/settings/profile')
-                || currentPath.startsWith('/settings/password')
-                || currentPath.startsWith('/settings/two-factor')
-                || currentPath.startsWith('/settings/appearance'),
+            active:
+                currentPath.startsWith('/settings/profile') ||
+                currentPath.startsWith('/settings/password') ||
+                currentPath.startsWith('/settings/two-factor') ||
+                currentPath.startsWith('/settings/appearance'),
         },
         {
             key: 'tasks_editor',
             label: t('settings_nav.tab_tasks_editor', 'Tasks & Editor'),
             href: editEditorPreferences(),
-            active: currentPath.startsWith('/settings/editor-preferences')
-                || currentPath.startsWith('/settings/task-filters'),
+            active:
+                currentPath.startsWith('/settings/editor-preferences') ||
+                currentPath.startsWith('/settings/task-filters'),
         },
         {
             key: 'workspace',
@@ -181,7 +201,10 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
 
             <div className="flex flex-col lg:flex-row lg:space-x-8">
                 <aside className="w-full max-w-xl lg:w-56">
-                    <nav className="flex flex-col gap-4" aria-label={t('settings.title', 'Settings')}>
+                    <nav
+                        className="flex flex-col gap-4"
+                        aria-label={t('settings.title', 'Settings')}
+                    >
                         {activeTopTab === 'profile' ? (
                             <div className="space-y-1">
                                 <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -194,10 +217,14 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                         variant="ghost"
                                         asChild
                                         className={cn('w-full justify-start', {
-                                            'bg-muted': isCurrentOrParentUrl(item.href),
+                                            'bg-muted': isCurrentOrParentUrl(
+                                                item.href,
+                                            ),
                                         })}
                                     >
-                                        <Link href={item.href}>{item.title}</Link>
+                                        <Link href={item.href}>
+                                            {item.title}
+                                        </Link>
                                     </Button>
                                 ))}
                             </div>
@@ -206,7 +233,10 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                         {activeTopTab === 'tasks_editor' ? (
                             <div className="space-y-1">
                                 <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                                    {t('settings_nav.tab_tasks_editor', 'Tasks & Editor')}
+                                    {t(
+                                        'settings_nav.tab_tasks_editor',
+                                        'Tasks & Editor',
+                                    )}
                                 </p>
                                 {tasksEditorNavItems.map((item, index) => (
                                     <Button
@@ -215,10 +245,14 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                         variant="ghost"
                                         asChild
                                         className={cn('w-full justify-start', {
-                                            'bg-muted': isCurrentOrParentUrl(item.href),
+                                            'bg-muted': isCurrentOrParentUrl(
+                                                item.href,
+                                            ),
                                         })}
                                     >
-                                        <Link href={item.href}>{item.title}</Link>
+                                        <Link href={item.href}>
+                                            {item.title}
+                                        </Link>
                                     </Button>
                                 ))}
                             </div>
@@ -227,14 +261,21 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                         {canShowWorkspaceSidebar && selectedWorkspace ? (
                             <div className="space-y-3">
                                 <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                                    {t('settings.workspaces_section', 'Workspaces')}
+                                    {t(
+                                        'settings.workspaces_section',
+                                        'Workspaces',
+                                    )}
                                 </p>
                                 <Select
                                     value={selectedWorkspace.id}
                                     onValueChange={(workspaceId) => {
                                         const nextSection =
-                                            currentSection === 'calendars'
-                                            && !workspaces.find((workspace) => workspace.id === workspaceId)?.is_personal
+                                            currentSection === 'calendars' &&
+                                            !workspaces.find(
+                                                (workspace) =>
+                                                    workspace.id ===
+                                                    workspaceId,
+                                            )?.is_personal
                                                 ? 'general'
                                                 : currentSection;
                                         router.get(
@@ -248,11 +289,16 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {ownerWorkspaces.active.map((workspace) => (
-                                            <SelectItem key={workspace.id} value={workspace.id}>
-                                                {workspace.name}
-                                            </SelectItem>
-                                        ))}
+                                        {ownerWorkspaces.active.map(
+                                            (workspace) => (
+                                                <SelectItem
+                                                    key={workspace.id}
+                                                    value={workspace.id}
+                                                >
+                                                    {workspace.name}
+                                                </SelectItem>
+                                            ),
+                                        )}
                                         {ownerWorkspaces.migrated.length > 0 ? (
                                             <div className="px-2 py-1 text-[10px] tracking-wide text-muted-foreground uppercase">
                                                 {t(
@@ -261,17 +307,25 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                                 )}
                                             </div>
                                         ) : null}
-                                        {ownerWorkspaces.migrated.map((workspace) => (
-                                            <SelectItem key={workspace.id} value={workspace.id}>
-                                                {workspace.name}
-                                            </SelectItem>
-                                        ))}
+                                        {ownerWorkspaces.migrated.map(
+                                            (workspace) => (
+                                                <SelectItem
+                                                    key={workspace.id}
+                                                    value={workspace.id}
+                                                >
+                                                    {workspace.name}
+                                                </SelectItem>
+                                            ),
+                                        )}
                                     </SelectContent>
                                 </Select>
 
                                 <div className="space-y-1">
                                     {workspaceNavItems.map((item) => {
-                                        if (item.key === 'calendars' && !selectedWorkspace.is_personal) {
+                                        if (
+                                            item.key === 'calendars' &&
+                                            !selectedWorkspace.is_personal
+                                        ) {
                                             return null;
                                         }
 
@@ -281,9 +335,14 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                                 size="sm"
                                                 variant="ghost"
                                                 asChild
-                                                className={cn('w-full justify-start', {
-                                                    'bg-muted': currentSection === item.key,
-                                                })}
+                                                className={cn(
+                                                    'w-full justify-start',
+                                                    {
+                                                        'bg-muted':
+                                                            currentSection ===
+                                                            item.key,
+                                                    },
+                                                )}
                                             >
                                                 <Link
                                                     href={`/settings/workspaces/${selectedWorkspace.id}?section=${item.key}`}
@@ -307,11 +366,16 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                     variant="ghost"
                                     asChild
                                     className={cn('w-full justify-start', {
-                                        'bg-muted': currentPath === '/settings/admin/operations',
+                                        'bg-muted':
+                                            currentPath ===
+                                            '/settings/admin/operations',
                                     })}
                                 >
                                     <Link href="/settings/admin/operations">
-                                        {t('settings_nav.operations', 'Operations')}
+                                        {t(
+                                            'settings_nav.operations',
+                                            'Operations',
+                                        )}
                                     </Link>
                                 </Button>
                                 <Button
@@ -319,11 +383,44 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                     variant="ghost"
                                     asChild
                                     className={cn('w-full justify-start', {
-                                        'bg-muted': currentPath === '/settings/admin/maintenance',
+                                        'bg-muted':
+                                            currentPath ===
+                                            '/settings/admin/maintenance',
                                     })}
                                 >
                                     <Link href="/settings/admin/maintenance">
-                                        {t('settings_nav.maintenance', 'Maintenance')}
+                                        {t(
+                                            'settings_nav.maintenance',
+                                            'Maintenance',
+                                        )}
+                                    </Link>
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    asChild
+                                    className={cn('w-full justify-start', {
+                                        'bg-muted': currentPath === '/horizon',
+                                    })}
+                                >
+                                    <Link href="/horizon">
+                                        {t('settings_nav.horizon', 'Horizon')}
+                                    </Link>
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    asChild
+                                    className={cn('w-full justify-start', {
+                                        'bg-muted':
+                                            currentPath === '/telescope',
+                                    })}
+                                >
+                                    <Link href="/telescope">
+                                        {t(
+                                            'settings_nav.telescope',
+                                            'Telescope',
+                                        )}
                                     </Link>
                                 </Button>
                             </div>
