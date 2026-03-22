@@ -86,8 +86,23 @@ type DayIndicator = {
     open_tasks_count: number;
 };
 
+type WeekIndicator = {
+    has_note: boolean;
+    has_events: boolean;
+    task_state: DayIndicatorTaskState;
+    events_count: number;
+    birthday_count: number;
+    open_note_tasks_count: number;
+    assigned_tasks_count: number;
+};
+
+type PeriodIndicator = WeekIndicator;
+
 type IndicatorResponse = {
     days?: Record<string, DayIndicator>;
+    weeks?: Record<string, WeekIndicator>;
+    months?: Record<string, PeriodIndicator>;
+    years?: Record<string, PeriodIndicator>;
     pending_dates?: string[];
     version?: string;
     polling_ms?: number;
@@ -120,27 +135,29 @@ const CALENDAR_SELECTED_DAY_CLASS: Record<string, string> = {
 };
 
 const CALENDAR_SELECTED_WEEK_CLASS: Record<string, string> = {
-    black: 'rounded-full bg-black text-white',
-    slate: 'rounded-full bg-slate-600 text-white',
-    zinc: 'rounded-full bg-zinc-600 text-white',
-    stone: 'rounded-full bg-stone-600 text-white',
-    red: 'rounded-full bg-red-600 text-white',
-    orange: 'rounded-full bg-orange-600 text-white',
-    amber: 'rounded-full bg-amber-600 text-white',
-    yellow: 'rounded-full bg-yellow-500 text-black',
-    lime: 'rounded-full bg-lime-600 text-white',
-    green: 'rounded-full bg-green-600 text-white',
-    emerald: 'rounded-full bg-emerald-600 text-white',
-    teal: 'rounded-full bg-teal-600 text-white',
-    cyan: 'rounded-full bg-cyan-600 text-white',
-    sky: 'rounded-full bg-sky-600 text-white',
-    blue: 'rounded-full bg-blue-600 text-white',
-    indigo: 'rounded-full bg-indigo-600 text-white',
-    violet: 'rounded-full bg-violet-600 text-white',
-    purple: 'rounded-full bg-purple-600 text-white',
-    fuchsia: 'rounded-full bg-fuchsia-600 text-white',
-    pink: 'rounded-full bg-pink-600 text-white',
-    rose: 'rounded-full bg-rose-600 text-white',
+    black: 'rounded-md bg-zinc-900/15 text-foreground dark:bg-zinc-100/20',
+    slate: 'rounded-md bg-slate-500/20 text-foreground dark:bg-slate-400/25',
+    zinc: 'rounded-md bg-zinc-500/20 text-foreground dark:bg-zinc-400/25',
+    stone: 'rounded-md bg-stone-500/20 text-foreground dark:bg-stone-400/25',
+    red: 'rounded-md bg-red-500/20 text-foreground dark:bg-red-400/25',
+    orange: 'rounded-md bg-orange-500/20 text-foreground dark:bg-orange-400/25',
+    amber: 'rounded-md bg-amber-500/22 text-foreground dark:bg-amber-400/28',
+    yellow: 'rounded-md bg-yellow-400/28 text-foreground dark:bg-yellow-300/30',
+    lime: 'rounded-md bg-lime-500/20 text-foreground dark:bg-lime-400/25',
+    green: 'rounded-md bg-green-500/20 text-foreground dark:bg-green-400/25',
+    emerald:
+        'rounded-md bg-emerald-500/20 text-foreground dark:bg-emerald-400/25',
+    teal: 'rounded-md bg-teal-500/20 text-foreground dark:bg-teal-400/25',
+    cyan: 'rounded-md bg-cyan-500/20 text-foreground dark:bg-cyan-400/25',
+    sky: 'rounded-md bg-sky-500/20 text-foreground dark:bg-sky-400/25',
+    blue: 'rounded-md bg-blue-500/20 text-foreground dark:bg-blue-400/25',
+    indigo: 'rounded-md bg-indigo-500/20 text-foreground dark:bg-indigo-400/25',
+    violet: 'rounded-md bg-violet-500/20 text-foreground dark:bg-violet-400/25',
+    purple: 'rounded-md bg-purple-500/20 text-foreground dark:bg-purple-400/25',
+    fuchsia:
+        'rounded-md bg-fuchsia-500/20 text-foreground dark:bg-fuchsia-400/25',
+    pink: 'rounded-md bg-pink-500/20 text-foreground dark:bg-pink-400/25',
+    rose: 'rounded-md bg-rose-500/20 text-foreground dark:bg-rose-400/25',
 };
 
 function parseJournalPeriod(
@@ -251,6 +268,39 @@ function formatIndicatorTooltip(
     return parts.length > 0 ? parts.join(', ') : null;
 }
 
+function formatWeekIndicatorTooltip(indicator: WeekIndicator | undefined): string | null {
+    if (!indicator) {
+        return null;
+    }
+
+    const parts: string[] = [];
+
+    if (indicator.events_count > 0) {
+        parts.push(
+            `${indicator.events_count} ${indicator.events_count === 1 ? 'event' : 'events'}`,
+        );
+    }
+
+    const openTasks = indicator.open_note_tasks_count + indicator.assigned_tasks_count;
+    if (openTasks > 0) {
+        parts.push(
+            `${openTasks} open ${openTasks === 1 ? 'task' : 'tasks'}`,
+        );
+    }
+
+    if (indicator.birthday_count > 0) {
+        parts.push(
+            `${indicator.birthday_count} ${indicator.birthday_count === 1 ? 'birthday' : 'birthdays'}`,
+        );
+    }
+
+    if (indicator.has_note) {
+        parts.push('Note exists');
+    }
+
+    return parts.length > 0 ? parts.join(', ') : null;
+}
+
 export function RightSidebarCalendar() {
     const pageProps = usePage().props as JournalPageProps;
     const prefetchTimeoutRef = useRef<number | null>(null);
@@ -301,8 +351,26 @@ export function RightSidebarCalendar() {
     const [dayIndicators, setDayIndicators] = useState<
         Record<string, DayIndicator>
     >({});
+    const [weekIndicators, setWeekIndicators] = useState<
+        Record<string, WeekIndicator>
+    >({});
+    const [monthIndicators, setMonthIndicators] = useState<
+        Record<string, PeriodIndicator>
+    >({});
+    const [yearIndicators, setYearIndicators] = useState<
+        Record<string, PeriodIndicator>
+    >({});
     const indicatorCacheRef = useRef<
-        Record<string, { days: Record<string, DayIndicator>; version: string }>
+        Record<
+            string,
+            {
+                days: Record<string, DayIndicator>;
+                weeks: Record<string, WeekIndicator>;
+                months: Record<string, PeriodIndicator>;
+                years: Record<string, PeriodIndicator>;
+                version: string;
+            }
+        >
     >({});
     const indicatorPollRef = useRef<number | null>(null);
     const [indicatorRefreshNonce, setIndicatorRefreshNonce] = useState(0);
@@ -498,6 +566,9 @@ export function RightSidebarCalendar() {
         const cached = indicatorCacheRef.current[currentRangeKey];
         if (cached?.days) {
             setDayIndicators(cached.days);
+            setWeekIndicators(cached.weeks ?? {});
+            setMonthIndicators(cached.months ?? {});
+            setYearIndicators(cached.years ?? {});
         }
 
         const abortController = new AbortController();
@@ -554,9 +625,15 @@ export function RightSidebarCalendar() {
                 if (hasChanged) {
                     indicatorCacheRef.current[currentRangeKey] = {
                         days: payload.days,
+                        weeks: payload.weeks ?? {},
+                        months: payload.months ?? {},
+                        years: payload.years ?? {},
                         version: nextVersion,
                     };
                     setDayIndicators(payload.days);
+                    setWeekIndicators(payload.weeks ?? {});
+                    setMonthIndicators(payload.months ?? {});
+                    setYearIndicators(payload.years ?? {});
                 }
 
                 const pollMs =
@@ -589,7 +666,15 @@ export function RightSidebarCalendar() {
 
     useEffect(() => {
         setDayIndicators({});
+        setWeekIndicators({});
+        setMonthIndicators({});
+        setYearIndicators({});
     }, [eventsWorkspaceSlug]);
+
+    const monthIndicator = monthIndicators[monthPeriod];
+    const yearIndicator = yearIndicators[yearPeriod];
+    const monthTooltip = formatWeekIndicatorTooltip(monthIndicator);
+    const yearTooltip = formatWeekIndicatorTooltip(yearIndicator);
 
     useEffect(() => {
         if (eventsWorkspaceSlug === '') {
@@ -754,30 +839,111 @@ export function RightSidebarCalendar() {
                 </div>
 
                 <div className="flex items-center gap-1 text-sm font-medium">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-8 px-2 text-sm capitalize"
-                        onMouseEnter={() =>
-                            schedulePrefetchJournal('monthly', monthPeriod)
-                        }
-                        onMouseLeave={clearPrefetchTimeout}
-                        onClick={() => visitJournal('monthly', monthPeriod)}
-                    >
-                        {monthName}
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-8 px-2 text-sm"
-                        onMouseEnter={() =>
-                            schedulePrefetchJournal('yearly', yearPeriod)
-                        }
-                        onMouseLeave={clearPrefetchTimeout}
-                        onClick={() => visitJournal('yearly', yearPeriod)}
-                    >
-                        {yearPeriod}
-                    </Button>
+                    <Tooltip delayDuration={500}>
+                        <TooltipTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="relative h-8 px-2 text-sm capitalize"
+                                onMouseEnter={() =>
+                                    schedulePrefetchJournal(
+                                        'monthly',
+                                        monthPeriod,
+                                    )
+                                }
+                                onMouseLeave={clearPrefetchTimeout}
+                                onClick={() =>
+                                    visitJournal('monthly', monthPeriod)
+                                }
+                            >
+                                {monthName}
+                                {monthIndicator &&
+                                (monthIndicator.has_note ||
+                                    monthIndicator.has_events ||
+                                    monthIndicator.task_state !== 'none' ||
+                                    monthIndicator.birthday_count > 0) ? (
+                                    <span className="pointer-events-none absolute bottom-0.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-0.5">
+                                        {monthIndicator.has_note ? (
+                                            <span className="size-1 rounded-full bg-zinc-950 ring-1 ring-background/90 dark:bg-zinc-50" />
+                                        ) : null}
+                                        {monthIndicator.has_events ? (
+                                            <span className="size-1 rounded-full bg-cyan-600 ring-1 ring-background/90 dark:bg-cyan-400" />
+                                        ) : null}
+                                        {monthIndicator.birthday_count > 0 ? (
+                                            <span className="size-1 rounded-full bg-fuchsia-600 ring-1 ring-background/90 dark:bg-fuchsia-400" />
+                                        ) : null}
+                                        {monthIndicator.task_state ===
+                                        'all_completed' ? (
+                                            <span className="size-1 rounded-full bg-lime-600 ring-1 ring-background/90 dark:bg-lime-400" />
+                                        ) : null}
+                                        {monthIndicator.task_state ===
+                                        'open' ? (
+                                            <span className="size-1 rounded-full bg-amber-600 ring-1 ring-background/90 dark:bg-amber-400" />
+                                        ) : null}
+                                        {monthIndicator.task_state ===
+                                        'open_past' ? (
+                                            <span className="size-1 rounded-full bg-red-600 ring-1 ring-background/90 dark:bg-red-400" />
+                                        ) : null}
+                                    </span>
+                                ) : null}
+                            </Button>
+                        </TooltipTrigger>
+                        {monthTooltip ? (
+                            <TooltipContent side="top">
+                                {monthTooltip}
+                            </TooltipContent>
+                        ) : null}
+                    </Tooltip>
+                    <Tooltip delayDuration={500}>
+                        <TooltipTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="relative h-8 px-2 text-sm"
+                                onMouseEnter={() =>
+                                    schedulePrefetchJournal('yearly', yearPeriod)
+                                }
+                                onMouseLeave={clearPrefetchTimeout}
+                                onClick={() => visitJournal('yearly', yearPeriod)}
+                            >
+                                {yearPeriod}
+                                {yearIndicator &&
+                                (yearIndicator.has_note ||
+                                    yearIndicator.has_events ||
+                                    yearIndicator.task_state !== 'none' ||
+                                    yearIndicator.birthday_count > 0) ? (
+                                    <span className="pointer-events-none absolute bottom-0.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-0.5">
+                                        {yearIndicator.has_note ? (
+                                            <span className="size-1 rounded-full bg-zinc-950 ring-1 ring-background/90 dark:bg-zinc-50" />
+                                        ) : null}
+                                        {yearIndicator.has_events ? (
+                                            <span className="size-1 rounded-full bg-cyan-600 ring-1 ring-background/90 dark:bg-cyan-400" />
+                                        ) : null}
+                                        {yearIndicator.birthday_count > 0 ? (
+                                            <span className="size-1 rounded-full bg-fuchsia-600 ring-1 ring-background/90 dark:bg-fuchsia-400" />
+                                        ) : null}
+                                        {yearIndicator.task_state ===
+                                        'all_completed' ? (
+                                            <span className="size-1 rounded-full bg-lime-600 ring-1 ring-background/90 dark:bg-lime-400" />
+                                        ) : null}
+                                        {yearIndicator.task_state ===
+                                        'open' ? (
+                                            <span className="size-1 rounded-full bg-amber-600 ring-1 ring-background/90 dark:bg-amber-400" />
+                                        ) : null}
+                                        {yearIndicator.task_state ===
+                                        'open_past' ? (
+                                            <span className="size-1 rounded-full bg-red-600 ring-1 ring-background/90 dark:bg-red-400" />
+                                        ) : null}
+                                    </span>
+                                ) : null}
+                            </Button>
+                        </TooltipTrigger>
+                        {yearTooltip ? (
+                            <TooltipContent side="top">
+                                {yearTooltip}
+                            </TooltipContent>
+                        ) : null}
+                    </Tooltip>
                 </div>
 
                 <div className="flex items-center gap-0.5">
@@ -925,65 +1091,115 @@ export function RightSidebarCalendar() {
                                 anchorPeriod &&
                                 currentWeeklyPeriod === anchorPeriod,
                             );
+                            const weekIndicator = anchorPeriod
+                                ? weekIndicators[anchorPeriod]
+                                : undefined;
+                            const hasAnyWeekDot = Boolean(
+                                weekIndicator &&
+                                (weekIndicator.has_note ||
+                                    weekIndicator.has_events ||
+                                    weekIndicator.task_state !== 'none' ||
+                                    weekIndicator.birthday_count > 0),
+                            );
+                            const weekTooltip =
+                                formatWeekIndicatorTooltip(weekIndicator);
+
+                            const weekButton = (
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        'relative inline-flex h-(--cell-size) w-(--cell-size) cursor-pointer items-center justify-center rounded-md text-center text-sm font-light hover:bg-muted',
+                                        isActive && selectedWeekClass,
+                                    )}
+                                    onMouseEnter={() => {
+                                        if (!anchor) {
+                                            return;
+                                        }
+
+                                        const isoYear = getISOWeekYear(anchor);
+                                        const isoWeek = String(
+                                            getISOWeek(anchor),
+                                        ).padStart(2, '0');
+                                        schedulePrefetchJournal(
+                                            'weekly',
+                                            `${isoYear}-W${isoWeek}`,
+                                        );
+                                    }}
+                                    onMouseLeave={clearPrefetchTimeout}
+                                    onFocus={() => {
+                                        if (!anchor) {
+                                            return;
+                                        }
+
+                                        const isoYear = getISOWeekYear(anchor);
+                                        const isoWeek = String(
+                                            getISOWeek(anchor),
+                                        ).padStart(2, '0');
+                                        prefetchJournal(
+                                            'weekly',
+                                            `${isoYear}-W${isoWeek}`,
+                                        );
+                                    }}
+                                    onClick={() => {
+                                        if (!anchor) {
+                                            return;
+                                        }
+
+                                        const isoYear = getISOWeekYear(anchor);
+                                        const isoWeek = String(
+                                            getISOWeek(anchor),
+                                        ).padStart(2, '0');
+                                        visitJournal(
+                                            'weekly',
+                                            `${isoYear}-W${isoWeek}`,
+                                        );
+                                    }}
+                                    aria-label={`Open weekly note for week ${weekNumber}`}
+                                >
+                                    {weekNumber}
+                                    {hasAnyWeekDot ? (
+                                        <span className="pointer-events-none absolute bottom-0.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-0.5">
+                                            {weekIndicator?.has_note ? (
+                                                <span className="size-1 rounded-full bg-zinc-950 ring-1 ring-background/90 dark:bg-zinc-50" />
+                                            ) : null}
+                                            {weekIndicator?.has_events ? (
+                                                <span className="size-1 rounded-full bg-cyan-600 ring-1 ring-background/90 dark:bg-cyan-400" />
+                                            ) : null}
+                                            {(weekIndicator?.birthday_count ?? 0) >
+                                            0 ? (
+                                                <span className="size-1 rounded-full bg-fuchsia-600 ring-1 ring-background/90 dark:bg-fuchsia-400" />
+                                            ) : null}
+                                            {weekIndicator?.task_state ===
+                                            'all_completed' ? (
+                                                <span className="size-1 rounded-full bg-lime-600 ring-1 ring-background/90 dark:bg-lime-400" />
+                                            ) : null}
+                                            {weekIndicator?.task_state ===
+                                            'open' ? (
+                                                <span className="size-1 rounded-full bg-amber-600 ring-1 ring-background/90 dark:bg-amber-400" />
+                                            ) : null}
+                                            {weekIndicator?.task_state ===
+                                            'open_past' ? (
+                                                <span className="size-1 rounded-full bg-red-600 ring-1 ring-background/90 dark:bg-red-400" />
+                                            ) : null}
+                                        </span>
+                                    ) : null}
+                                </button>
+                            );
 
                             return (
                                 <th {...props}>
-                                    <button
-                                        type="button"
-                                        className={cn(
-                                            'inline-flex h-(--cell-size) w-(--cell-size) cursor-pointer items-center justify-center rounded-full text-center text-sm font-light hover:bg-muted',
-                                            isActive && selectedWeekClass,
-                                        )}
-                                        onMouseEnter={() => {
-                                            if (!anchor) {
-                                                return;
-                                            }
-
-                                            const isoYear =
-                                                getISOWeekYear(anchor);
-                                            const isoWeek = String(
-                                                getISOWeek(anchor),
-                                            ).padStart(2, '0');
-                                            schedulePrefetchJournal(
-                                                'weekly',
-                                                `${isoYear}-W${isoWeek}`,
-                                            );
-                                        }}
-                                        onMouseLeave={clearPrefetchTimeout}
-                                        onFocus={() => {
-                                            if (!anchor) {
-                                                return;
-                                            }
-
-                                            const isoYear =
-                                                getISOWeekYear(anchor);
-                                            const isoWeek = String(
-                                                getISOWeek(anchor),
-                                            ).padStart(2, '0');
-                                            prefetchJournal(
-                                                'weekly',
-                                                `${isoYear}-W${isoWeek}`,
-                                            );
-                                        }}
-                                        onClick={() => {
-                                            if (!anchor) {
-                                                return;
-                                            }
-
-                                            const isoYear =
-                                                getISOWeekYear(anchor);
-                                            const isoWeek = String(
-                                                getISOWeek(anchor),
-                                            ).padStart(2, '0');
-                                            visitJournal(
-                                                'weekly',
-                                                `${isoYear}-W${isoWeek}`,
-                                            );
-                                        }}
-                                        aria-label={`Open weekly note for week ${weekNumber}`}
-                                    >
-                                        {weekNumber}
-                                    </button>
+                                    {weekTooltip ? (
+                                        <Tooltip delayDuration={500}>
+                                            <TooltipTrigger asChild>
+                                                {weekButton}
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                {weekTooltip}
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    ) : (
+                                        weekButton
+                                    )}
                                 </th>
                             );
                         },

@@ -279,17 +279,387 @@ class SidebarEventsController extends Controller
         }
 
         $projection = $this->readProjectionIndicators($workspace, $startDate, $endDate, $userTimezone);
+        $weeklyIndicators = $this->readWeeklyIndicators($workspace, $startDate, $endDate, $userTimezone);
+        $monthlyIndicators = $this->readMonthlyIndicators($workspace, $startDate, $endDate, $userTimezone);
+        $yearlyIndicators = $this->readYearlyIndicators($workspace, $startDate, $endDate, $userTimezone);
         $this->dispatchMissingIndicatorDates($workspace, $startDate, $endDate, $projection['pending_dates']);
 
         return response()->json([
             'start' => $startDate->toDateString(),
             'end' => $endDate->toDateString(),
             'days' => $projection['days'],
+            'weeks' => $weeklyIndicators,
+            'months' => $monthlyIndicators,
+            'years' => $yearlyIndicators,
             'pending_dates' => $projection['pending_dates'],
             'pending_count' => count($projection['pending_dates']),
             'version' => $projection['version'],
             'polling_ms' => $projection['pending_dates'] === [] ? 300000 : 2000,
         ]);
+    }
+
+    /**
+     * @return array<string, array{
+     *     has_note: bool,
+     *     has_events: bool,
+     *     task_state: 'none'|'all_completed'|'open'|'open_past',
+     *     events_count: int,
+     *     birthday_count: int,
+     *     open_note_tasks_count: int,
+     *     assigned_tasks_count: int
+     * }>
+     */
+    private function readWeeklyIndicators(
+        Workspace $workspace,
+        Carbon $startDate,
+        Carbon $endDate,
+        string $userTimezone,
+    ): array {
+        $periods = [];
+        $periodEndByKey = [];
+        $cursor = $startDate->copy();
+        while ($cursor->lte($endDate)) {
+            $weekStart = $cursor->copy()->startOfWeek(Carbon::MONDAY);
+            $weekEnd = $cursor->copy()->endOfWeek(Carbon::SUNDAY);
+            $period = sprintf('%04d-W%02d', $weekStart->isoWeekYear(), $weekStart->isoWeek());
+            $periods[$period] = [
+                'has_note' => false,
+                'has_events' => false,
+                'task_state' => 'none',
+                'events_count' => 0,
+                'birthday_count' => 0,
+                'open_note_tasks_count' => 0,
+                'assigned_tasks_count' => 0,
+            ];
+            $periodEndByKey[$period] = $weekEnd->toDateString();
+            $cursor = $cursor->addDay();
+        }
+
+        if ($periods === []) {
+            return [];
+        }
+
+        $weeklyNotes = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->where('journal_granularity', Note::JOURNAL_WEEKLY)
+            ->whereDate('journal_date', '>=', $startDate->toDateString())
+            ->whereDate('journal_date', '<=', $endDate->toDateString())
+            ->get(['id', 'journal_date']);
+
+        /** @var array<string, string> $notePeriodById */
+        $notePeriodById = [];
+        foreach ($weeklyNotes as $weeklyNote) {
+            $date = $weeklyNote->journal_date;
+            if ($date === null) {
+                continue;
+            }
+
+            $period = sprintf('%04d-W%02d', $date->isoWeekYear(), $date->isoWeek());
+            if (! isset($periods[$period])) {
+                continue;
+            }
+
+            $periods[$period]['has_note'] = true;
+            $notePeriodById[$weeklyNote->id] = $period;
+        }
+
+        $openStatusesToExclude = ['canceled', 'migrated'];
+
+        if ($notePeriodById !== []) {
+            $openWeeklyNoteTasks = NoteTask::query()
+                ->where('workspace_id', $workspace->id)
+                ->whereIn('note_id', array_keys($notePeriodById))
+                ->where('checked', false)
+                ->where(function ($query) use ($openStatusesToExclude): void {
+                    $query
+                        ->whereNull('task_status')
+                        ->orWhereNotIn('task_status', $openStatusesToExclude);
+                })
+                ->get(['note_id']);
+
+            foreach ($openWeeklyNoteTasks as $task) {
+                $period = $notePeriodById[$task->note_id] ?? null;
+                if ($period === null || ! isset($periods[$period])) {
+                    continue;
+                }
+
+                $periods[$period]['open_note_tasks_count']++;
+            }
+        }
+
+        $allPeriods = array_keys($periods);
+        $assignedTasks = NoteTask::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('checked', false)
+            ->where(function ($query) use ($openStatusesToExclude): void {
+                $query
+                    ->whereNull('task_status')
+                    ->orWhereNotIn('task_status', $openStatusesToExclude);
+            })
+            ->where(function ($query) use ($allPeriods): void {
+                $query
+                    ->whereIn('due_date_token', $allPeriods)
+                    ->orWhereIn('deadline_date_token', $allPeriods);
+            })
+            ->get(['id', 'due_date_token', 'deadline_date_token']);
+
+        $taskIdsByPeriod = [];
+        foreach ($assignedTasks as $task) {
+            $duePeriod = trim((string) ($task->due_date_token ?? ''));
+            if ($duePeriod !== '' && isset($periods[$duePeriod])) {
+                $taskIdsByPeriod[$duePeriod] ??= [];
+                $taskIdsByPeriod[$duePeriod][$task->id] = true;
+            }
+
+            $deadlinePeriod = trim((string) ($task->deadline_date_token ?? ''));
+            if ($deadlinePeriod !== '' && isset($periods[$deadlinePeriod])) {
+                $taskIdsByPeriod[$deadlinePeriod] ??= [];
+                $taskIdsByPeriod[$deadlinePeriod][$task->id] = true;
+            }
+        }
+
+        foreach ($taskIdsByPeriod as $period => $taskIds) {
+            $periods[$period]['assigned_tasks_count'] = count($taskIds);
+        }
+
+        $today = now($userTimezone)->startOfDay();
+        foreach ($periods as $period => $payload) {
+            $openTaskCount = $payload['open_note_tasks_count'] + $payload['assigned_tasks_count'];
+            if ($openTaskCount > 0) {
+                $periodEnd = Carbon::createFromFormat('Y-m-d', $periodEndByKey[$period], $userTimezone)->startOfDay();
+                $periods[$period]['task_state'] = $periodEnd->lt($today) ? 'open_past' : 'open';
+            }
+        }
+
+        return $periods;
+    }
+
+    /**
+     * @return array<string, array{
+     *     has_note: bool,
+     *     has_events: bool,
+     *     task_state: 'none'|'all_completed'|'open'|'open_past',
+     *     events_count: int,
+     *     birthday_count: int,
+     *     open_note_tasks_count: int,
+     *     assigned_tasks_count: int
+     * }>
+     */
+    private function readMonthlyIndicators(
+        Workspace $workspace,
+        Carbon $startDate,
+        Carbon $endDate,
+        string $userTimezone,
+    ): array {
+        $periods = [];
+        $periodEndByKey = [];
+        $cursor = $startDate->copy();
+        while ($cursor->lte($endDate)) {
+            $period = $cursor->format('Y-m');
+            $periods[$period] = [
+                'has_note' => false,
+                'has_events' => false,
+                'task_state' => 'none',
+                'events_count' => 0,
+                'birthday_count' => 0,
+                'open_note_tasks_count' => 0,
+                'assigned_tasks_count' => 0,
+            ];
+            $periodEndByKey[$period] = $cursor->copy()->endOfMonth()->toDateString();
+            $cursor = $cursor->addDay();
+        }
+
+        if ($periods === []) {
+            return [];
+        }
+
+        $monthNotes = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->where('journal_granularity', Note::JOURNAL_MONTHLY)
+            ->whereDate('journal_date', '>=', $startDate->toDateString())
+            ->whereDate('journal_date', '<=', $endDate->toDateString())
+            ->get(['id', 'journal_date']);
+
+        $notePeriodById = [];
+        foreach ($monthNotes as $monthNote) {
+            $period = $monthNote->journal_date?->format('Y-m');
+            if ($period === null || ! isset($periods[$period])) {
+                continue;
+            }
+
+            $periods[$period]['has_note'] = true;
+            $notePeriodById[$monthNote->id] = $period;
+        }
+
+        $this->hydrateOpenAndAssignedCounts($workspace, $periods, $notePeriodById, array_keys($periods), 'month');
+
+        $today = now($userTimezone)->startOfDay();
+        foreach ($periods as $period => $payload) {
+            $openTaskCount = $payload['open_note_tasks_count'] + $payload['assigned_tasks_count'];
+            if ($openTaskCount > 0) {
+                $periodEnd = Carbon::createFromFormat('Y-m-d', $periodEndByKey[$period], $userTimezone)->startOfDay();
+                $periods[$period]['task_state'] = $periodEnd->lt($today) ? 'open_past' : 'open';
+            }
+        }
+
+        return $periods;
+    }
+
+    /**
+     * @return array<string, array{
+     *     has_note: bool,
+     *     has_events: bool,
+     *     task_state: 'none'|'all_completed'|'open'|'open_past',
+     *     events_count: int,
+     *     birthday_count: int,
+     *     open_note_tasks_count: int,
+     *     assigned_tasks_count: int
+     * }>
+     */
+    private function readYearlyIndicators(
+        Workspace $workspace,
+        Carbon $startDate,
+        Carbon $endDate,
+        string $userTimezone,
+    ): array {
+        $periods = [];
+        $periodEndByKey = [];
+        $cursor = $startDate->copy();
+        while ($cursor->lte($endDate)) {
+            $period = $cursor->format('Y');
+            $periods[$period] = [
+                'has_note' => false,
+                'has_events' => false,
+                'task_state' => 'none',
+                'events_count' => 0,
+                'birthday_count' => 0,
+                'open_note_tasks_count' => 0,
+                'assigned_tasks_count' => 0,
+            ];
+            $periodEndByKey[$period] = $cursor->copy()->endOfYear()->toDateString();
+            $cursor = $cursor->addDay();
+        }
+
+        if ($periods === []) {
+            return [];
+        }
+
+        $yearKeys = array_keys($periods);
+        $yearNotes = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->where('journal_granularity', Note::JOURNAL_YEARLY)
+            ->where(function ($query) use ($yearKeys): void {
+                foreach ($yearKeys as $yearKey) {
+                    $query->orWhereYear('journal_date', (int) $yearKey);
+                }
+            })
+            ->get(['id', 'journal_date']);
+
+        $notePeriodById = [];
+        foreach ($yearNotes as $yearNote) {
+            $period = $yearNote->journal_date?->format('Y');
+            if ($period === null || ! isset($periods[$period])) {
+                continue;
+            }
+
+            $periods[$period]['has_note'] = true;
+            $notePeriodById[$yearNote->id] = $period;
+        }
+
+        $this->hydrateOpenAndAssignedCounts($workspace, $periods, $notePeriodById, array_keys($periods), 'year');
+
+        $today = now($userTimezone)->startOfDay();
+        foreach ($periods as $period => $payload) {
+            $openTaskCount = $payload['open_note_tasks_count'] + $payload['assigned_tasks_count'];
+            if ($openTaskCount > 0) {
+                $periodEnd = Carbon::createFromFormat('Y-m-d', $periodEndByKey[$period], $userTimezone)->startOfDay();
+                $periods[$period]['task_state'] = $periodEnd->lt($today) ? 'open_past' : 'open';
+            }
+        }
+
+        return $periods;
+    }
+
+    /**
+     * @param  array<string, array{
+     *     has_note: bool,
+     *     has_events: bool,
+     *     task_state: 'none'|'all_completed'|'open'|'open_past',
+     *     events_count: int,
+     *     birthday_count: int,
+     *     open_note_tasks_count: int,
+     *     assigned_tasks_count: int
+     * }>  $periods
+     * @param  array<string, string>  $notePeriodById
+     * @param  array<int, string>  $allPeriods
+     */
+    private function hydrateOpenAndAssignedCounts(
+        Workspace $workspace,
+        array &$periods,
+        array $notePeriodById,
+        array $allPeriods,
+        string $granularity,
+    ): void {
+        $openStatusesToExclude = ['canceled', 'migrated'];
+
+        if ($notePeriodById !== []) {
+            $openPeriodNoteTasks = NoteTask::query()
+                ->where('workspace_id', $workspace->id)
+                ->whereIn('note_id', array_keys($notePeriodById))
+                ->where('checked', false)
+                ->where(function ($query) use ($openStatusesToExclude): void {
+                    $query
+                        ->whereNull('task_status')
+                        ->orWhereNotIn('task_status', $openStatusesToExclude);
+                })
+                ->get(['note_id']);
+
+            foreach ($openPeriodNoteTasks as $task) {
+                $period = $notePeriodById[$task->note_id] ?? null;
+                if ($period === null || ! isset($periods[$period])) {
+                    continue;
+                }
+
+                $periods[$period]['open_note_tasks_count']++;
+            }
+        }
+
+        $assignedTasks = NoteTask::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('checked', false)
+            ->where(function ($query) use ($openStatusesToExclude): void {
+                $query
+                    ->whereNull('task_status')
+                    ->orWhereNotIn('task_status', $openStatusesToExclude);
+            })
+            ->where(function ($query) use ($allPeriods): void {
+                $query
+                    ->whereIn('due_date_token', $allPeriods)
+                    ->orWhereIn('deadline_date_token', $allPeriods);
+            })
+            ->get(['id', 'due_date_token', 'deadline_date_token']);
+
+        $taskIdsByPeriod = [];
+        foreach ($assignedTasks as $task) {
+            $duePeriod = trim((string) ($task->due_date_token ?? ''));
+            if ($duePeriod !== '' && isset($periods[$duePeriod])) {
+                $taskIdsByPeriod[$duePeriod] ??= [];
+                $taskIdsByPeriod[$duePeriod][$task->id] = true;
+            }
+
+            $deadlinePeriod = trim((string) ($task->deadline_date_token ?? ''));
+            if ($deadlinePeriod !== '' && isset($periods[$deadlinePeriod])) {
+                $taskIdsByPeriod[$deadlinePeriod] ??= [];
+                $taskIdsByPeriod[$deadlinePeriod][$task->id] = true;
+            }
+        }
+
+        foreach ($taskIdsByPeriod as $period => $taskIds) {
+            $periods[$period]['assigned_tasks_count'] = count($taskIds);
+        }
     }
 
     /**

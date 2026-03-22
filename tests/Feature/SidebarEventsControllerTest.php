@@ -454,6 +454,123 @@ test('sidebar event indicators endpoint reads projected indicator rows', functio
     expect(data_get($days, '2026-10-03.task_state'))->toBe('none');
 });
 
+test('sidebar event indicators endpoint returns weekly note and assignment indicators', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $weeklyNote = Note::query()->create([
+        'workspace_id' => $workspace->id,
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_WEEKLY,
+        'journal_date' => '2026-03-23',
+        'title' => 'Week 13',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $weeklyNote->id,
+        'checked' => false,
+        'task_status' => null,
+        'content_text' => 'Open task in weekly note',
+        'position' => 1,
+    ]);
+
+    $regularNote = Note::query()->create([
+        'workspace_id' => $workspace->id,
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Assignment holder',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $regularNote->id,
+        'checked' => false,
+        'task_status' => null,
+        'due_date_token' => '2026-W13',
+        'content_text' => 'Assigned to week token',
+        'position' => 1,
+    ]);
+
+    $timeblock = Timeblock::query()->create([
+        'location' => 'Week room',
+    ]);
+
+    Event::query()->create([
+        'workspace_id' => $workspace->id,
+        'eventable_type' => Timeblock::class,
+        'eventable_id' => $timeblock->id,
+        'title' => 'Week event',
+        'starts_at' => '2026-03-24 09:00:00',
+        'ends_at' => '2026-03-24 10:00:00',
+        'timezone' => 'Europe/Amsterdam',
+        'journal_date' => '2026-03-24',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson("/w/{$workspace->slug}/events/indicators?start=2026-03-23&end=2026-03-29")
+        ->assertOk();
+
+    expect(data_get($response->json('weeks'), '2026-W13.has_note'))->toBeTrue();
+    expect((int) data_get($response->json('weeks'), '2026-W13.open_note_tasks_count'))->toBe(1);
+    expect((int) data_get($response->json('weeks'), '2026-W13.assigned_tasks_count'))->toBe(1);
+    expect(data_get($response->json('weeks'), '2026-W13.task_state'))->toBe('open');
+});
+
+test('sidebar event indicators endpoint returns month and year indicator aggregates', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $monthlyNote = Note::query()->create([
+        'workspace_id' => $workspace->id,
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_MONTHLY,
+        'journal_date' => '2026-03-01',
+        'title' => 'March',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $yearlyNote = Note::query()->create([
+        'workspace_id' => $workspace->id,
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_YEARLY,
+        'journal_date' => '2026-01-01',
+        'title' => '2026',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $monthlyNote->id,
+        'checked' => false,
+        'task_status' => null,
+        'content_text' => 'Open task in month note',
+        'position' => 1,
+    ]);
+
+    NoteTask::query()->create([
+        'workspace_id' => $workspace->id,
+        'note_id' => $yearlyNote->id,
+        'checked' => false,
+        'task_status' => null,
+        'due_date_token' => '2026-03',
+        'content_text' => 'Assigned to month token',
+        'position' => 2,
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson("/w/{$workspace->slug}/events/indicators?start=2026-03-01&end=2026-03-31")
+        ->assertOk();
+
+    expect(data_get($response->json('months'), '2026-03.has_note'))->toBeTrue();
+    expect((int) data_get($response->json('months'), '2026-03.open_note_tasks_count'))->toBe(1);
+    expect((int) data_get($response->json('months'), '2026-03.assigned_tasks_count'))->toBe(1);
+    expect(data_get($response->json('years'), '2026.has_note'))->toBeTrue();
+});
+
 test('sidebar event indicators marks legacy event rows as pending for backfill', function () {
     Queue::fake();
 
