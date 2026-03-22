@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Listeners\SyncUserCalendarsOnLogin;
 use App\Models\Note;
+use App\Models\NoteTask;
 use App\Observers\NoteObserver;
+use App\Observers\NoteTaskObserver;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +33,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Model::unguard();
         Note::observe(NoteObserver::class);
+        NoteTask::observe(NoteTaskObserver::class);
         Event::listen(Login::class, SyncUserCalendarsOnLogin::class);
 
         $this->configureDefaults();

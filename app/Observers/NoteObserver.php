@@ -2,11 +2,13 @@
 
 namespace App\Observers;
 
+use App\Jobs\RecalculateDailySignalsJob;
 use App\Jobs\ReindexNoteJob;
 use App\Jobs\WarmNoteSharedCacheJob;
 use App\Models\Note;
 use App\Models\NoteHeading;
 use App\Models\NoteTask;
+use App\Support\Notes\BirthdayEventIndexer;
 use App\Support\Notes\NoteMetaExtractor;
 use App\Support\Notes\NoteTaskCountExtractor;
 use App\Support\Notes\NoteWordCountExtractor;
@@ -21,6 +23,7 @@ class NoteObserver
         private readonly NoteTaskCountExtractor $noteTaskCountExtractor,
         private readonly NoteWordCountExtractor $noteWordCountExtractor,
         private readonly TimeblockIndexer $timeblockIndexer,
+        private readonly BirthdayEventIndexer $birthdayEventIndexer,
     ) {}
 
     public function saving(Note $note): void
@@ -36,6 +39,7 @@ class NoteObserver
     public function saved(Note $note): void
     {
         $userId = Auth::id();
+        $originalJournalDate = $this->originalJournalDate($note);
 
         ReindexNoteJob::dispatch($note->id, $userId);
 
@@ -49,6 +53,8 @@ class NoteObserver
         if ($note->wasRecentlyCreated || $note->wasChanged('title') || $note->wasChanged('parent_id') || $note->wasChanged('type')) {
             $this->clearNoteSharedCache($note->workspace_id);
         }
+
+        $this->dispatchDailySignalRecalculation($note, $originalJournalDate);
     }
 
     public function deleted(Note $note): void
@@ -57,10 +63,13 @@ class NoteObserver
         NoteHeading::query()->where('note_id', $note->id)->delete();
         $this->timeblockIndexer->deleteNoteTimeblocks($note);
         $this->clearNoteSharedCache($note->workspace_id);
+        $this->dispatchDailySignalRecalculation($note, $this->originalJournalDate($note));
     }
 
     public function deleting(Note $note): void
     {
+        $this->birthdayEventIndexer->deleteNoteBirthdayEvents($note);
+
         if ($note->isForceDeleting()) {
             $note->children()
                 ->withTrashed()
@@ -91,6 +100,42 @@ class NoteObserver
 
         ReindexNoteJob::dispatch($note->id, $userId);
         $this->clearNoteSharedCache($note->workspace_id);
+        $this->dispatchDailySignalRecalculation($note, $this->originalJournalDate($note));
+    }
+
+    private function dispatchDailySignalRecalculation(Note $note, ?string $originalJournalDate = null): void
+    {
+        if ($note->type !== Note::TYPE_JOURNAL || $note->journal_granularity !== Note::JOURNAL_DAILY) {
+            return;
+        }
+
+        $dates = [];
+        if (is_string($originalJournalDate) && $originalJournalDate !== '') {
+            $dates[] = $originalJournalDate;
+        }
+        if ($note->journal_date !== null) {
+            $dates[] = $note->journal_date->toDateString();
+        }
+
+        $dates = array_values(array_unique($dates));
+        if ($dates === []) {
+            return;
+        }
+
+        RecalculateDailySignalsJob::dispatch($note->workspace_id, $dates);
+    }
+
+    private function originalJournalDate(Note $note): ?string
+    {
+        $previous = $note->getPrevious();
+        $original = $previous['journal_date'] ?? $note->getOriginal('journal_date');
+        if (! is_string($original) || trim($original) === '') {
+            return null;
+        }
+
+        $timestamp = strtotime($original);
+
+        return $timestamp === false ? null : date('Y-m-d', $timestamp);
     }
 
     private function clearNoteSharedCache(string $workspaceId): void

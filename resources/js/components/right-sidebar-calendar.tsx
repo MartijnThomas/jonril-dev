@@ -1,5 +1,15 @@
 import { router, usePage } from '@inertiajs/react';
-import { addMonths, format, getISOWeek, getISOWeekYear, parseISO } from 'date-fns';
+import {
+    addMonths,
+    endOfMonth,
+    endOfWeek,
+    format,
+    getISOWeek,
+    getISOWeekYear,
+    parseISO,
+    startOfMonth,
+    startOfWeek,
+} from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import {
     ChevronDown,
@@ -11,7 +21,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RightSidebarTodayEvents } from '@/components/right-sidebar-today-events';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
+import { Calendar, CalendarDayButton } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PREFETCH_CACHE_FOR_MS, PREFETCH_HOVER_DELAY_MS } from '@/lib/prefetch';
 import { cn } from '@/lib/utils';
@@ -19,7 +29,7 @@ import { cn } from '@/lib/utils';
 type SidebarEvent = {
     id: string;
     block_id: string | null;
-    type: 'timeblock' | 'event';
+    type: 'timeblock' | 'event' | 'birthday';
     all_day: boolean;
     title: string;
     note_id: string | null;
@@ -34,6 +44,8 @@ type SidebarEvent = {
     href: string | null;
     meeting_note_id: string | null;
     meeting_note_href: string | null;
+    birthday_age?: number | null;
+    calendar_color?: string | null;
 };
 
 type JournalPageProps = {
@@ -58,6 +70,21 @@ type JournalPageProps = {
     personalWorkspace?: {
         slug?: string | null;
     } | null;
+};
+
+type DayIndicatorTaskState = 'none' | 'all_completed' | 'open' | 'open_past';
+
+type DayIndicator = {
+    has_note: boolean;
+    has_events: boolean;
+    task_state: DayIndicatorTaskState;
+};
+
+type IndicatorResponse = {
+    days?: Record<string, DayIndicator>;
+    pending_dates?: string[];
+    version?: string;
+    polling_ms?: number;
 };
 
 const CALENDAR_SELECTED_DAY_CLASS: Record<string, string> = {
@@ -230,6 +257,9 @@ export function RightSidebarCalendar() {
     const syncPollRef = useRef<number | null>(null);
     const [events, setEvents] = useState<SidebarEvent[]>([]);
     const [eventsDate, setEventsDate] = useState<string | null>(null);
+    const [dayIndicators, setDayIndicators] = useState<Record<string, DayIndicator>>({});
+    const indicatorCacheRef = useRef<Record<string, { days: Record<string, DayIndicator>; version: string }>>({});
+    const indicatorPollRef = useRef<number | null>(null);
 
     // The date to request: daily journal period, or omit for today (server decides).
     const eventsDateParam =
@@ -297,6 +327,16 @@ export function RightSidebarCalendar() {
     }, [eventsDateParam, fetchEvents]);
 
     const monthLabel = format(viewMonth, 'LLLL yyyy', { locale: dateLocale });
+    const indicatorRange = useMemo(() => {
+        const start = startOfWeek(startOfMonth(viewMonth), { locale: dateLocale });
+        const end = endOfWeek(endOfMonth(viewMonth), { locale: dateLocale });
+
+        return {
+            start: format(start, 'yyyy-MM-dd'),
+            end: format(end, 'yyyy-MM-dd'),
+            cacheKey: `${format(start, 'yyyy-MM-dd')}:${format(end, 'yyyy-MM-dd')}`,
+        };
+    }, [dateLocale, viewMonth]);
     const monthNames = useMemo(
         () =>
             Array.from({ length: 12 }, (_, monthIndex) =>
@@ -384,8 +424,108 @@ export function RightSidebarCalendar() {
             if (syncPollRef.current !== null) {
                 window.clearTimeout(syncPollRef.current);
             }
+            if (indicatorPollRef.current !== null) {
+                window.clearTimeout(indicatorPollRef.current);
+            }
         };
     }, []);
+
+    useEffect(() => {
+        if (eventsWorkspaceSlug === '') {
+            return;
+        }
+
+        const currentRangeKey = indicatorRange.cacheKey;
+        const cached = indicatorCacheRef.current[currentRangeKey];
+        if (cached?.days) {
+            setDayIndicators(cached.days);
+        }
+
+        const abortController = new AbortController();
+        let disposed = false;
+        let inFlight = false;
+
+        const schedulePoll = (ms: number) => {
+            if (disposed) {
+                return;
+            }
+            if (indicatorPollRef.current !== null) {
+                window.clearTimeout(indicatorPollRef.current);
+            }
+            indicatorPollRef.current = window.setTimeout(() => {
+                void fetchIndicators();
+            }, ms);
+        };
+
+        const fetchIndicators = async () => {
+            if (disposed || inFlight) {
+                return;
+            }
+
+            inFlight = true;
+
+            try {
+                const response = await fetch(
+                    `/w/${eventsWorkspaceSlug}/events/indicators?start=${indicatorRange.start}&end=${indicatorRange.end}`,
+                    {
+                        credentials: 'same-origin',
+                        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        signal: abortController.signal,
+                    },
+                );
+
+                if (!response.ok) {
+                    schedulePoll(5000);
+                    return;
+                }
+
+                const payload = (await response.json()) as IndicatorResponse;
+                if (!payload.days) {
+                    schedulePoll(5000);
+                    return;
+                }
+
+                const nextVersion = payload.version ?? '';
+                const cachedEntry = indicatorCacheRef.current[currentRangeKey];
+                const hasChanged = !cachedEntry || cachedEntry.version !== nextVersion;
+                if (hasChanged) {
+                    indicatorCacheRef.current[currentRangeKey] = {
+                        days: payload.days,
+                        version: nextVersion,
+                    };
+                    setDayIndicators(payload.days);
+                }
+
+                const pollMs =
+                    typeof payload.polling_ms === 'number' && payload.polling_ms >= 1000
+                        ? payload.polling_ms
+                        : (payload.pending_dates?.length ?? 0) > 0
+                          ? 2000
+                          : 300000;
+                schedulePoll(pollMs);
+            } catch {
+                schedulePoll(5000);
+            } finally {
+                inFlight = false;
+            }
+        };
+
+        const initialDelay = cached ? 250 : 750;
+        schedulePoll(initialDelay);
+
+        return () => {
+            disposed = true;
+            if (indicatorPollRef.current !== null) {
+                window.clearTimeout(indicatorPollRef.current);
+                indicatorPollRef.current = null;
+            }
+            abortController.abort();
+        };
+    }, [eventsWorkspaceSlug, indicatorRange]);
+
+    useEffect(() => {
+        setDayIndicators({});
+    }, [eventsWorkspaceSlug]);
 
     const refreshEvents = () => {
         if (isRefreshing || eventsWorkspaceSlug === '') {
@@ -418,6 +558,19 @@ export function RightSidebarCalendar() {
                 setIsRefreshing(false);
             });
     };
+
+    const handleMonthChange = useCallback((nextMonth: Date) => {
+        setViewMonth((currentMonth) => {
+            if (
+                currentMonth.getFullYear() === nextMonth.getFullYear()
+                && currentMonth.getMonth() === nextMonth.getMonth()
+            ) {
+                return currentMonth;
+            }
+
+            return nextMonth;
+        });
+    }, []);
 
     return (
         <section className="space-y-1 overflow-hidden">
@@ -550,7 +703,7 @@ export function RightSidebarCalendar() {
                 key={calendarKey}
                 locale={dateLocale}
                 month={viewMonth}
-                onMonthChange={setViewMonth}
+                onMonthChange={handleMonthChange}
                 defaultMonth={anchorDate ?? new Date()}
                 showWeekNumber
                 mode="single"
@@ -575,6 +728,36 @@ export function RightSidebarCalendar() {
                     visitJournal('daily', format(day, 'yyyy-MM-dd'))
                 }
                 components={{
+                    DayButton: (props) => {
+                        const dateKey = format(props.day.date, 'yyyy-MM-dd');
+                        const indicator = dayIndicators[dateKey];
+                        const hasTaskDot = indicator && indicator.task_state !== 'none';
+
+                        return (
+                            <div className="relative flex size-(--cell-size) items-center justify-center">
+                                <CalendarDayButton {...props} />
+                                {indicator && (indicator.has_note || indicator.has_events || hasTaskDot) ? (
+                                    <span className="pointer-events-none absolute bottom-0.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-0.5">
+                                        {indicator.has_note ? (
+                                            <span className="size-1 rounded-full bg-black ring-1 ring-background dark:bg-zinc-100" />
+                                        ) : null}
+                                        {indicator.has_events ? (
+                                            <span className="size-1 rounded-full bg-blue-500 ring-1 ring-background" />
+                                        ) : null}
+                                        {indicator.task_state === 'all_completed' ? (
+                                            <span className="size-1 rounded-full bg-emerald-500 ring-1 ring-background" />
+                                        ) : null}
+                                        {indicator.task_state === 'open' ? (
+                                            <span className="size-1 rounded-full bg-amber-500 ring-1 ring-background" />
+                                        ) : null}
+                                        {indicator.task_state === 'open_past' ? (
+                                            <span className="size-1 rounded-full bg-red-500 ring-1 ring-background" />
+                                        ) : null}
+                                    </span>
+                                ) : null}
+                            </div>
+                        );
+                    },
                     WeekNumber: ({ week, ...props }) => {
                         const anchor = week.days.at(0)?.date;
                         const weekNumber = week.weekNumber;
