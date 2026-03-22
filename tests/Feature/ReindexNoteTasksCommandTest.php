@@ -327,3 +327,64 @@ test('reindex tasks command indexes block editor task paragraphs', function () {
     expect($fourthTask->task_status)->toBeNull();
     expect($fourthTask->backlog_promoted_at)->not->toBeNull();
 });
+
+test('reindex tasks command stores week and month task date tokens', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $noteId = (string) Str::uuid();
+
+    DB::table('notes')->insert([
+        'id' => $noteId,
+        'workspace_id' => $workspace?->id,
+        'title' => 'Task token note',
+        'type' => 'note',
+        'content' => json_encode([
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => ['checked' => false],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [['type' => 'text', 'text' => 'Weekly due >2026-W22']],
+                        ]],
+                    ],
+                    [
+                        'type' => 'taskItem',
+                        'attrs' => ['checked' => false],
+                        'content' => [[
+                            'type' => 'paragraph',
+                            'content' => [['type' => 'text', 'text' => 'Monthly deadline >>2026-06']],
+                        ]],
+                    ],
+                ],
+            ]],
+        ]),
+        'properties' => json_encode([]),
+        'parent_id' => null,
+        'slug' => 'task-token-note',
+        'journal_granularity' => null,
+        'journal_date' => null,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->artisan('notes:reindex-tasks')->assertSuccessful();
+
+    expect(
+        NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('due_date_token'),
+    )->toBe('2026-W22');
+    expect(
+        NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('due_date'),
+    )->toBeNull();
+
+    expect(
+        NoteTask::query()->where('note_id', $noteId)->where('position', 2)->value('deadline_date_token'),
+    )->toBe('2026-06');
+    expect(
+        NoteTask::query()->where('note_id', $noteId)->where('position', 2)->value('deadline_date'),
+    )->toBeNull();
+});

@@ -56,6 +56,8 @@ class NoteTask extends Model
         'children',
         'due_date',
         'deadline_date',
+        'due_date_token',
+        'deadline_date_token',
         'journal_date',
         'mentions',
         'hashtags',

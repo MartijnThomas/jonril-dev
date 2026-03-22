@@ -37,7 +37,8 @@ type TaskToken = {
     end: number;
 };
 
-const TASK_TOKEN_REGEX = /(>>?)(\d{4}-\d{2}-\d{2}|[a-zA-Z]+)/g;
+const TASK_TOKEN_REGEX =
+    /(>>?)(\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2}|[a-zA-Z]+)/g;
 const HELPER_KEYWORDS = [
     'today',
     'tomorrow',
@@ -176,6 +177,74 @@ function formatLocalizedDate(isoDate: string, localeTag: string): string {
         month: 'long',
         year: 'numeric',
     }).format(date);
+}
+
+function isIsoWeekToken(value: string): boolean {
+    const match = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(value);
+    if (!match) {
+        return false;
+    }
+
+    const week = Number(match.groups?.week ?? 0);
+
+    return week >= 1 && week <= 53;
+}
+
+function isIsoMonthToken(value: string): boolean {
+    const match = /^(?<year>\d{4})-(?<month>\d{2})$/.exec(value);
+    if (!match) {
+        return false;
+    }
+
+    const month = Number(match.groups?.month ?? 0);
+
+    return month >= 1 && month <= 12;
+}
+
+function formatLocalizedWeek(value: string, localeTag: string): string {
+    const match = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(value);
+    if (!match) {
+        return value;
+    }
+
+    const week = Number(match.groups?.week ?? 0);
+    const year = Number(match.groups?.year ?? 0);
+    const weekLabel = localeTag.startsWith('nl') ? 'Week' : 'Week';
+
+    return `${weekLabel} ${week} (${year})`;
+}
+
+function formatLocalizedMonth(value: string, localeTag: string): string {
+    if (!isIsoMonthToken(value)) {
+        return value;
+    }
+
+    const date = new Date(`${value}-01T00:00:00`);
+
+    return new Intl.DateTimeFormat(localeTag, {
+        month: 'long',
+        year: 'numeric',
+    }).format(date);
+}
+
+function formatLocalizedTaskToken(
+    value: string,
+    resolvedIsoDate: string | null,
+    localeTag: string,
+): string | null {
+    if (resolvedIsoDate) {
+        return formatLocalizedDate(resolvedIsoDate, localeTag);
+    }
+
+    if (isIsoWeekToken(value)) {
+        return formatLocalizedWeek(value, localeTag);
+    }
+
+    if (isIsoMonthToken(value)) {
+        return formatLocalizedMonth(value, localeTag);
+    }
+
+    return null;
 }
 
 function parseTaskDates(text: string): ParsedTaskDates {
@@ -393,7 +462,13 @@ function buildTokenDecorations(
                     ? 'md-task-deadline-token'
                     : 'md-task-due-token';
 
-            if (isTodayToken || !resolvedIso || isActive) {
+            const formatted = formatLocalizedTaskToken(
+                token.value,
+                resolvedIso,
+                localeTag,
+            );
+
+            if (isTodayToken || !formatted || isActive) {
                 decorations.push(
                     Decoration.inline(start, end, {
                         class: className,
@@ -401,8 +476,6 @@ function buildTokenDecorations(
                 );
                 continue;
             }
-
-            const formatted = formatLocalizedDate(resolvedIso, localeTag);
 
             decorations.push(
                 Decoration.inline(start, end, {

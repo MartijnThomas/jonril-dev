@@ -11,6 +11,7 @@ class NoteRelatedPanelBuilder
 {
     public function __construct(
         private readonly NoteSlugService $noteSlugService,
+        private readonly JournalNoteService $journalNoteService,
     ) {}
 
     /**
@@ -36,11 +37,47 @@ class NoteRelatedPanelBuilder
             return $this->tasksForDailyNote($note);
         }
 
+        if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity === Note::JOURNAL_WEEKLY) {
+            return $this->tasksForPeriodToken($note, Note::JOURNAL_WEEKLY);
+        }
+
+        if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity === Note::JOURNAL_MONTHLY) {
+            return $this->tasksForPeriodToken($note, Note::JOURNAL_MONTHLY);
+        }
+
         if ($note->type === Note::TYPE_JOURNAL) {
             return [];
         }
 
         return $this->relatedTasksForRegularNote($note);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function tasksForPeriodToken(Note $note, string $granularity): array
+    {
+        if ($note->journal_date === null) {
+            return [];
+        }
+
+        $period = $this->journalNoteService->periodFor($granularity, $note->journal_date);
+
+        return NoteTask::query()
+            ->where('workspace_id', $note->workspace_id)
+            ->where('note_id', '!=', $note->id)
+            ->where(function ($query) use ($period): void {
+                $query
+                    ->where('due_date_token', $period)
+                    ->orWhere('deadline_date_token', $period);
+            })
+            ->with('note:id,workspace_id,slug,type,journal_granularity,journal_date,title')
+            ->orderBy('checked')
+            ->orderBy('updated_at', 'desc')
+            ->get()
+            ->map(fn (NoteTask $task) => $this->mapTaskForPanel($task))
+            ->values()
+            ->all();
     }
 
     /**
@@ -134,6 +171,8 @@ class NoteRelatedPanelBuilder
             'render_fragments' => is_array($task->render_fragments) ? $task->render_fragments : [],
             'due_date' => $task->due_date?->toDateString(),
             'deadline_date' => $task->deadline_date?->toDateString(),
+            'due_date_token' => $task->due_date_token,
+            'deadline_date_token' => $task->deadline_date_token,
             'note' => [
                 'id' => $task->note_id,
                 'title' => $task->note_title ?? 'Untitled',
@@ -518,6 +557,7 @@ class NoteRelatedPanelBuilder
                     'type' => 'deadline_date_token',
                     'date' => $matches[1],
                 ];
+
                 continue;
             }
 
@@ -526,6 +566,7 @@ class NoteRelatedPanelBuilder
                     'type' => 'due_date_token',
                     'date' => $matches[1],
                 ];
+
                 continue;
             }
 
@@ -613,6 +654,7 @@ class NoteRelatedPanelBuilder
 
             if ($type === 'text') {
                 $parts[] = (string) ($fragment['text'] ?? '');
+
                 continue;
             }
 
@@ -621,6 +663,7 @@ class NoteRelatedPanelBuilder
                 if ($label !== '') {
                     $parts[] = "@{$label}";
                 }
+
                 continue;
             }
 
@@ -629,11 +672,13 @@ class NoteRelatedPanelBuilder
                 if ($label !== '') {
                     $parts[] = "#{$label}";
                 }
+
                 continue;
             }
 
             if ($type === 'wikilink') {
                 $parts[] = (string) ($fragment['text'] ?? '');
+
                 continue;
             }
 
@@ -642,6 +687,7 @@ class NoteRelatedPanelBuilder
                 if ($date !== '') {
                     $parts[] = ">{$date}";
                 }
+
                 continue;
             }
 

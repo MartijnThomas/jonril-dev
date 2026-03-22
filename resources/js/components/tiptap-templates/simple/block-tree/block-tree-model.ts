@@ -184,7 +184,8 @@ export type BlockTaskDateToken = {
 
 export type BlockTaskPriority = 'normal' | 'medium' | 'high' | null;
 
-const BLOCK_TASK_DATE_TOKEN_REGEX = /(>>?)(\d{4}-\d{2}-\d{2})/g;
+const BLOCK_TASK_DATE_TOKEN_REGEX =
+    /(>>?)(\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2})/g;
 const BLOCK_TASK_PRIORITY_REGEX = /^(?:[?/*<\-—]\s)?(!{1,3})(?=\s|$)/u;
 
 export function headingTextPrefix(level: number): string {
@@ -229,6 +230,34 @@ export function isValidIsoDate(value: string): boolean {
     );
 }
 
+function isValidIsoWeek(value: string): boolean {
+    const match = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(value);
+    if (!match?.groups) {
+        return false;
+    }
+
+    const week = Number(match.groups.week);
+
+    return week >= 1 && week <= 53;
+}
+
+function isValidIsoMonth(value: string): boolean {
+    const match = /^(?<year>\d{4})-(?<month>\d{2})$/.exec(value);
+    if (!match?.groups) {
+        return false;
+    }
+
+    const month = Number(match.groups.month);
+
+    return month >= 1 && month <= 12;
+}
+
+function isSupportedTaskDateToken(value: string): boolean {
+    return (
+        isValidIsoDate(value) || isValidIsoWeek(value) || isValidIsoMonth(value)
+    );
+}
+
 export function parseBlockTaskDateTokens(text: string): BlockTaskDateToken[] {
     const tokens: BlockTaskDateToken[] = [];
 
@@ -238,7 +267,7 @@ export function parseBlockTaskDateTokens(text: string): BlockTaskDateToken[] {
         const value = match[2];
         const start = match.index ?? -1;
 
-        if (start < 0 || !isValidIsoDate(value)) {
+        if (start < 0 || !isSupportedTaskDateToken(value)) {
             continue;
         }
 
@@ -258,6 +287,10 @@ export function parseBlockTaskDates(text: string): ParsedTaskDates {
     let deadlineDate: string | null = null;
 
     for (const token of parseBlockTaskDateTokens(text)) {
+        if (!isValidIsoDate(token.value)) {
+            continue;
+        }
+
         if (token.prefix === '>>') {
             deadlineDate = token.value;
         } else {
@@ -268,18 +301,39 @@ export function parseBlockTaskDates(text: string): ParsedTaskDates {
     return { dueDate, deadlineDate };
 }
 
-export function formatLocalizedDate(isoDate: string, localeTag: string): string {
-    if (!isValidIsoDate(isoDate)) {
-        return isoDate;
+export function formatLocalizedDate(
+    dateToken: string,
+    localeTag: string,
+): string {
+    if (isValidIsoDate(dateToken)) {
+        const date = new Date(`${dateToken}T00:00:00`);
+
+        return new Intl.DateTimeFormat(localeTag, {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+        }).format(date);
     }
 
-    const date = new Date(`${isoDate}T00:00:00`);
+    const weekMatch = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(dateToken);
+    if (weekMatch?.groups) {
+        const week = Number(weekMatch.groups.week);
+        const year = Number(weekMatch.groups.year);
+        if (week >= 1 && week <= 53) {
+            return `Week ${week} (${year})`;
+        }
+    }
 
-    return new Intl.DateTimeFormat(localeTag, {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-    }).format(date);
+    if (isValidIsoMonth(dateToken)) {
+        const date = new Date(`${dateToken}-01T00:00:00`);
+
+        return new Intl.DateTimeFormat(localeTag, {
+            month: 'long',
+            year: 'numeric',
+        }).format(date);
+    }
+
+    return dateToken;
 }
 
 export function parseBlockTaskPriority(

@@ -2616,6 +2616,93 @@ test('toggling a daily task updates persisted checked state reflected on daily n
         );
 });
 
+test('weekly and monthly journal related panels include period token scheduled tasks', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_WEEKLY,
+        'journal_date' => '2026-05-25',
+        'title' => 'Week 22 2026',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_MONTHLY,
+        'journal_date' => '2026-06-01',
+        'title' => 'June 2026',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $weeklySource = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Weekly source',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'weekly-token-task',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Weekly task >2026-W22']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $monthlySource = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Monthly source',
+        'content' => [
+            'type' => 'doc',
+            'content' => [[
+                'type' => 'taskList',
+                'content' => [[
+                    'type' => 'taskItem',
+                    'attrs' => [
+                        'id' => 'monthly-token-task',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'paragraph',
+                        'content' => [['type' => 'text', 'text' => 'Monthly task >>2026-06']],
+                    ]],
+                ]],
+            ]],
+        ],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/2026-W22')
+        ->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('relatedTasks', 1)
+                ->where('relatedTasks.0.note_id', $weeklySource->id)
+                ->where('relatedTasks.0.due_date_token', '2026-W22'),
+            ),
+        );
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/2026-06')
+        ->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('relatedTasks', 1)
+                ->where('relatedTasks.0.note_id', $monthlySource->id)
+                ->where('relatedTasks.0.deadline_date_token', '2026-06'),
+            ),
+        );
+});
+
 test('regular note includes related tasks that link to it', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();

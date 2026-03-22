@@ -52,11 +52,36 @@ export function TaskInlineContent({
 }: TaskInlineContentProps) {
     const dateLocale = language === 'en' ? enUS : nl;
     const formatReadableDate = (value: string) => {
-        try {
-            return format(parseISO(value), 'd MMMM yyyy', { locale: dateLocale });
-        } catch {
-            return value;
+        const isoDateMatch = /^\d{4}-\d{2}-\d{2}$/.test(value);
+        if (isoDateMatch) {
+            try {
+                return format(parseISO(value), 'd MMMM yyyy', {
+                    locale: dateLocale,
+                });
+            } catch {
+                return value;
+            }
         }
+
+        const isoWeekMatch = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(value);
+        if (isoWeekMatch?.groups) {
+            const week = Number(isoWeekMatch.groups.week);
+            const year = Number(isoWeekMatch.groups.year);
+            if (week >= 1 && week <= 53) {
+                return `Week ${week} (${year})`;
+            }
+        }
+
+        const isoMonthMatch = /^(?<year>\d{4})-(?<month>\d{2})$/.exec(value);
+        if (isoMonthMatch?.groups) {
+            const month = Number(isoMonthMatch.groups.month);
+            if (month >= 1 && month <= 12) {
+                const monthDate = parseISO(`${value}-01`);
+                return format(monthDate, 'MMMM yyyy', { locale: dateLocale });
+            }
+        }
+
+        return value;
     };
 
     const classForPriority = (priority: TaskRenderFragment['priority']) => {
