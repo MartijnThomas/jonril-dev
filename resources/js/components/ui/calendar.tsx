@@ -115,7 +115,7 @@ function Calendar({
         range_middle: cn("rounded-none", defaultClassNames.range_middle),
         range_end: cn("rounded-r-md bg-accent", defaultClassNames.range_end),
         today: cn(
-          "text-sky-500 font-medium italic data-[selected=true]:rounded-none",
+          "text-foreground font-semibold not-italic data-[selected=true]:rounded-none",
           defaultClassNames.today
         ),
         outside: cn(
@@ -207,6 +207,8 @@ function CalendarDayButton({
       data-range-middle={modifiers.range_middle}
       className={cn(
         "size-(--cell-size) min-w-(--cell-size) p-0 text-sm leading-none font-light group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-[3px] group-data-[focused=true]/day:ring-ring/50 data-[range-end=true]:rounded-md data-[range-end=true]:rounded-r-md data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground data-[range-middle=true]:rounded-none data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground data-[range-start=true]:rounded-md data-[range-start=true]:rounded-l-md data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground dark:hover:text-accent-foreground [&>span]:text-[0.7rem] [&>span]:opacity-70",
+        modifiers.today &&
+          "font-semibold text-foreground",
         defaultClassNames.day,
         className
       )}

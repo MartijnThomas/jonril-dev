@@ -44,9 +44,9 @@ export function AppRightSidebar({
                     overlayClassName="bg-black/20"
                     className="w-[18rem] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
                 >
-                    <div className="flex h-full w-full flex-col">
-                        <div className="h-full min-w-0 overflow-y-auto">
-                            <div className="space-y-4 md:pr-2">
+                    <div className="flex h-full min-h-0 w-full flex-col">
+                        <div className="flex h-full min-h-0 min-w-0 flex-col">
+                            <div className="flex h-full min-h-0 flex-col space-y-4 md:pr-2">
                                 <RightSidebarCalendar />
                                 {children ? (
                                     <section className="rounded-lg border border-sidebar-border/50 bg-background/80 p-3">
@@ -82,12 +82,12 @@ export function AppRightSidebar({
             >
                 <div
                     className={cn(
-                        'flex h-full w-full flex-col rounded-xl bg-sidebar',
+                        'flex h-full min-h-0 w-full flex-col rounded-xl bg-sidebar',
                         !open && 'pointer-events-none opacity-0',
                     )}
                 >
-                    <div className="h-full min-w-0 overflow-y-auto">
-                        <div className="space-y-4">
+                    <div className="flex h-full min-h-0 min-w-0 flex-col">
+                        <div className="flex h-full min-h-0 flex-col space-y-4">
                             <RightSidebarCalendar />
                             {children ? (
                                 <section className="rounded-lg border border-sidebar-border/50 bg-background/80 p-3">

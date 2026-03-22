@@ -6,14 +6,20 @@ import {
     ChevronLeft,
     ChevronRight,
     LoaderCircle,
+    Moon,
     Search,
+    Sun,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { NoteHeaderActions } from '@/components/note-header-actions';
 import { Button } from '@/components/ui/button';
+import { useAppearance } from '@/hooks/use-appearance';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { BreadcrumbItem as BreadcrumbItemType, EditorSaveStatus } from '@/types';
+import type {
+    BreadcrumbItem as BreadcrumbItemType,
+    EditorSaveStatus,
+} from '@/types';
 
 function SaveStatusIcon({ status }: { status: EditorSaveStatus | null }) {
     const [showSaved, setShowSaved] = useState(false);
@@ -30,30 +36,59 @@ function SaveStatusIcon({ status }: { status: EditorSaveStatus | null }) {
     }, [status]);
 
     if (status === 'saving') {
-        return <LoaderCircle className="size-4.5 animate-spin text-muted-foreground" aria-label="Saving" />;
+        return (
+            <LoaderCircle
+                className="size-4.5 animate-spin text-muted-foreground"
+                aria-label="Saving"
+            />
+        );
     }
     if (status === 'error') {
-        return <AlertCircle className="size-4.5 text-destructive" aria-label="Save failed" />;
+        return (
+            <AlertCircle
+                className="size-4.5 text-destructive"
+                aria-label="Save failed"
+            />
+        );
     }
     if (status === 'dirty') {
-        return <span className="flex size-4.5 items-center justify-center" aria-label="Unsaved changes"><span className="size-2 rounded-full bg-amber-400" /></span>;
+        return (
+            <span
+                className="flex size-4.5 items-center justify-center"
+                aria-label="Unsaved changes"
+            >
+                <span className="size-2 rounded-full bg-amber-400" />
+            </span>
+        );
     }
     if (showSaved) {
-        return <CheckCircle className="size-4.5 text-emerald-500" aria-label="Saved" />;
+        return (
+            <CheckCircle
+                className="size-4.5 text-emerald-500"
+                aria-label="Saved"
+            />
+        );
     }
     return null;
 }
 
-function MobileNotePath({ breadcrumbs }: { breadcrumbs: BreadcrumbItemType[] }) {
+function MobileNotePath({
+    breadcrumbs,
+}: {
+    breadcrumbs: BreadcrumbItemType[];
+}) {
     const parents = breadcrumbs.slice(0, -1);
     if (parents.length === 0) return null;
     return (
         <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground md:text-[0.68rem]">
+            <span className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground md:text-[0.68rem]">
                 {parents.map((item, i) => (
                     <span key={i} className="flex items-center gap-1">
                         {i > 0 && <span className="opacity-40">/</span>}
-                        <Link href={item.href} className="hover:text-foreground transition-colors">
+                        <Link
+                            href={item.href}
+                            className="transition-colors hover:text-foreground"
+                        >
                             {item.title}
                         </Link>
                     </span>
@@ -235,6 +270,7 @@ export function AppSidebarHeader({
     saveStatus?: EditorSaveStatus | null;
 }) {
     const isMobile = useIsMobile();
+    const { resolvedAppearance, updateAppearance } = useAppearance();
     const pageProps = usePage().props as JournalPageProps;
     const isJournal =
         pageProps.noteType === 'journal' &&
@@ -279,15 +315,27 @@ export function AppSidebarHeader({
     const openCommandPalette = () => {
         window.dispatchEvent(new Event('open-command-palette'));
     };
+    const toggleAppearance = () => {
+        if (resolvedAppearance === 'dark') {
+            updateAppearance('light');
+            return;
+        }
+
+        updateAppearance('dark');
+    };
 
     return (
         <div className="z-20 shrink-0">
-            <header className="flex shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 py-3 backdrop-blur-lg transition-[width,height] ease-linear supports-backdrop-filter:bg-background/90 md:h-16 md:py-0 md:px-4">
+            <header className="flex shrink-0 items-center gap-2 border-b border-sidebar-border/60 bg-background/90 px-6 py-3 backdrop-blur-lg transition-[width,height] ease-linear supports-backdrop-filter:bg-background/90 md:h-16 md:px-4 md:py-0">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                     {isMobile ? (
                         <div className="flex min-w-0 flex-col gap-0.5">
-                            <span className="truncate text-base leading-tight font-medium text-foreground md:text-sm">{mobileTitle}</span>
-                            {showMobilePath && <MobileNotePath breadcrumbs={breadcrumbs} />}
+                            <span className="truncate text-base leading-tight font-medium text-foreground md:text-sm">
+                                {mobileTitle}
+                            </span>
+                            {showMobilePath && (
+                                <MobileNotePath breadcrumbs={breadcrumbs} />
+                            )}
                         </div>
                     ) : (
                         <Breadcrumbs breadcrumbs={breadcrumbs} />
@@ -298,6 +346,24 @@ export function AppSidebarHeader({
                     <Button
                         type="button"
                         variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground md:h-7 md:w-7"
+                        onClick={toggleAppearance}
+                        aria-label={
+                            resolvedAppearance === 'dark'
+                                ? 'Switch to light mode'
+                                : 'Switch to dark mode'
+                        }
+                    >
+                        {resolvedAppearance === 'dark' ? (
+                            <Sun className="size-4 md:size-3.5" />
+                        ) : (
+                            <Moon className="size-4 md:size-3.5" />
+                        )}
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
                         size="sm"
                         className="h-8 gap-1.5 px-2 text-sm text-muted-foreground md:h-7 md:text-xs"
                         onClick={openCommandPalette}
@@ -305,7 +371,9 @@ export function AppSidebarHeader({
                     >
                         <Search className="size-4 md:size-3.5" />
                         <span className="hidden sm:inline">Search</span>
-                        <span className="hidden lg:inline text-[10px] text-muted-foreground/80">⌘K</span>
+                        <span className="hidden text-[10px] text-muted-foreground/80 lg:inline">
+                            ⌘K
+                        </span>
                     </Button>
                     {isJournal && (
                         <div className="flex items-center gap-1">
@@ -335,23 +403,37 @@ export function AppSidebarHeader({
                         <NoteHeaderActions
                             noteId={pageProps.noteActions.id}
                             title={pageProps.noteActions.title}
-                            currentLocation={pageProps.noteActions.parent_path ?? null}
-                            currentParentId={pageProps.noteActions.parent_id ?? null}
-                            moveParentOptions={pageProps.moveParentOptions ?? []}
+                            currentLocation={
+                                pageProps.noteActions.parent_path ?? null
+                            }
+                            currentParentId={
+                                pageProps.noteActions.parent_id ?? null
+                            }
+                            moveParentOptions={
+                                pageProps.moveParentOptions ?? []
+                            }
                             canMove={Boolean(pageProps.noteActions.canMove)}
                             canRename={Boolean(pageProps.noteActions.canRename)}
                             canDelete={Boolean(pageProps.noteActions.canDelete)}
                             canClear={Boolean(pageProps.noteActions.canClear)}
-                            canAttachToEvent={Boolean(pageProps.noteActions.canAttachToEvent)}
-                            canDetachFromEvent={Boolean(pageProps.noteActions.canDetachFromEvent)}
+                            canAttachToEvent={Boolean(
+                                pageProps.noteActions.canAttachToEvent,
+                            )}
+                            canDetachFromEvent={Boolean(
+                                pageProps.noteActions.canDetachFromEvent,
+                            )}
                             canOpenBlockPreview={Boolean(
                                 pageProps.noteActions.canOpenBlockPreview,
                             )}
                             blockPreviewUrl={
                                 pageProps.noteActions.blockPreviewUrl ?? null
                             }
-                            historyUrl={pageProps.noteActions.historyUrl ?? null}
-                            kanbanUrl={buildNoteKanbanUrl(pageProps.noteActions.id)}
+                            historyUrl={
+                                pageProps.noteActions.historyUrl ?? null
+                            }
+                            kanbanUrl={buildNoteKanbanUrl(
+                                pageProps.noteActions.id,
+                            )}
                             dropdownSide="left"
                             enablePropertiesToggle
                             triggerIconClassName={headerIconClassName}

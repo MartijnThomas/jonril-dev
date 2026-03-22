@@ -1,6 +1,14 @@
 import { Link, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
-import { BookOpen, CalendarDays, Folder, Menu, Search } from 'lucide-react';
+import {
+    BookOpen,
+    CalendarDays,
+    Folder,
+    Menu,
+    Moon,
+    Search,
+    Sun,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Breadcrumbs } from '@/components/breadcrumbs';
@@ -31,6 +39,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { UserMenuContent } from '@/components/user-menu-content';
+import { useAppearance } from '@/hooks/use-appearance';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useInitials } from '@/hooks/use-initials';
 import { cn, toUrl } from '@/lib/utils';
@@ -68,7 +77,17 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
         },
     ];
     const getInitials = useInitials();
+    const { resolvedAppearance, updateAppearance } = useAppearance();
     const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
+    const toggleAppearance = () => {
+        if (resolvedAppearance === 'dark') {
+            updateAppearance('light');
+            return;
+        }
+
+        updateAppearance('dark');
+    };
+
     return (
         <>
             <div className="border-b border-sidebar-border/80">
@@ -177,6 +196,24 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
 
                     <div className="ml-auto flex items-center space-x-2">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9"
+                            onClick={toggleAppearance}
+                            aria-label={
+                                resolvedAppearance === 'dark'
+                                    ? 'Switch to light mode'
+                                    : 'Switch to dark mode'
+                            }
+                        >
+                            {resolvedAppearance === 'dark' ? (
+                                <Sun className="size-5 opacity-80 hover:opacity-100" />
+                            ) : (
+                                <Moon className="size-5 opacity-80 hover:opacity-100" />
+                            )}
+                        </Button>
                         <div className="relative flex items-center space-x-1">
                             <Button
                                 variant="ghost"
