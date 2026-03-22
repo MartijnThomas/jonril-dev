@@ -108,6 +108,20 @@ type IndicatorResponse = {
     polling_ms?: number;
 };
 
+type CachedIndicatorPayload = {
+    days: Record<string, DayIndicator>;
+    weeks: Record<string, WeekIndicator>;
+    months: Record<string, PeriodIndicator>;
+    years: Record<string, PeriodIndicator>;
+    version: string;
+    fetchedAt: number;
+    pollingMs: number;
+};
+
+const INDICATOR_CACHE_STORAGE_KEY = 'sidebar:indicator-cache:v2';
+const INDICATOR_CACHE_FRESH_FOR_MS = 5 * 60 * 1000;
+const indicatorMemoryCache: Record<string, CachedIndicatorPayload> = {};
+
 const CALENDAR_SELECTED_DAY_CLASS: Record<string, string> = {
     black: 'rounded-md hover:bg-muted data-[selected-single=true]:bg-zinc-900/15 dark:data-[selected-single=true]:bg-zinc-100/20 data-[selected-single=true]:text-foreground',
     slate: 'rounded-md hover:bg-muted data-[selected-single=true]:bg-slate-500/20 dark:data-[selected-single=true]:bg-slate-400/25 data-[selected-single=true]:text-foreground',
@@ -360,20 +374,53 @@ export function RightSidebarCalendar() {
     const [yearIndicators, setYearIndicators] = useState<
         Record<string, PeriodIndicator>
     >({});
-    const indicatorCacheRef = useRef<
-        Record<
-            string,
-            {
-                days: Record<string, DayIndicator>;
-                weeks: Record<string, WeekIndicator>;
-                months: Record<string, PeriodIndicator>;
-                years: Record<string, PeriodIndicator>;
-                version: string;
-            }
-        >
-    >({});
+    const indicatorCacheRef = useRef<Record<string, CachedIndicatorPayload>>({
+        ...indicatorMemoryCache,
+    });
     const indicatorPollRef = useRef<number | null>(null);
     const [indicatorRefreshNonce, setIndicatorRefreshNonce] = useState(0);
+
+    const readStorageCache = useCallback((): Record<string, CachedIndicatorPayload> => {
+        if (typeof window === 'undefined') {
+            return {};
+        }
+
+        try {
+            const raw = window.sessionStorage.getItem(
+                INDICATOR_CACHE_STORAGE_KEY,
+            );
+            if (!raw) {
+                return {};
+            }
+
+            const parsed = JSON.parse(raw) as unknown;
+            if (!parsed || typeof parsed !== 'object') {
+                return {};
+            }
+
+            return parsed as Record<string, CachedIndicatorPayload>;
+        } catch {
+            return {};
+        }
+    }, []);
+
+    const writeStorageCache = useCallback(
+        (cache: Record<string, CachedIndicatorPayload>): void => {
+            if (typeof window === 'undefined') {
+                return;
+            }
+
+            try {
+                window.sessionStorage.setItem(
+                    INDICATOR_CACHE_STORAGE_KEY,
+                    JSON.stringify(cache),
+                );
+            } catch {
+                // Ignore storage write failures.
+            }
+        },
+        [],
+    );
 
     // The date to request: daily journal period, or omit for today (server decides).
     const eventsDateParam =
@@ -558,6 +605,17 @@ export function RightSidebarCalendar() {
     }, []);
 
     useEffect(() => {
+        const persisted = readStorageCache();
+        if (Object.keys(persisted).length > 0) {
+            indicatorCacheRef.current = {
+                ...indicatorCacheRef.current,
+                ...persisted,
+            };
+            Object.assign(indicatorMemoryCache, indicatorCacheRef.current);
+        }
+    }, [readStorageCache]);
+
+    useEffect(() => {
         if (eventsWorkspaceSlug === '') {
             return;
         }
@@ -622,18 +680,36 @@ export function RightSidebarCalendar() {
                 const cachedEntry = indicatorCacheRef.current[currentRangeKey];
                 const hasChanged =
                     !cachedEntry || cachedEntry.version !== nextVersion;
+                const nextPollingMs =
+                    typeof payload.polling_ms === 'number' &&
+                    payload.polling_ms >= 1000
+                        ? payload.polling_ms
+                        : (payload.pending_dates?.length ?? 0) > 0
+                          ? 2000
+                          : 300000;
+
+                const nextCachedPayload: CachedIndicatorPayload = {
+                    days: payload.days,
+                    weeks: payload.weeks ?? {},
+                    months: payload.months ?? {},
+                    years: payload.years ?? {},
+                    version: nextVersion,
+                    fetchedAt: Date.now(),
+                    pollingMs: nextPollingMs,
+                };
+
+                indicatorCacheRef.current[currentRangeKey] = nextCachedPayload;
+                indicatorMemoryCache[currentRangeKey] = nextCachedPayload;
+
+                // Always hydrate visible state from server payload; relying only
+                // on version changes can leave the UI empty after remounts.
+                setDayIndicators(payload.days);
+                setWeekIndicators(payload.weeks ?? {});
+                setMonthIndicators(payload.months ?? {});
+                setYearIndicators(payload.years ?? {});
+
                 if (hasChanged) {
-                    indicatorCacheRef.current[currentRangeKey] = {
-                        days: payload.days,
-                        weeks: payload.weeks ?? {},
-                        months: payload.months ?? {},
-                        years: payload.years ?? {},
-                        version: nextVersion,
-                    };
-                    setDayIndicators(payload.days);
-                    setWeekIndicators(payload.weeks ?? {});
-                    setMonthIndicators(payload.months ?? {});
-                    setYearIndicators(payload.years ?? {});
+                    writeStorageCache(indicatorCacheRef.current);
                 }
 
                 const pollMs =
@@ -651,8 +727,20 @@ export function RightSidebarCalendar() {
             }
         };
 
-        const initialDelay = cached ? 250 : 750;
-        schedulePoll(initialDelay);
+        if (cached?.days) {
+            const ageMs = Date.now() - cached.fetchedAt;
+            if (ageMs < INDICATOR_CACHE_FRESH_FOR_MS) {
+                const pollIn = Math.max(
+                    1000,
+                    cached.pollingMs - ageMs,
+                );
+                schedulePoll(pollIn);
+            } else {
+                void fetchIndicators();
+            }
+        } else {
+            void fetchIndicators();
+        }
 
         return () => {
             disposed = true;
@@ -662,14 +750,12 @@ export function RightSidebarCalendar() {
             }
             abortController.abort();
         };
-    }, [eventsWorkspaceSlug, indicatorRange, indicatorRefreshNonce]);
-
-    useEffect(() => {
-        setDayIndicators({});
-        setWeekIndicators({});
-        setMonthIndicators({});
-        setYearIndicators({});
-    }, [eventsWorkspaceSlug]);
+    }, [
+        eventsWorkspaceSlug,
+        indicatorRange,
+        indicatorRefreshNonce,
+        writeStorageCache,
+    ]);
 
     const monthIndicator = monthIndicators[monthPeriod];
     const yearIndicator = yearIndicators[yearPeriod];

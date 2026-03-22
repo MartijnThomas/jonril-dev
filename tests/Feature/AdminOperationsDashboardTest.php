@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\System\ScheduledCommandHealthStore;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -97,6 +98,27 @@ test('non admin cannot view operations dashboard', function (): void {
     $this
         ->actingAs($user)
         ->get(route('settings.admin.operations', absolute: false))
+        ->assertForbidden();
+});
+
+test('admin can view maintenance page', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this
+        ->actingAs($admin)
+        ->get(route('settings.admin.maintenance', absolute: false))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('settings/admin-maintenance')
+            ->has('maintenanceActions')
+            ->has('maintenanceRuns'));
+});
+
+test('non admin cannot view maintenance page', function (): void {
+    $user = User::factory()->create(['role' => 'user']);
+
+    $this
+        ->actingAs($user)
+        ->get(route('settings.admin.maintenance', absolute: false))
         ->assertForbidden();
 });
 
@@ -233,5 +255,52 @@ test('backup profile health states are derived correctly', function (): void {
                     return $states->get('healthy') === 'healthy'
                         && $states->get('stale') === 'stale'
                         && $states->get('error') === 'error';
+                })));
+});
+
+test('admin can dispatch maintenance action from operations page', function (): void {
+    Queue::fake();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this
+        ->actingAs($admin)
+        ->post(route('settings.admin.operations.maintenance.trigger', absolute: false), [
+            'action' => 'reindex_tasks',
+        ])
+        ->assertRedirect();
+
+    Queue::assertPushed(\App\Jobs\RunAdminMaintenanceCommandJob::class, function ($job): bool {
+        return $job->action === 'reindex_tasks';
+    });
+});
+
+test('non admin cannot dispatch maintenance action from operations page', function (): void {
+    Queue::fake();
+
+    $user = User::factory()->create(['role' => 'user']);
+
+    $this
+        ->actingAs($user)
+        ->post(route('settings.admin.operations.maintenance.trigger', absolute: false), [
+            'action' => 'reindex_tasks',
+        ])
+        ->assertForbidden();
+
+    Queue::assertNothingPushed();
+});
+
+test('operations page includes scheduled commands discovered from scheduler', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this
+        ->actingAs($admin)
+        ->get(route('settings.admin.operations', absolute: false))
+        ->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps('operations-scheduled', fn (Assert $deferred) => $deferred
+                ->where('scheduledHealth', function ($items): bool {
+                    return collect($items)
+                        ->pluck('command')
+                        ->contains('notes:prune-images');
                 })));
 });

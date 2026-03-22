@@ -350,6 +350,10 @@ return [
         'current_workspace' => 'Huidig',
     ],
     'settings_nav' => [
+        'tab_profile' => 'Profiel',
+        'tab_tasks_editor' => 'Taken & Editor',
+        'tab_workspace' => 'Werkruimte',
+        'tab_admin' => 'Admin',
         'profile' => 'Profiel',
         'password' => 'Wachtwoord',
         'two_factor' => 'Tweestapsverificatie',
@@ -357,9 +361,12 @@ return [
         'editor_preferences' => 'Editorvoorkeuren',
         'task_filters' => 'Taakfilters',
         'operations' => 'Operaties',
+        'maintenance' => 'Onderhoud',
     ],
     'settings_operations' => [
         'page_title' => 'Operatiegezondheid',
+        'maintenance_page_title' => 'Onderhoudsacties',
+        'maintenance_page_description' => 'Start operationele onderhoudscommando\'s handmatig.',
         'heading' => 'Operatiegezondheid',
         'description' => 'Inzicht in geplande jobs, back-ups en de gezondheid van achtergrondsynchronisatie.',
         'kpi_last_backup' => 'Laatste back-up',

@@ -42,6 +42,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('two-factor.show');
     Route::get('settings/admin/operations', [AdminOperationsController::class, 'show'])
         ->name('settings.admin.operations');
+    Route::get('settings/admin/maintenance', [AdminOperationsController::class, 'maintenance'])
+        ->name('settings.admin.maintenance');
+    Route::post('settings/admin/operations/maintenance', [AdminOperationsController::class, 'trigger'])
+        ->name('settings.admin.operations.maintenance.trigger');
 
     Route::get('settings/workspaces/{workspace}', [WorkspaceController::class, 'edit'])
         ->name('workspaces.settings.edit');

@@ -246,7 +246,6 @@ export default function AdminOperations({
             .map((profile) => profile.latest_backup_at)
             .filter((value): value is string => typeof value === 'string')
             .sort((a, b) => b.localeCompare(a))[0] ?? null;
-
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\TriggerAdminMaintenanceCommandRequest;
+use App\Jobs\RunAdminMaintenanceCommandJob;
 use App\Models\Calendar;
 use App\Models\NoteImage;
 use App\Models\TimeblockCalendarLink;
@@ -11,13 +13,17 @@ use App\Models\WorkspaceDailySignal;
 use App\Support\System\ScheduledCommandHealthStore;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Backup\BackupDestination\BackupDestination;
 use Spatie\Backup\BackupDestination\BackupDestinationFactory;
 use Spatie\Backup\Config\Config as BackupConfig;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class AdminOperationsController extends Controller
 {
@@ -57,6 +63,36 @@ class AdminOperationsController extends Controller
         ]);
     }
 
+    public function maintenance(Request $request): Response
+    {
+        $this->assertAdmin($request);
+
+        return Inertia::render('settings/admin-maintenance', [
+            'maintenanceActions' => $this->maintenanceActions(),
+            'maintenanceRuns' => $this->maintenanceRuns(),
+            'status' => (string) session('status', ''),
+        ]);
+    }
+
+    public function trigger(
+        TriggerAdminMaintenanceCommandRequest $request,
+    ): HttpResponse {
+        $this->assertAdmin($request);
+
+        $action = $request->validated('action');
+        $definition = $this->maintenanceActions()[$action] ?? null;
+        abort_if($definition === null, 422, 'Unknown maintenance action.');
+
+        RunAdminMaintenanceCommandJob::dispatch(
+            action: $action,
+            label: (string) $definition['label'],
+            commands: $definition['commands'],
+            initiatedByUserId: (int) $request->user()->id,
+        );
+
+        return back(303)->with('status', 'admin-maintenance-dispatched');
+    }
+
     /**
      * @return array<int, array{
      *     key: string,
@@ -76,11 +112,7 @@ class AdminOperationsController extends Controller
      */
     private function scheduledHealth(): array
     {
-        $scheduledDefinitions = collect(config('system-health.scheduled_commands', []))
-            ->filter(fn ($item): bool => is_array($item))
-            ->all();
-
-        return collect($scheduledDefinitions)
+        return collect($this->scheduledCommandDefinitions())
             ->map(function (array $definition, string $key): array {
                 $state = ScheduledCommandHealthStore::get($key);
                 $staleAfterMinutes = max(1, (int) ($definition['stale_after_minutes'] ?? 60));
@@ -107,6 +139,163 @@ class AdminOperationsController extends Controller
                 ];
             })
             ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, array{
+     *     label: string,
+     *     command: string,
+     *     timezone: string,
+     *     stale_after_minutes: int
+     * }>
+     */
+    private function scheduledCommandDefinitions(): array
+    {
+        $configured = collect(config('system-health.scheduled_commands', []))
+            ->filter(fn ($item): bool => is_array($item))
+            ->map(function (array $definition): array {
+                return [
+                    'label' => (string) ($definition['label'] ?? 'Scheduled command'),
+                    'command' => (string) ($definition['command'] ?? ''),
+                    'timezone' => (string) ($definition['timezone'] ?? config('app.timezone', 'UTC')),
+                    'stale_after_minutes' => max(1, (int) ($definition['stale_after_minutes'] ?? 60)),
+                ];
+            })
+            ->filter(fn (array $definition): bool => trim($definition['command']) !== '');
+
+        $discoveredByCommand = collect(Schedule::events())
+            ->map(function (object $event): ?array {
+                $command = $this->extractScheduledArtisanCommand($event);
+                if ($command === null) {
+                    return null;
+                }
+
+                $timezone = (string) ($event->timezone ?? config('app.timezone', 'UTC'));
+
+                return [
+                    'command' => $command,
+                    'timezone' => $timezone,
+                ];
+            })
+            ->filter()
+            ->keyBy('command');
+
+        $byCommand = $configured
+            ->mapWithKeys(fn (array $definition, string $key): array => [
+                trim($definition['command']) => [
+                    ...$definition,
+                    'key' => $key,
+                ],
+            ]);
+
+        foreach ($discoveredByCommand as $command => $eventMeta) {
+            if ($byCommand->has($command)) {
+                continue;
+            }
+
+            $generatedKey = 'scheduled_'.md5($command);
+            $baseCommand = Str::before($command, ' ');
+            $label = Str::headline(str_replace(':', ' ', $baseCommand));
+
+            $byCommand->put($command, [
+                'key' => $generatedKey,
+                'label' => $label,
+                'command' => $command,
+                'timezone' => (string) ($eventMeta['timezone'] ?? config('app.timezone', 'UTC')),
+                'stale_after_minutes' => 24 * 60,
+            ]);
+        }
+
+        return $byCommand
+            ->mapWithKeys(fn (array $definition): array => [
+                (string) $definition['key'] => [
+                    'label' => (string) $definition['label'],
+                    'command' => (string) $definition['command'],
+                    'timezone' => (string) $definition['timezone'],
+                    'stale_after_minutes' => (int) $definition['stale_after_minutes'],
+                ],
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<string, array{
+     *     key: string,
+     *     label: string,
+     *     description: string,
+     *     commands: array<int, array{command: string, parameters: array<string, mixed>}>
+     * }>
+     */
+    private function maintenanceActions(): array
+    {
+        return [
+            'reindex_tasks' => [
+                'key' => 'reindex_tasks',
+                'label' => 'Reindex tasks',
+                'description' => 'Run notes:reindex-tasks to rebuild note task records and tokens.',
+                'commands' => [
+                    ['command' => 'notes:reindex-tasks', 'parameters' => []],
+                ],
+            ],
+            'reindex_scout' => [
+                'key' => 'reindex_scout',
+                'label' => 'Reindex Scout',
+                'description' => 'Sync Scout index settings and reimport Note + NoteTask documents.',
+                'commands' => [
+                    ['command' => 'scout:sync-index-settings', 'parameters' => []],
+                    ['command' => 'scout:import', 'parameters' => ['model' => 'App\\Models\\Note']],
+                    ['command' => 'scout:import', 'parameters' => ['model' => 'App\\Models\\NoteTask']],
+                ],
+            ],
+            'daily_signals_reconcile' => [
+                'key' => 'daily_signals_reconcile',
+                'label' => 'Reconcile daily signals',
+                'description' => 'Run daily-signals:reconcile to rebuild projection consistency.',
+                'commands' => [
+                    ['command' => 'daily-signals:reconcile', 'parameters' => []],
+                ],
+            ],
+            'prune_note_images' => [
+                'key' => 'prune_note_images',
+                'label' => 'Prune note images',
+                'description' => 'Run notes:prune-images to remove orphaned image files.',
+                'commands' => [
+                    ['command' => 'notes:prune-images', 'parameters' => []],
+                ],
+            ],
+            'backup_hourly_db' => [
+                'key' => 'backup_hourly_db',
+                'label' => 'Run DB backup profile',
+                'description' => 'Run backup:run --only-db --config=backup_hourly_db now.',
+                'commands' => [
+                    ['command' => 'backup:run', 'parameters' => ['--only-db' => true, '--config' => 'backup_hourly_db']],
+                ],
+            ],
+            'backup_full' => [
+                'key' => 'backup_full',
+                'label' => 'Run full backup',
+                'description' => 'Run backup:run now.',
+                'commands' => [
+                    ['command' => 'backup:run', 'parameters' => []],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function maintenanceRuns(): array
+    {
+        return collect($this->maintenanceActions())
+            ->mapWithKeys(function (array $definition, string $key): array {
+                $state = Cache::get('admin:maintenance:last-run:'.$key);
+
+                return [
+                    $key => is_array($state) ? $state : [],
+                ];
+            })
             ->all();
     }
 
@@ -395,5 +584,29 @@ class AdminOperationsController extends Controller
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function extractScheduledArtisanCommand(object $event): ?string
+    {
+        if (! method_exists($event, 'getSummaryForDisplay')) {
+            return null;
+        }
+
+        $summary = (string) $event->getSummaryForDisplay();
+        $rawCommand = trim($summary);
+
+        if (preg_match('/(?:^|\s)artisan\s+(.+)$/', $rawCommand, $matches) !== 1) {
+            return null;
+        }
+
+        $command = trim((string) ($matches[1] ?? ''));
+        if ($command === '') {
+            return null;
+        }
+
+        $command = preg_replace('/\s+>.*$/', '', $command) ?? $command;
+        $command = preg_replace('/\s+2>&1.*$/', '', $command) ?? $command;
+
+        return trim($command);
     }
 }

@@ -350,6 +350,10 @@ return [
         'current_workspace' => 'Current',
     ],
     'settings_nav' => [
+        'tab_profile' => 'Profile',
+        'tab_tasks_editor' => 'Tasks & Editor',
+        'tab_workspace' => 'Workspace',
+        'tab_admin' => 'Admin',
         'profile' => 'Profile',
         'password' => 'Password',
         'two_factor' => 'Two-factor auth',
@@ -357,9 +361,12 @@ return [
         'editor_preferences' => 'Editor preferences',
         'task_filters' => 'Task filters',
         'operations' => 'Operations',
+        'maintenance' => 'Maintenance',
     ],
     'settings_operations' => [
         'page_title' => 'Operations health',
+        'maintenance_page_title' => 'Maintenance actions',
+        'maintenance_page_description' => 'Manually trigger operational maintenance commands.',
         'heading' => 'Operations health',
         'description' => 'Visibility into scheduled jobs, backups and background synchronization health.',
         'kpi_last_backup' => 'Last backup',
