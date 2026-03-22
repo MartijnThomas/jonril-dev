@@ -52,31 +52,29 @@ class DailySignalPipeline
     {
         $signalDate = $date->toDateString();
         $keys = [];
+        $upsertRows = [];
+        $timestamp = now();
 
         foreach ($this->calculators as $calculator) {
             $result = $calculator->calculate($workspace, $date);
             $keys[] = $result->key;
+            $upsertRows[] = [
+                'workspace_id' => $workspace->id,
+                'date' => $signalDate,
+                'signal_key' => $result->key,
+                'state' => $result->state,
+                'value_json' => json_encode($result->value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ];
+        }
 
-            $existing = WorkspaceDailySignal::query()
-                ->where('workspace_id', $workspace->id)
-                ->whereDate('date', $signalDate)
-                ->where('signal_key', $result->key)
-                ->first();
-
-            if ($existing !== null) {
-                $existing->update([
-                    'state' => $result->state,
-                    'value_json' => $result->value,
-                ]);
-            } else {
-                WorkspaceDailySignal::query()->create([
-                    'workspace_id' => $workspace->id,
-                    'date' => $signalDate,
-                    'signal_key' => $result->key,
-                    'state' => $result->state,
-                    'value_json' => $result->value,
-                ]);
-            }
+        if ($upsertRows !== []) {
+            WorkspaceDailySignal::query()->upsert(
+                $upsertRows,
+                ['workspace_id', 'date', 'signal_key'],
+                ['state', 'value_json', 'updated_at'],
+            );
         }
 
         WorkspaceDailySignal::query()

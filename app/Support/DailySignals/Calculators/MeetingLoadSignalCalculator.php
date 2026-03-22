@@ -10,9 +10,15 @@ use App\Models\Workspace;
 use App\Support\DailySignals\Contracts\DailySignalCalculator;
 use App\Support\DailySignals\Data\DailySignalResult;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 
 class MeetingLoadSignalCalculator implements DailySignalCalculator
 {
+    /**
+     * @var array<string, Collection<int, string>>
+     */
+    private array $activeCalendarIdsByWorkspace = [];
+
     public function key(): string
     {
         return 'meeting_load';
@@ -20,10 +26,7 @@ class MeetingLoadSignalCalculator implements DailySignalCalculator
 
     public function calculate(Workspace $workspace, CarbonInterface $date): DailySignalResult
     {
-        $activeCalendarIds = Calendar::query()
-            ->where('workspace_id', $workspace->id)
-            ->where('is_active', true)
-            ->pluck('id');
+        $activeCalendarIds = $this->activeCalendarIds($workspace);
 
         $dayStart = $date->copy()->startOfDay()->timezone('UTC');
         $dayEnd = $date->copy()->endOfDay()->timezone('UTC');
@@ -84,5 +87,24 @@ class MeetingLoadSignalCalculator implements DailySignalCalculator
                 'has_conflict' => $hasConflict,
             ],
         );
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
+    private function activeCalendarIds(Workspace $workspace): Collection
+    {
+        if (array_key_exists($workspace->id, $this->activeCalendarIdsByWorkspace)) {
+            return $this->activeCalendarIdsByWorkspace[$workspace->id];
+        }
+
+        $activeCalendarIds = Calendar::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('is_active', true)
+            ->pluck('id');
+
+        $this->activeCalendarIdsByWorkspace[$workspace->id] = $activeCalendarIds;
+
+        return $activeCalendarIds;
     }
 }

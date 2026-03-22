@@ -8,9 +8,15 @@ use App\Models\Workspace;
 use App\Support\DailySignals\Contracts\DailySignalCalculator;
 use App\Support\DailySignals\Data\DailySignalResult;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 
 class CalendarSyncHealthSignalCalculator implements DailySignalCalculator
 {
+    /**
+     * @var array<string, Collection<int, Calendar>>
+     */
+    private array $activeCalendarsByWorkspace = [];
+
     public function key(): string
     {
         return 'calendar_sync_health';
@@ -18,10 +24,7 @@ class CalendarSyncHealthSignalCalculator implements DailySignalCalculator
 
     public function calculate(Workspace $workspace, CarbonInterface $date): DailySignalResult
     {
-        $activeCalendars = Calendar::query()
-            ->where('workspace_id', $workspace->id)
-            ->where('is_active', true)
-            ->get(['id', 'last_synced_at']);
+        $activeCalendars = $this->activeCalendars($workspace);
 
         $activeCount = $activeCalendars->count();
         if ($activeCount === 0) {
@@ -55,5 +58,24 @@ class CalendarSyncHealthSignalCalculator implements DailySignalCalculator
                 'stale_count' => $staleCount,
             ],
         );
+    }
+
+    /**
+     * @return Collection<int, Calendar>
+     */
+    private function activeCalendars(Workspace $workspace): Collection
+    {
+        if (array_key_exists($workspace->id, $this->activeCalendarsByWorkspace)) {
+            return $this->activeCalendarsByWorkspace[$workspace->id];
+        }
+
+        $activeCalendars = Calendar::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('is_active', true)
+            ->get(['id', 'last_synced_at']);
+
+        $this->activeCalendarsByWorkspace[$workspace->id] = $activeCalendars;
+
+        return $activeCalendars;
     }
 }
