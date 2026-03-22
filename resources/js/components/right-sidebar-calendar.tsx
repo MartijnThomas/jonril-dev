@@ -120,6 +120,11 @@ type CachedIndicatorPayload = {
 
 const INDICATOR_CACHE_STORAGE_KEY = 'sidebar:indicator-cache:v2';
 const INDICATOR_CACHE_FRESH_FOR_MS = 5 * 60 * 1000;
+const INDICATOR_MIN_POLLING_MS = 5_000;
+const INDICATOR_MAX_POLLING_MS = 5 * 60 * 1000;
+const INDICATOR_PENDING_BASE_POLLING_MS = 10_000;
+const INDICATOR_IDLE_POLLING_MS = 5 * 60 * 1000;
+const INDICATOR_ERROR_BASE_POLLING_MS = 30_000;
 const indicatorMemoryCache: Record<string, CachedIndicatorPayload> = {};
 
 const CALENDAR_SELECTED_DAY_CLASS: Record<string, string> = {
@@ -378,6 +383,9 @@ export function RightSidebarCalendar() {
         ...indicatorMemoryCache,
     });
     const indicatorPollRef = useRef<number | null>(null);
+    const indicatorStableVersionCountRef = useRef<Record<string, number>>({});
+    const indicatorPendingAttemptRef = useRef<Record<string, number>>({});
+    const indicatorErrorAttemptRef = useRef<Record<string, number>>({});
     const [indicatorRefreshNonce, setIndicatorRefreshNonce] = useState(0);
 
     const readStorageCache = useCallback((): Record<string, CachedIndicatorPayload> => {
@@ -680,13 +688,42 @@ export function RightSidebarCalendar() {
                 const cachedEntry = indicatorCacheRef.current[currentRangeKey];
                 const hasChanged =
                     !cachedEntry || cachedEntry.version !== nextVersion;
-                const nextPollingMs =
+                const serverPollingMs =
                     typeof payload.polling_ms === 'number' &&
                     payload.polling_ms >= 1000
                         ? payload.polling_ms
                         : (payload.pending_dates?.length ?? 0) > 0
                           ? 2000
                           : 300000;
+                const hasPending = (payload.pending_dates?.length ?? 0) > 0;
+                const pendingAttempt = hasPending
+                    ? (indicatorPendingAttemptRef.current[currentRangeKey] ?? 0) + 1
+                    : 0;
+                indicatorPendingAttemptRef.current[currentRangeKey] =
+                    pendingAttempt;
+                indicatorErrorAttemptRef.current[currentRangeKey] = 0;
+                const stableCount = hasChanged
+                    ? 0
+                    : (indicatorStableVersionCountRef.current[currentRangeKey] ??
+                        0) + 1;
+                indicatorStableVersionCountRef.current[currentRangeKey] =
+                    stableCount;
+                const pendingBackoffMs = hasPending
+                    ? Math.min(
+                          INDICATOR_MAX_POLLING_MS,
+                          INDICATOR_PENDING_BASE_POLLING_MS *
+                              Math.pow(2, Math.max(0, pendingAttempt - 1)),
+                      )
+                    : INDICATOR_IDLE_POLLING_MS;
+                const nextPollingMs = Math.min(
+                    INDICATOR_MAX_POLLING_MS,
+                    Math.max(
+                        INDICATOR_MIN_POLLING_MS,
+                        hasPending
+                            ? Math.max(serverPollingMs, pendingBackoffMs)
+                            : Math.max(serverPollingMs, INDICATOR_IDLE_POLLING_MS),
+                    ),
+                );
 
                 const nextCachedPayload: CachedIndicatorPayload = {
                     days: payload.days,
@@ -719,9 +756,27 @@ export function RightSidebarCalendar() {
                         : (payload.pending_dates?.length ?? 0) > 0
                           ? 2000
                           : 300000;
-                schedulePoll(pollMs);
+                schedulePoll(
+                    Math.min(
+                        INDICATOR_MAX_POLLING_MS,
+                        Math.max(
+                            INDICATOR_MIN_POLLING_MS,
+                            hasPending
+                                ? Math.max(pollMs, pendingBackoffMs)
+                                : Math.max(pollMs, INDICATOR_IDLE_POLLING_MS),
+                        ),
+                    ),
+                );
             } catch {
-                schedulePoll(5000);
+                const errorAttempt =
+                    (indicatorErrorAttemptRef.current[currentRangeKey] ?? 0) + 1;
+                indicatorErrorAttemptRef.current[currentRangeKey] = errorAttempt;
+                const errorBackoffMs = Math.min(
+                    INDICATOR_MAX_POLLING_MS,
+                    INDICATOR_ERROR_BASE_POLLING_MS *
+                        Math.pow(2, Math.max(0, errorAttempt - 1)),
+                );
+                schedulePoll(errorBackoffMs);
             } finally {
                 inFlight = false;
             }
@@ -731,7 +786,7 @@ export function RightSidebarCalendar() {
             const ageMs = Date.now() - cached.fetchedAt;
             if (ageMs < INDICATOR_CACHE_FRESH_FOR_MS) {
                 const pollIn = Math.max(
-                    1000,
+                    INDICATOR_MIN_POLLING_MS,
                     cached.pollingMs - ageMs,
                 );
                 schedulePoll(pollIn);

@@ -964,6 +964,7 @@ class SidebarEventsController extends Controller
                 'date',
                 'has_note',
                 'has_events',
+                'calendar_state',
                 'work_state',
                 'events_count',
                 'birthday_count',
@@ -995,7 +996,8 @@ class SidebarEventsController extends Controller
                 // Compatibility path for rows created before events_count / birthday_count were projected.
                 return (bool) $indicator->has_events
                     && (int) $indicator->events_count === 0
-                    && (int) $indicator->birthday_count === 0;
+                    && (int) $indicator->birthday_count === 0
+                    && $indicator->calendar_state === null;
             })
             ->keys()
             ->values()
