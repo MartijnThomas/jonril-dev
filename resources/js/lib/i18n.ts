@@ -6,6 +6,7 @@ type TranslationTree = Record<string, unknown>;
 type I18nStoreEntry = {
     version: string;
     ui: TranslationTree;
+    fetchedAt: number;
 };
 
 type PageI18nProps = {
@@ -19,6 +20,7 @@ const listeners = new Set<() => void>();
 const store = new Map<string, I18nStoreEntry>();
 const loading = new Map<string, Promise<void>>();
 const initializedLocales = new Set<string>();
+const CLIENT_I18N_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function storageKey(locale: string): string {
     return `i18n:ui:${locale}`;
@@ -80,6 +82,7 @@ function loadFromStorage(locale: string): void {
         store.set(locale, {
             version: parsed.version,
             ui: parsed.ui as TranslationTree,
+            fetchedAt: typeof parsed.fetchedAt === 'number' ? parsed.fetchedAt : 0,
         });
         notify();
     } catch {
@@ -126,6 +129,7 @@ async function fetchTranslations(locale: string, currentVersion: string | null):
     store.set(locale, {
         version: payload.version,
         ui: payload.ui,
+        fetchedAt: Date.now(),
     });
     if (typeof window !== 'undefined') {
         window.localStorage.setItem(storageKey(locale), JSON.stringify({
@@ -140,8 +144,12 @@ function ensureTranslations(locale: string, serverVersion: string | null): void 
     loadFromStorage(locale);
 
     const cached = store.get(locale);
+    const cacheExpired =
+        !cached
+        || Date.now() - (cached.fetchedAt || 0) >= CLIENT_I18N_CACHE_TTL_MS;
     const needsSync =
         !cached
+        || cacheExpired
         || (serverVersion !== null && serverVersion !== '' && cached.version !== serverVersion);
 
     if (!needsSync) {
@@ -183,4 +191,3 @@ export function useI18n() {
         t: (key: string, fallback?: string) => resolveKey(ui, key) ?? fallback ?? key,
     };
 }
-
