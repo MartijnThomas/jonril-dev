@@ -9,6 +9,7 @@ use App\Models\Event;
 use App\Models\Note;
 use App\Models\Timeblock;
 use App\Models\TimeblockCalendarLink;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Sabre\DAV\Client;
@@ -62,7 +63,8 @@ class CalDavService
     }
 
     /**
-     * Sync events for the given calendar covering -7 days to +30 days.
+     * Sync events for the given calendar using the configured sync period window,
+     * with fallback to -7 days and +30 days.
      * Also marks the overlapping YYYY-MM periods as synced.
      */
     public function sync(Calendar $calendar): void
@@ -70,13 +72,35 @@ class CalDavService
         $credentials = $this->credentialsForCalendar($calendar);
         $client = $this->makeClient($calendar->url, $credentials['username'], $credentials['password']);
 
-        $rangeStart = now()->subDays(7)->startOfDay();
-        $rangeEnd = now()->addDays(30)->endOfDay();
+        $syncPeriodStartDays = max((int) config('calendar.sync_period.start', 7), 0);
+        $syncPeriodEndDays = max((int) config('calendar.sync_period.end', 30), 0);
+
+        $rangeStart = now()->subDays($syncPeriodStartDays)->startOfDay();
+        $rangeEnd = now()->addDays($syncPeriodEndDays)->endOfDay();
 
         $items = $this->fetchRemoteItems($client, $calendar->url, $rangeStart, $rangeEnd);
 
         // Null means the remote request failed — skip to avoid false deletions.
         if ($items === null) {
+            return;
+        }
+
+        if ($this->isOutboundTimeblockTargetCalendar($calendar)) {
+            $this->purgeAllImportedCalendarItems($calendar);
+
+            $cursor = $rangeStart->copy()->startOfMonth();
+            while ($cursor->lte($rangeEnd)) {
+                CalendarSyncedRange::query()->updateOrCreate(
+                    ['calendar_id' => $calendar->id, 'period' => $cursor->format('Y-m')],
+                    ['synced_at' => now()],
+                );
+                $cursor = $cursor->addMonth();
+            }
+
+            $calendar->update([
+                'last_synced_at' => now(),
+            ]);
+
             return;
         }
 
@@ -116,6 +140,21 @@ class CalDavService
         $items = $this->fetchRemoteItems($client, $calendar->url, $rangeStart, $rangeEnd);
 
         if ($items === null) {
+            return;
+        }
+
+        if ($this->isOutboundTimeblockTargetCalendar($calendar)) {
+            $this->purgeAllImportedCalendarItems($calendar);
+
+            CalendarSyncedRange::query()->updateOrCreate(
+                ['calendar_id' => $calendar->id, 'period' => $period],
+                ['synced_at' => now()],
+            );
+
+            $calendar->update([
+                'last_synced_at' => now(),
+            ]);
+
             return;
         }
 
@@ -529,6 +568,12 @@ class CalDavService
      */
     private function upsertCalendarItem(Calendar $calendar, array $item): void
     {
+        if ($this->isJonrilTimeblockRemoteItem($item)) {
+            $this->purgeMirroredTimeblockCalendarItem($calendar, (string) $item['uid']);
+
+            return;
+        }
+
         $vevent = $item['vevent'];
 
         $dtstart = $vevent->DTSTART ?? null;
@@ -583,6 +628,90 @@ class CalDavService
                 'remote_deleted_at' => null,
             ],
         );
+    }
+
+    /**
+     * @param  array{uid: string, href: string, etag: string, ical: string, vevent: mixed}  $item
+     */
+    private function isJonrilTimeblockRemoteItem(array $item): bool
+    {
+        $uid = trim((string) ($item['uid'] ?? ''));
+        if ($uid !== '' && str_starts_with($uid, 'jonril-timeblock-')) {
+            return true;
+        }
+
+        $vevent = $item['vevent'] ?? null;
+        if (! is_object($vevent)) {
+            return false;
+        }
+
+        $source = strtoupper(trim((string) ($vevent->{'X-JONRIL-SOURCE'} ?? '')));
+        if ($source === 'TIMEBLOCK') {
+            return true;
+        }
+
+        $eventId = trim((string) ($vevent->{'X-JONRIL-EVENT-ID'} ?? ''));
+        if ($eventId !== '') {
+            return true;
+        }
+
+        $description = strtolower(trim((string) ($vevent->DESCRIPTION ?? '')));
+
+        return $description !== '' && str_contains($description, 'created by jonril timeblock sync');
+    }
+
+    private function purgeMirroredTimeblockCalendarItem(Calendar $calendar, string $uid): void
+    {
+        if ($uid === '') {
+            return;
+        }
+
+        $existingItem = CalendarItem::query()
+            ->where('calendar_id', $calendar->id)
+            ->where('uid', $uid)
+            ->first();
+
+        if (! $existingItem) {
+            return;
+        }
+
+        Event::query()
+            ->where('eventable_type', CalendarItem::class)
+            ->where('eventable_id', $existingItem->id)
+            ->delete();
+
+        $existingItem->delete();
+    }
+
+    private function isOutboundTimeblockTargetCalendar(Calendar $calendar): bool
+    {
+        return User::query()
+            ->whereHas('workspaces', function ($query) use ($calendar): void {
+                $query->where('workspaces.id', $calendar->workspace_id);
+            })
+            ->where('settings->calendar->outbound_timeblock_calendar_id', $calendar->id)
+            ->exists();
+    }
+
+    private function purgeAllImportedCalendarItems(Calendar $calendar): void
+    {
+        $calendarItemIds = CalendarItem::query()
+            ->where('calendar_id', $calendar->id)
+            ->pluck('id')
+            ->all();
+
+        if ($calendarItemIds === []) {
+            return;
+        }
+
+        Event::query()
+            ->where('eventable_type', CalendarItem::class)
+            ->whereIn('eventable_id', $calendarItemIds)
+            ->delete();
+
+        CalendarItem::query()
+            ->whereIn('id', $calendarItemIds)
+            ->delete();
     }
 
     protected function makeClient(string $url, string $username, string $password): Client

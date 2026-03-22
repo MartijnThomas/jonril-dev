@@ -137,6 +137,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('w/{workspace:slug}/events', [SidebarEventsController::class, 'index'])
         ->name('sidebar-events.index');
+    Route::get('w/{workspace:slug}/events/indicators', [SidebarEventsController::class, 'indicators'])
+        ->name('sidebar-events.indicators');
     Route::get('w/{workspace:slug}/attachable-events', [SidebarEventsController::class, 'attachable'])
         ->name('sidebar-events.attachable');
     Route::post('w/{workspace:slug}/images', [NoteImageController::class, 'store'])

@@ -55,7 +55,7 @@ declare module '@inertiajs/core' {
             todayEvents?: Array<{
                 id: string;
                 block_id: string | null;
-                type: 'timeblock' | 'event';
+                type: 'timeblock' | 'event' | 'birthday';
                 title: string;
                 note_id: string | null;
                 starts_at: string | null;
@@ -69,6 +69,8 @@ declare module '@inertiajs/core' {
                 href: string | null;
                 meeting_note_id: string | null;
                 meeting_note_href: string | null;
+                birthday_age?: number | null;
+                calendar_color?: string | null;
             }>;
             todayEventsDate?: string | null;
             workspaceLinkableNotes?: Array<{

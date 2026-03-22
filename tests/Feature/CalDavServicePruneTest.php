@@ -239,3 +239,49 @@ test('syncPeriod skips pruning when the remote server is unreachable', function 
     expect(Event::find($event->id))->not()->toBeNull();
     expect(CalendarItem::find($item->id))->not()->toBeNull();
 });
+
+test('upsert ignores jonril outbound timeblock calendar items and purges mirrored duplicates', function () {
+    $uid = 'jonril-timeblock-'.Str::uuid()->toString();
+    [$item, $event] = makeCalendarEvent($this->calendar, $uid);
+
+    $method = new ReflectionMethod($this->service, 'upsertCalendarItem');
+    $vevent = new class
+    {
+        public $SUMMARY = 'Mirrored Timeblock';
+    };
+
+    $method->invoke($this->service, $this->calendar, [
+        'uid' => $uid,
+        'href' => "/cal/{$uid}.ics",
+        'etag' => 'etag-1',
+        'ical' => '',
+        'vevent' => $vevent,
+    ]);
+
+    expect(CalendarItem::find($item->id))->toBeNull();
+    expect(Event::find($event->id))->toBeNull();
+});
+
+test('outbound timeblock target calendar can be detected and purged as imported-calendar-item free', function () {
+    [$item, $event] = makeCalendarEvent($this->calendar);
+
+    $this->user->forceFill([
+        'settings' => [
+            ...(is_array($this->user->settings) ? $this->user->settings : []),
+            'calendar' => [
+                'outbound_timeblock_calendar_id' => $this->calendar->id,
+            ],
+        ],
+    ])->save();
+
+    $isOutboundMethod = new ReflectionMethod($this->service, 'isOutboundTimeblockTargetCalendar');
+    $isOutbound = $isOutboundMethod->invoke($this->service, $this->calendar);
+
+    expect($isOutbound)->toBeTrue();
+
+    $purgeMethod = new ReflectionMethod($this->service, 'purgeAllImportedCalendarItems');
+    $purgeMethod->invoke($this->service, $this->calendar);
+
+    expect(CalendarItem::find($item->id))->toBeNull();
+    expect(Event::find($event->id))->toBeNull();
+});

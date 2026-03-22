@@ -10,6 +10,7 @@ import {
     Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { toast } from 'sonner';
 import { AttachMeetingNoteDialog } from '@/components/attach-meeting-note-dialog';
 import {
@@ -38,7 +39,7 @@ import { cn } from '@/lib/utils';
 type SidebarTodayEvent = {
     id: string;
     block_id: string | null;
-    type: 'timeblock' | 'event';
+    type: 'timeblock' | 'event' | 'birthday';
     all_day: boolean;
     title: string;
     note_id: string | null;
@@ -54,6 +55,8 @@ type SidebarTodayEvent = {
     meeting_note_id: string | null;
     meeting_note_href: string | null;
     remote_deleted?: boolean;
+    birthday_age?: number | null;
+    calendar_color?: string | null;
 };
 
 type RightSidebarTodayEventsProps = {
@@ -259,25 +262,38 @@ function resolveTimingState(
 }
 
 function formatAllDayLabel(
+    event: SidebarTodayEvent,
     startsAt: string | null,
     endsAt: string | null,
     anchorDate: Date,
     locale: Locale,
+    language: 'nl' | 'en',
 ): string {
+    if (event.type === 'birthday') {
+        const baseLabel = language === 'nl' ? 'Verjaardag' : 'Birthday';
+        const age = event.birthday_age;
+
+        if (typeof age === 'number' && Number.isFinite(age) && age > 0) {
+            return `${baseLabel} (${age})`;
+        }
+
+        return baseLabel;
+    }
+
     if (!startsAt) {
-        return 'All day';
+        return language === 'nl' ? 'Hele dag' : 'All day';
     }
 
     const start = parseISO(startsAt);
     if (!isValid(start)) {
-        return 'All day';
+        return language === 'nl' ? 'Hele dag' : 'All day';
     }
 
     const end = endsAt ? parseISO(endsAt) : null;
     const isSingleDay = !end || isValid(end) === false || startsAt === endsAt;
 
     if (isSingleDay) {
-        return 'All day';
+        return language === 'nl' ? 'Hele dag' : 'All day';
     }
 
     const startStr = format(start, 'd MMM', { locale });
@@ -287,10 +303,39 @@ function formatAllDayLabel(
     const endDateStr = format(end!, 'yyyy-MM-dd');
 
     if (startDateStr === anchorStr && endDateStr === anchorStr) {
-        return 'All day';
+        return language === 'nl' ? 'Hele dag' : 'All day';
     }
 
     return `${startStr} – ${endStr}`;
+}
+
+function resolveAccentClassAndStyle(
+    calendarColor: string | null | undefined,
+    fallbackClass: string,
+): { className: string; style?: CSSProperties } {
+    const rawColor = (calendarColor ?? '').trim();
+    if (rawColor === '') {
+        return { className: fallbackClass };
+    }
+
+    const normalized = rawColor.toLowerCase();
+    const themeClass = (COLOR_SWATCH_THEME_BG_CLASS as Record<string, string>)[normalized];
+    if (themeClass) {
+        return { className: themeClass };
+    }
+
+    if (
+        /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(rawColor) ||
+        /^rgba?\(/i.test(rawColor) ||
+        /^hsla?\(/i.test(rawColor)
+    ) {
+        return {
+            className: '',
+            style: { backgroundColor: rawColor },
+        };
+    }
+
+    return { className: fallbackClass };
 }
 
 export function RightSidebarTodayEvents({
@@ -454,11 +499,19 @@ export function RightSidebarTodayEvents({
             {allDayEvents.length > 0 ? (
                 <ul className="mb-2 space-y-0.5">
                     {allDayEvents.map((event) => {
+                        const eventAccent = event.type === 'timeblock'
+                            ? { className: timeblockAccent }
+                            : resolveAccentClassAndStyle(
+                                  event.calendar_color,
+                                  workspaceAccent,
+                              );
                         const dateLabel = formatAllDayLabel(
+                            event,
                             event.starts_at,
                             event.ends_at,
                             parsedAnchorDate,
                             locale,
+                            language,
                         );
                         const eventIdentifier = event.block_id ?? event.id;
 
@@ -468,8 +521,9 @@ export function RightSidebarTodayEvents({
                                     <span
                                         className={cn(
                                             'h-1.5 w-1.5 shrink-0 rounded-full',
-                                            workspaceAccent,
+                                            eventAccent.className,
                                         )}
+                                        style={eventAccent.style}
                                         aria-hidden="true"
                                     />
                                     {event.meeting_note_href ? (
@@ -766,9 +820,12 @@ export function RightSidebarTodayEvents({
                         const shouldDim =
                             (isTimeblock && !hasLinkedTask && hasPassed) ||
                             isLinkedTaskCompleted;
-                        const accentColor = isTimeblock
-                            ? timeblockAccent
-                            : workspaceAccent;
+                        const eventAccent = isTimeblock
+                            ? { className: timeblockAccent }
+                            : resolveAccentClassAndStyle(
+                                  event.calendar_color,
+                                  workspaceAccent,
+                              );
                         const checkboxBorderClass = isTimeblock
                             ? timeblockBorder
                             : workspaceBorder;
@@ -1000,8 +1057,9 @@ export function RightSidebarTodayEvents({
                                             <span
                                                 className={cn(
                                                     'mt-[0.2rem] w-1 shrink-0 self-stretch rounded-full',
-                                                    accentColor,
+                                                    eventAccent.className,
                                                 )}
+                                                style={eventAccent.style}
                                                 aria-hidden="true"
                                             />
                                         )}
