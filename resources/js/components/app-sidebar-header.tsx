@@ -346,24 +346,6 @@ export function AppSidebarHeader({
                     <Button
                         type="button"
                         variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground md:h-7 md:w-7"
-                        onClick={toggleAppearance}
-                        aria-label={
-                            resolvedAppearance === 'dark'
-                                ? 'Switch to light mode'
-                                : 'Switch to dark mode'
-                        }
-                    >
-                        {resolvedAppearance === 'dark' ? (
-                            <Sun className="size-4 md:size-3.5" />
-                        ) : (
-                            <Moon className="size-4 md:size-3.5" />
-                        )}
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="ghost"
                         size="sm"
                         className="h-8 gap-1.5 px-2 text-sm text-muted-foreground md:h-7 md:text-xs"
                         onClick={openCommandPalette}
@@ -399,6 +381,24 @@ export function AppSidebarHeader({
                             </Button>
                         </div>
                     )}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground md:h-7 md:w-7"
+                        onClick={toggleAppearance}
+                        aria-label={
+                            resolvedAppearance === 'dark'
+                                ? 'Switch to light mode'
+                                : 'Switch to dark mode'
+                        }
+                    >
+                        {resolvedAppearance === 'dark' ? (
+                            <Sun className="size-4 md:size-3.5" />
+                        ) : (
+                            <Moon className="size-4 md:size-3.5" />
+                        )}
+                    </Button>
                     {pageProps.noteActions ? (
                         <NoteHeaderActions
                             noteId={pageProps.noteActions.id}
