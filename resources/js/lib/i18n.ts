@@ -21,6 +21,7 @@ const store = new Map<string, I18nStoreEntry>();
 const loading = new Map<string, Promise<void>>();
 const initializedLocales = new Set<string>();
 const CLIENT_I18N_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const EMPTY_TRANSLATION_TREE: TranslationTree = {};
 
 function storageKey(locale: string): string {
     return `i18n:ui:${locale}`;
@@ -51,7 +52,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 function getSnapshot(locale: string): TranslationTree {
-    return store.get(locale)?.ui ?? {};
+    return store.get(locale)?.ui ?? EMPTY_TRANSLATION_TREE;
 }
 
 function loadFromStorage(locale: string): void {

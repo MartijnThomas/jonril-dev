@@ -293,11 +293,8 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
-        $membership = $user->workspaces()
-            ->where('workspaces.id', $workspace->id)
-            ->select('workspace_user.role')
-            ->first();
         $noteCounts = $this->workspaceNoteCounts($workspace);
+        $role = $this->workspaceRoleForUser($request, $workspace->id);
 
         return [
             'id' => $workspace->id,
@@ -306,7 +303,7 @@ class HandleInertiaRequests extends Middleware
             'color' => $workspace->color,
             'timeblock_color' => $workspace->timeblock_color,
             'icon' => $workspace->icon,
-            'role' => (string) ($membership?->pivot->role ?? 'member'),
+            'role' => $role,
             'is_migrated_source' => $workspace->isMigratedSource(),
             'note_counts' => $noteCounts,
         ];
@@ -349,24 +346,24 @@ class HandleInertiaRequests extends Middleware
         }
 
         if ($request->routeIs('journal.*')) {
-            return $user->currentWorkspace();
+            return $this->currentWorkspace($request);
         }
 
         $routeWorkspace = $request->route('workspace');
         if ($routeWorkspace instanceof Workspace) {
-            $isMember = $user->workspaces()
-                ->where('workspaces.id', $routeWorkspace->id)
-                ->exists();
+            $isMember = $this->userWorkspaces($request)
+                ->contains(fn (Workspace $workspace): bool => $workspace->id === $routeWorkspace->id);
 
             return $isMember ? $routeWorkspace : null;
         }
         if (is_string($routeWorkspace) && trim($routeWorkspace) !== '') {
-            return $user->workspaces()
-                ->where('workspaces.slug', trim($routeWorkspace))
-                ->first();
+            $slug = trim($routeWorkspace);
+
+            return $this->userWorkspaces($request)
+                ->first(fn (Workspace $workspace): bool => $workspace->slug === $slug);
         }
 
-        return $user->currentWorkspace();
+        return $this->currentWorkspace($request);
     }
 
     /**
@@ -388,15 +385,12 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
-        $workspace = $this->personalWorkspaceResolver->resolveFor($user);
+        $workspace = $this->requestCached($request, 'shared.personal_workspace', function () use ($user): ?Workspace {
+            return $this->personalWorkspaceResolver->resolveFor($user);
+        });
         if (! $workspace) {
             return null;
         }
-
-        $membership = $user->workspaces()
-            ->where('workspaces.id', $workspace->id)
-            ->select('workspace_user.role')
-            ->first();
 
         return [
             'id' => $workspace->id,
@@ -405,7 +399,7 @@ class HandleInertiaRequests extends Middleware
             'color' => $workspace->color,
             'timeblock_color' => $workspace->timeblock_color,
             'icon' => $workspace->icon,
-            'role' => (string) ($membership?->pivot->role ?? 'member'),
+            'role' => $this->workspaceRoleForUser($request, $workspace->id),
             'is_migrated_source' => $workspace->isMigratedSource(),
         ];
     }
@@ -420,11 +414,7 @@ class HandleInertiaRequests extends Middleware
             return [];
         }
 
-        return $user->workspaces()
-            ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.timeblock_color', 'workspaces.icon', 'workspaces.is_personal', 'workspaces.migrated_at', 'workspace_user.role')
-            ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
-            ->orderBy('workspaces.name')
-            ->get()
+        return $this->userWorkspaces($request)
             ->map(fn ($workspace) => [
                 'id' => $workspace->id,
                 'name' => $workspace->name,
@@ -438,5 +428,62 @@ class HandleInertiaRequests extends Middleware
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * @return Collection<int, Workspace>
+     */
+    private function userWorkspaces(Request $request): Collection
+    {
+        return $this->requestCached($request, 'shared.user_workspaces', function () use ($request): Collection {
+            $user = $request->user();
+            if (! $user) {
+                return new Collection;
+            }
+
+            return $user->workspaces()
+                ->select('workspaces.id', 'workspaces.name', 'workspaces.slug', 'workspaces.color', 'workspaces.timeblock_color', 'workspaces.icon', 'workspaces.is_personal', 'workspaces.migrated_at', 'workspace_user.role')
+                ->orderByRaw("case when workspace_user.role = 'owner' then 0 else 1 end")
+                ->orderBy('workspaces.name')
+                ->get();
+        });
+    }
+
+    private function currentWorkspace(Request $request): ?Workspace
+    {
+        return $this->requestCached($request, 'shared.current_workspace', function () use ($request): ?Workspace {
+            $user = $request->user();
+            if (! $user) {
+                return null;
+            }
+
+            return $user->currentWorkspace();
+        });
+    }
+
+    private function workspaceRoleForUser(Request $request, string $workspaceId): string
+    {
+        $workspace = $this->userWorkspaces($request)
+            ->first(fn (Workspace $candidate): bool => $candidate->id === $workspaceId);
+
+        return (string) ($workspace?->pivot?->role ?? 'member');
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $resolver
+     * @return T
+     */
+    private function requestCached(Request $request, string $key, callable $resolver): mixed
+    {
+        if ($request->attributes->has($key)) {
+            return $request->attributes->get($key);
+        }
+
+        $value = $resolver();
+        $request->attributes->set($key, $value);
+
+        return $value;
     }
 }
