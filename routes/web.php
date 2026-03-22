@@ -3,6 +3,7 @@
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CommandSearchController;
 use App\Http\Controllers\DocumentationController;
+use App\Http\Controllers\I18nController;
 use App\Http\Controllers\NoteImageController;
 use App\Http\Controllers\NotesController;
 use App\Http\Controllers\SidebarEventsController;
@@ -85,6 +86,9 @@ if (app()->environment('local')) {
 Route::get('/ping', fn () => response()->noContent())->middleware('auth')->name('ping');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('i18n/ui', [I18nController::class, 'ui'])
+        ->name('i18n.ui');
+
     Route::get('journal', function (Request $request) {
         $user = $request->user();
         $workspace = $user

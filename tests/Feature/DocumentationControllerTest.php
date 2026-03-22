@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Support\Facades\Cache;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('documentation landing page renders from markdown', function () {
@@ -77,23 +76,10 @@ test('non-admin users do not see development docs and cannot open them directly'
         ->assertNotFound();
 });
 
-test('shared ui translations are loaded through cache in non-local environments', function () {
+test('shared inertia props include i18n metadata without full translations payload', function () {
     $user = User::factory()->create([
         'settings' => ['language' => 'en'],
     ]);
-
-    // Other middleware methods also call Cache::remember (e.g. note dropdowns), so we
-    // intercept all calls and return fake data only for the translation key.
-    Cache::shouldReceive('remember')
-        ->withAnyArgs()
-        ->zeroOrMoreTimes()
-        ->andReturnUsing(function (string $key, mixed $ttl, \Closure $callback): mixed {
-            if (str_starts_with($key, 'i18n:ui:en:')) {
-                return ['cache_test_key' => 'cached-value'];
-            }
-
-            return $callback();
-        });
 
     $this
         ->actingAs($user)
@@ -101,37 +87,7 @@ test('shared ui translations are loaded through cache in non-local environments'
         ->assertInertia(fn (Assert $page) => $page
             ->component('docs/show')
             ->where('locale', 'en')
-            ->where('translations.ui.cache_test_key', 'cached-value'),
+            ->where('i18n.uiVersion', fn (mixed $version): bool => is_string($version) && $version !== '')
+            ->missing('translations'),
         );
-});
-
-test('shared ui translations bypass cache in local environment', function () {
-    $user = User::factory()->create([
-        'settings' => ['language' => 'en'],
-    ]);
-
-    $this->app->detectEnvironment(fn () => 'local');
-
-    $translationCacheUsed = false;
-    Cache::shouldReceive('remember')
-        ->withAnyArgs()
-        ->zeroOrMoreTimes()
-        ->andReturnUsing(function (string $key, mixed $ttl, \Closure $callback) use (&$translationCacheUsed): mixed {
-            if (str_starts_with($key, 'i18n:ui:')) {
-                $translationCacheUsed = true;
-            }
-
-            return $callback();
-        });
-
-    $this
-        ->actingAs($user)
-        ->get('/docs')
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('docs/show')
-            ->where('locale', 'en')
-            ->where('translations.ui.tasks_index.page_title', 'Tasks'),
-        );
-
-    expect($translationCacheUsed)->toBeFalse();
 });

@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Lang;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -66,34 +65,13 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => $this->sidebarDefaultOpenState($request, 'left'),
             'rightSidebarOpen' => $this->sidebarDefaultOpenState($request, 'right'),
             'locale' => $locale,
-            'translations' => fn () => [
-                'ui' => $this->cachedUiTranslations($request, $locale),
+            'i18n' => [
+                'uiVersion' => $this->translationVersion($request, $locale),
             ],
         ];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function cachedUiTranslations(Request $request, string $locale): array
-    {
-        // Keep locale translation edits hot-reload friendly while developing.
-        if (app()->isLocal()) {
-            return Lang::get('ui', [], $locale);
-        }
-
-        $cacheKey = sprintf(
-            'i18n:ui:%s:%s',
-            $locale,
-            $this->translationCacheSignature($request, $locale),
-        );
-
-        return Cache::remember($cacheKey, now()->addHours(12), function () use ($locale): array {
-            return Lang::get('ui', [], $locale);
-        });
-    }
-
-    private function translationCacheSignature(Request $request, string $locale): string
+    private function translationVersion(Request $request, string $locale): string
     {
         $assetVersion = (string) ($this->version($request) ?? '');
         if ($assetVersion !== '') {
