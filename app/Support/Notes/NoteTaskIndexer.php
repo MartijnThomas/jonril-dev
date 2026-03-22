@@ -647,7 +647,7 @@ class NoteTaskIndexer
             $text = substr($text, $consumedLength) ?: '';
         }
 
-        if (! preg_match('/(>>(?:\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2})|>(?:\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2}))/', $text)) {
+        if (! preg_match('/(>>(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2})|>(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}))/', $text)) {
             if ($text !== '') {
                 $leadingFragments[] = [
                     'type' => 'text',
@@ -659,7 +659,7 @@ class NoteTaskIndexer
         }
 
         $parts = preg_split(
-            '/(>>(?:\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2})|>(?:\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2}))/',
+            '/(>>(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2})|>(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}))/',
             $text,
             -1,
             PREG_SPLIT_DELIM_CAPTURE,
@@ -680,7 +680,8 @@ class NoteTaskIndexer
 
             if (preg_match('/^>>(.+)$/', $part, $matches)) {
                 $tokenValue = trim((string) ($matches[1] ?? ''));
-                if (! $this->isSupportedTaskDateToken($tokenValue)) {
+                $normalizedToken = $this->normalizeSupportedTaskDateToken($tokenValue);
+                if ($normalizedToken === null) {
                     $fragments[] = [
                         'type' => 'text',
                         'text' => $part,
@@ -691,7 +692,7 @@ class NoteTaskIndexer
 
                 $fragments[] = [
                     'type' => 'deadline_date_token',
-                    'date' => $tokenValue,
+                    'date' => $normalizedToken,
                 ];
 
                 continue;
@@ -699,7 +700,8 @@ class NoteTaskIndexer
 
             if (preg_match('/^>(.+)$/', $part, $matches)) {
                 $tokenValue = trim((string) ($matches[1] ?? ''));
-                if (! $this->isSupportedTaskDateToken($tokenValue)) {
+                $normalizedToken = $this->normalizeSupportedTaskDateToken($tokenValue);
+                if ($normalizedToken === null) {
                     $fragments[] = [
                         'type' => 'text',
                         'text' => $part,
@@ -710,7 +712,7 @@ class NoteTaskIndexer
 
                 $fragments[] = [
                     'type' => 'due_date_token',
-                    'date' => $tokenValue,
+                    'date' => $normalizedToken,
                 ];
 
                 continue;
@@ -742,22 +744,23 @@ class NoteTaskIndexer
             'deadline_date_token' => null,
         ];
 
-        if (preg_match_all('/(^|\s)(>>|>)(\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2})(?=\s|$)/', $text, $matches, PREG_SET_ORDER)) {
+        if (preg_match_all('/(^|\s)(>>|>)(\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2})(?=\s|$)/', $text, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $prefix = $match[2] ?? null;
                 $dateValue = trim((string) ($match[3] ?? ''));
+                $normalizedToken = $this->normalizeSupportedTaskDateToken($dateValue);
 
-                if (! $this->isSupportedTaskDateToken($dateValue)) {
+                if ($normalizedToken === null) {
                     continue;
                 }
 
-                $isIsoDate = $this->isIsoDateToken($dateValue);
+                $isIsoDate = $this->isIsoDateToken($normalizedToken);
                 if ($prefix === '>>') {
-                    $result['deadline_date'] = $isIsoDate ? $dateValue : null;
-                    $result['deadline_date_token'] = $isIsoDate ? null : $dateValue;
+                    $result['deadline_date'] = $isIsoDate ? $normalizedToken : null;
+                    $result['deadline_date_token'] = $isIsoDate ? null : $normalizedToken;
                 } else {
-                    $result['due_date'] = $isIsoDate ? $dateValue : null;
-                    $result['due_date_token'] = $isIsoDate ? null : $dateValue;
+                    $result['due_date'] = $isIsoDate ? $normalizedToken : null;
+                    $result['due_date_token'] = $isIsoDate ? null : $normalizedToken;
                 }
             }
         }
@@ -772,6 +775,38 @@ class NoteTaskIndexer
             || $this->isIsoMonthToken($value);
     }
 
+    private function normalizeSupportedTaskDateToken(string $value): ?string
+    {
+        $normalized = trim($value);
+        if ($normalized === '') {
+            return null;
+        }
+
+        if ($this->isIsoDateToken($normalized)) {
+            return $normalized;
+        }
+
+        if (preg_match('/^(?<year>\d{4})-[Ww](?<week>\d{1,2})$/', $normalized, $matches)) {
+            $week = (int) ($matches['week'] ?? 0);
+            if ($week < 1 || $week > 53) {
+                return null;
+            }
+
+            return sprintf('%04d-W%02d', (int) $matches['year'], $week);
+        }
+
+        if (preg_match('/^(?<year>\d{4})-(?<month>\d{1,2})$/', $normalized, $matches)) {
+            $month = (int) ($matches['month'] ?? 0);
+            if ($month < 1 || $month > 12) {
+                return null;
+            }
+
+            return sprintf('%04d-%02d', (int) $matches['year'], $month);
+        }
+
+        return null;
+    }
+
     private function isIsoDateToken(string $value): bool
     {
         return (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $value);
@@ -779,7 +814,7 @@ class NoteTaskIndexer
 
     private function isIsoWeekToken(string $value): bool
     {
-        if (! preg_match('/^(?<year>\d{4})-W(?<week>\d{2})$/', $value, $matches)) {
+        if (! preg_match('/^(?<year>\d{4})-[Ww](?<week>\d{1,2})$/', $value, $matches)) {
             return false;
         }
 
@@ -790,7 +825,7 @@ class NoteTaskIndexer
 
     private function isIsoMonthToken(string $value): bool
     {
-        if (! preg_match('/^(?<year>\d{4})-(?<month>\d{2})$/', $value, $matches)) {
+        if (! preg_match('/^(?<year>\d{4})-(?<month>\d{1,2})$/', $value, $matches)) {
             return false;
         }
 

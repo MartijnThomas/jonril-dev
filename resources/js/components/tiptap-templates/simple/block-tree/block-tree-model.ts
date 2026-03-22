@@ -185,7 +185,7 @@ export type BlockTaskDateToken = {
 export type BlockTaskPriority = 'normal' | 'medium' | 'high' | null;
 
 const BLOCK_TASK_DATE_TOKEN_REGEX =
-    /(>>?)(\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2})/g;
+    /(>>?)(\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2})/g;
 const BLOCK_TASK_PRIORITY_REGEX = /^(?:[?/*<\-—]\s)?(!{1,3})(?=\s|$)/u;
 
 export function headingTextPrefix(level: number): string {
@@ -231,7 +231,7 @@ export function isValidIsoDate(value: string): boolean {
 }
 
 function isValidIsoWeek(value: string): boolean {
-    const match = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(value);
+    const match = /^(?<year>\d{4})-[Ww](?<week>\d{1,2})$/.exec(value);
     if (!match?.groups) {
         return false;
     }
@@ -242,7 +242,7 @@ function isValidIsoWeek(value: string): boolean {
 }
 
 function isValidIsoMonth(value: string): boolean {
-    const match = /^(?<year>\d{4})-(?<month>\d{2})$/.exec(value);
+    const match = /^(?<year>\d{4})-(?<month>\d{1,2})$/.exec(value);
     if (!match?.groups) {
         return false;
     }
@@ -315,7 +315,7 @@ export function formatLocalizedDate(
         }).format(date);
     }
 
-    const weekMatch = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(dateToken);
+    const weekMatch = /^(?<year>\d{4})-[Ww](?<week>\d{1,2})$/.exec(dateToken);
     if (weekMatch?.groups) {
         const week = Number(weekMatch.groups.week);
         const year = Number(weekMatch.groups.year);
@@ -325,7 +325,15 @@ export function formatLocalizedDate(
     }
 
     if (isValidIsoMonth(dateToken)) {
-        const date = new Date(`${dateToken}-01T00:00:00`);
+        const monthMatch = /^(?<year>\d{4})-(?<month>\d{1,2})$/.exec(dateToken);
+        if (!monthMatch?.groups) {
+            return dateToken;
+        }
+        const month = Number(monthMatch.groups.month);
+        const year = Number(monthMatch.groups.year);
+        const date = new Date(
+            `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01T00:00:00`,
+        );
 
         return new Intl.DateTimeFormat(localeTag, {
             month: 'long',

@@ -2651,7 +2651,7 @@ test('weekly and monthly journal related panels include period token scheduled t
                     ],
                     'content' => [[
                         'type' => 'paragraph',
-                        'content' => [['type' => 'text', 'text' => 'Weekly task >2026-W22']],
+                        'content' => [['type' => 'text', 'text' => 'Weekly task >2026-w22']],
                     ]],
                 ]],
             ]],
@@ -2673,7 +2673,7 @@ test('weekly and monthly journal related panels include period token scheduled t
                     ],
                     'content' => [[
                         'type' => 'paragraph',
-                        'content' => [['type' => 'text', 'text' => 'Monthly task >>2026-06']],
+                        'content' => [['type' => 'text', 'text' => 'Monthly task >>2026-6']],
                     ]],
                 ]],
             ]],

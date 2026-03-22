@@ -349,7 +349,7 @@ test('reindex tasks command stores week and month task date tokens', function ()
                         'attrs' => ['checked' => false],
                         'content' => [[
                             'type' => 'paragraph',
-                            'content' => [['type' => 'text', 'text' => 'Weekly due >2026-W22']],
+                            'content' => [['type' => 'text', 'text' => 'Weekly due >2026-w2']],
                         ]],
                     ],
                     [
@@ -357,7 +357,7 @@ test('reindex tasks command stores week and month task date tokens', function ()
                         'attrs' => ['checked' => false],
                         'content' => [[
                             'type' => 'paragraph',
-                            'content' => [['type' => 'text', 'text' => 'Monthly deadline >>2026-06']],
+                            'content' => [['type' => 'text', 'text' => 'Monthly deadline >>2026-6']],
                         ]],
                     ],
                 ],
@@ -376,7 +376,7 @@ test('reindex tasks command stores week and month task date tokens', function ()
 
     expect(
         NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('due_date_token'),
-    )->toBe('2026-W22');
+    )->toBe('2026-W02');
     expect(
         NoteTask::query()->where('note_id', $noteId)->where('position', 1)->value('due_date'),
     )->toBeNull();

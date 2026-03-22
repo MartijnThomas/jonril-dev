@@ -63,7 +63,7 @@ export function TaskInlineContent({
             }
         }
 
-        const isoWeekMatch = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(value);
+        const isoWeekMatch = /^(?<year>\d{4})-[Ww](?<week>\d{1,2})$/.exec(value);
         if (isoWeekMatch?.groups) {
             const week = Number(isoWeekMatch.groups.week);
             const year = Number(isoWeekMatch.groups.year);
@@ -72,11 +72,13 @@ export function TaskInlineContent({
             }
         }
 
-        const isoMonthMatch = /^(?<year>\d{4})-(?<month>\d{2})$/.exec(value);
+        const isoMonthMatch = /^(?<year>\d{4})-(?<month>\d{1,2})$/.exec(value);
         if (isoMonthMatch?.groups) {
             const month = Number(isoMonthMatch.groups.month);
             if (month >= 1 && month <= 12) {
-                const monthDate = parseISO(`${value}-01`);
+                const monthDate = parseISO(
+                    `${isoMonthMatch.groups.year}-${String(month).padStart(2, '0')}-01`,
+                );
                 return format(monthDate, 'MMMM yyyy', { locale: dateLocale });
             }
         }

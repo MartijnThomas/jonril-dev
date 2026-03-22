@@ -38,7 +38,7 @@ type TaskToken = {
 };
 
 const TASK_TOKEN_REGEX =
-    /(>>?)(\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2}|[a-zA-Z]+)/g;
+    /(>>?)(\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}|[a-zA-Z]+)/g;
 const HELPER_KEYWORDS = [
     'today',
     'tomorrow',
@@ -180,7 +180,7 @@ function formatLocalizedDate(isoDate: string, localeTag: string): string {
 }
 
 function isIsoWeekToken(value: string): boolean {
-    const match = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(value);
+    const match = /^(?<year>\d{4})-[Ww](?<week>\d{1,2})$/.exec(value);
     if (!match) {
         return false;
     }
@@ -191,7 +191,7 @@ function isIsoWeekToken(value: string): boolean {
 }
 
 function isIsoMonthToken(value: string): boolean {
-    const match = /^(?<year>\d{4})-(?<month>\d{2})$/.exec(value);
+    const match = /^(?<year>\d{4})-(?<month>\d{1,2})$/.exec(value);
     if (!match) {
         return false;
     }
@@ -202,7 +202,7 @@ function isIsoMonthToken(value: string): boolean {
 }
 
 function formatLocalizedWeek(value: string, localeTag: string): string {
-    const match = /^(?<year>\d{4})-W(?<week>\d{2})$/.exec(value);
+    const match = /^(?<year>\d{4})-[Ww](?<week>\d{1,2})$/.exec(value);
     if (!match) {
         return value;
     }
@@ -219,7 +219,15 @@ function formatLocalizedMonth(value: string, localeTag: string): string {
         return value;
     }
 
-    const date = new Date(`${value}-01T00:00:00`);
+    const match = /^(?<year>\d{4})-(?<month>\d{1,2})$/.exec(value);
+    if (!match?.groups) {
+        return value;
+    }
+    const month = Number(match.groups.month);
+    const year = Number(match.groups.year);
+    const date = new Date(
+        `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01T00:00:00`,
+    );
 
     return new Intl.DateTimeFormat(localeTag, {
         month: 'long',
