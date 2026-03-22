@@ -15,6 +15,11 @@ class NoteSlugService
         'journal',
     ];
 
+    /**
+     * @var array<string, string>
+     */
+    private array $workspaceSlugCache = [];
+
     public function findByReference(Workspace $workspace, string $reference): ?Note
     {
         $trimmed = trim($reference, '/');
@@ -169,9 +174,17 @@ class NoteSlugService
 
     private function workspaceSlugFor(Note $note): string
     {
-        $slug = $note->workspace?->slug;
-        if (is_string($slug) && trim($slug) !== '') {
-            return trim($slug);
+        if ($note->relationLoaded('workspace')) {
+            $loadedWorkspace = $note->getRelation('workspace');
+            $loadedSlug = $loadedWorkspace?->slug;
+            if (is_string($loadedSlug) && trim($loadedSlug) !== '') {
+                return trim($loadedSlug);
+            }
+        }
+
+        $workspaceId = (string) $note->workspace_id;
+        if (isset($this->workspaceSlugCache[$workspaceId])) {
+            return $this->workspaceSlugCache[$workspaceId];
         }
 
         $workspace = Workspace::query()
@@ -179,6 +192,10 @@ class NoteSlugService
             ->select(['id', 'slug'])
             ->first();
 
-        return (string) ($workspace?->slug ?? 'workspace');
+        $slug = trim((string) ($workspace?->slug ?? ''));
+        $resolved = $slug !== '' ? $slug : 'workspace';
+        $this->workspaceSlugCache[$workspaceId] = $resolved;
+
+        return $resolved;
     }
 }

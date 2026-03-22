@@ -832,7 +832,7 @@ class NotesController extends Controller
             ]];
         }
 
-        $breadcrumbs = $this->buildBreadcrumbs($note, $noteTrail, $noteById, $this->currentWorkspace());
+        $breadcrumbs = $this->buildBreadcrumbs($note, $noteTrail, $noteById, $workspace);
         [$noteActionIcon, $noteActionIconColor] = $this->resolveNoteActionIconPayload($note);
         $canOpenBlockPreview = $workspaceEditorMode === Workspace::EDITOR_MODE_LEGACY
             && ! $useBlockPreview
@@ -1109,8 +1109,8 @@ class NotesController extends Controller
                 return $this->noteRelatedPanelBuilder->backlinks($note);
             }, 'related-panel'),
             'workspaceSuggestions' => [
-                'mentions' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->mention_suggestions),
-                'hashtags' => $this->normalizeWorkspaceSuggestions($this->currentWorkspace()->hashtag_suggestions),
+                'mentions' => $this->normalizeWorkspaceSuggestions($workspace->mention_suggestions),
+                'hashtags' => $this->normalizeWorkspaceSuggestions($workspace->hashtag_suggestions),
             ],
         ]);
     }
