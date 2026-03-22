@@ -134,8 +134,11 @@ function MeetingEventMeta({
                 <span className="w-16 shrink-0 whitespace-nowrap pt-1 text-[0.7rem] font-medium uppercase tracking-wide opacity-60">
                     {language === 'nl' ? 'Wie' : 'Who'}
                 </span>
-                <div className="min-w-[15rem]">
-                    <div className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                    <div
+                        data-testid="meeting-participants-row"
+                        className="flex flex-wrap items-start gap-1"
+                    >
                         <TokenPropertyInput
                             mode="participants"
                             inputRef={(element) => {
@@ -152,7 +155,7 @@ function MeetingEventMeta({
                                     ? '+ deelnemers toevoegen'
                                     : '+ add participants'
                             }
-                            className="!w-auto h-8 max-w-full rounded-sm bg-muted/30 px-1 text-[0.82rem]"
+                            className="!h-auto min-h-8 !w-auto max-w-full rounded-sm bg-muted/30 px-1 py-1 text-[0.82rem]"
                         />
                         <button
                             type="button"
