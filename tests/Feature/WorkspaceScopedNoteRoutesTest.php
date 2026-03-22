@@ -252,3 +252,37 @@ test('workspace scoped update preserves leading and trailing spaces in tiptap te
     expect(data_get($note->content, 'content.0.content.2.text'))->toBe(' and ');
     expect(data_get($note->content, 'content.0.content.4.text'))->toBe(' after');
 });
+
+test('workspace scoped note page handles related panel partial requests without full page payload', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    expect($workspace)->not()->toBeNull();
+
+    $note = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Partial request note',
+        'slug' => 'partial-request-note',
+    ]);
+    $inertiaVersion = app(\App\Http\Middleware\HandleInertiaRequests::class)
+        ->version(Request::create('/'));
+
+    $response = $this
+        ->actingAs($user)
+        ->withHeaders([
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => is_string($inertiaVersion) ? $inertiaVersion : '',
+            'X-Requested-With' => 'XMLHttpRequest',
+            'X-Inertia-Partial-Component' => 'notes/show',
+            'X-Inertia-Partial-Data' => 'relatedTasks,backlinks',
+            'Accept' => 'text/html, application/xhtml+xml',
+        ])
+        ->get("/w/{$workspace->slug}/notes/{$note->id}");
+
+    $response->assertOk();
+    $response->assertJsonPath('component', 'notes/show');
+    $response->assertJsonStructure([
+        'props' => ['relatedTasks', 'backlinks'],
+    ]);
+    $response->assertJsonMissingPath('props.noteId');
+});

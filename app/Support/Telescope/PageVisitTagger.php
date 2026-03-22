@@ -43,6 +43,10 @@ class PageVisitTagger
             return false;
         }
 
+        if (self::isInertiaPartialRequest($entry)) {
+            return false;
+        }
+
         $method = strtoupper((string) data_get($entry->content, 'method', ''));
         if ($method !== 'GET') {
             return false;
@@ -66,6 +70,18 @@ class PageVisitTagger
             '#^/settings/(profile|password|appearance|editor-preferences|task-filters|two-factor|admin/operations|admin/maintenance|workspaces/[^/]+)$#',
             $path,
         ) === 1;
+    }
+
+    private static function isInertiaPartialRequest(IncomingEntry $entry): bool
+    {
+        $xInertia = trim((string) data_get($entry->content, 'headers.x-inertia.0', ''));
+        if ($xInertia === '') {
+            return false;
+        }
+
+        $partialData = trim((string) data_get($entry->content, 'headers.x-inertia-partial-data.0', ''));
+
+        return $partialData !== '';
     }
 
     private static function pathFromUri(string $uri): string

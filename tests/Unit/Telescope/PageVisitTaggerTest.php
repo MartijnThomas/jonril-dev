@@ -4,11 +4,12 @@ use App\Support\Telescope\PageVisitTagger;
 use Laravel\Telescope\EntryType;
 use Laravel\Telescope\IncomingEntry;
 
-function makeRequestEntry(string $method, string $uri): IncomingEntry
+function makeRequestEntry(string $method, string $uri, array $headers = []): IncomingEntry
 {
     return IncomingEntry::make([
         'method' => $method,
         'uri' => $uri,
+        'headers' => $headers,
         'response_status' => 200,
     ])->type(EntryType::REQUEST);
 }
@@ -35,4 +36,16 @@ test('it does not tag async backend requests', function (): void {
     expect(PageVisitTagger::tagsFor($settingsData))->toBe([]);
     expect(PageVisitTagger::tagsFor($maintenanceTrigger))->toBe([]);
     expect(PageVisitTagger::shouldRecordInProduction($indicators))->toBeFalse();
+});
+
+test('it does not tag inertia partial requests as page visits', function (): void {
+    $partialJournal = makeRequestEntry('GET', '/journal/2026-03-16', [
+        'x-inertia' => ['true'],
+        'x-inertia-partial-component' => ['notes/show'],
+        'x-inertia-partial-data' => ['relatedTasks,backlinks'],
+        'x-requested-with' => ['XMLHttpRequest'],
+    ]);
+
+    expect(PageVisitTagger::tagsFor($partialJournal))->toBe([]);
+    expect(PageVisitTagger::shouldRecordInProduction($partialJournal))->toBeFalse();
 });

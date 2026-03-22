@@ -742,6 +742,21 @@ class NotesController extends Controller
         $workspaceReadOnly = $workspace->isMigratedSource();
         $usesBlockEditor = $useBlockPreview || $workspaceEditorMode === Workspace::EDITOR_MODE_BLOCK;
 
+        if ($request && $this->isRelatedPanelPartialRequest($request)) {
+            $requestedPartialProps = $this->requestedInertiaPartialProps($request);
+
+            $props = [];
+            if (in_array('relatedTasks', $requestedPartialProps, true)) {
+                $props['relatedTasks'] = $this->noteRelatedPanelBuilder->tasks($note);
+            }
+
+            if (in_array('backlinks', $requestedPartialProps, true)) {
+                $props['backlinks'] = $this->noteRelatedPanelBuilder->backlinks($note);
+            }
+
+            return Inertia::render('notes/show', $props);
+        }
+
         if ($note->type === Note::TYPE_NOTE && ! $useBlockPreview) {
             $this->noteSlugService->syncSingleNote($note);
         }
@@ -1113,6 +1128,51 @@ class NotesController extends Controller
                 'hashtags' => $this->normalizeWorkspaceSuggestions($workspace->hashtag_suggestions),
             ],
         ]);
+    }
+
+    private function isRelatedPanelPartialRequest(Request $request): bool
+    {
+        $isInertia = trim((string) $request->header('X-Inertia', '')) !== '';
+        if (! $isInertia) {
+            return false;
+        }
+
+        $component = trim((string) $request->header('X-Inertia-Partial-Component', ''));
+        if ($component !== 'notes/show') {
+            return false;
+        }
+
+        $requested = $this->requestedInertiaPartialProps($request);
+        if ($requested === []) {
+            return false;
+        }
+
+        $allowed = ['relatedTasks', 'backlinks'];
+        foreach ($requested as $prop) {
+            if (! in_array($prop, $allowed, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function requestedInertiaPartialProps(Request $request): array
+    {
+        $raw = trim((string) $request->header('X-Inertia-Partial-Data', ''));
+        if ($raw === '') {
+            return [];
+        }
+
+        return collect(explode(',', $raw))
+            ->map(fn (string $value): string => trim($value))
+            ->filter(fn (string $value): bool => $value !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
