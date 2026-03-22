@@ -2,6 +2,8 @@
 
 namespace App\Support\DailySignals\Calculators;
 
+use App\Models\Calendar;
+use App\Models\CalendarItem;
 use App\Models\Event;
 use App\Models\Note;
 use App\Models\Workspace;
@@ -18,6 +20,27 @@ class MeetingLoadSignalCalculator implements DailySignalCalculator
 
     public function calculate(Workspace $workspace, CarbonInterface $date): DailySignalResult
     {
+        $activeCalendarIds = Calendar::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('is_active', true)
+            ->pluck('id');
+
+        $dayStart = $date->copy()->startOfDay()->timezone('UTC');
+        $dayEnd = $date->copy()->endOfDay()->timezone('UTC');
+
+        $eventCount = Event::query()
+            ->where('workspace_id', $workspace->id)
+            ->whereNull('remote_deleted_at')
+            ->where('starts_at', '<=', $dayEnd)
+            ->where('ends_at', '>=', $dayStart)
+            ->where(function ($query) use ($activeCalendarIds): void {
+                $query->whereNot('eventable_type', CalendarItem::class)
+                    ->orWhereHasMorph('eventable', CalendarItem::class, function ($q2) use ($activeCalendarIds): void {
+                        $q2->whereIn('calendar_id', $activeCalendarIds);
+                    });
+            })
+            ->count();
+
         $events = Event::query()
             ->where('workspace_id', $workspace->id)
             ->whereNull('remote_deleted_at')
@@ -33,7 +56,11 @@ class MeetingLoadSignalCalculator implements DailySignalCalculator
             return new DailySignalResult(
                 key: $this->key(),
                 state: 'free_day',
-                value: ['meeting_count' => 0, 'has_conflict' => false],
+                value: [
+                    'meeting_count' => 0,
+                    'event_count' => $eventCount,
+                    'has_conflict' => false,
+                ],
             );
         }
 
@@ -51,7 +78,11 @@ class MeetingLoadSignalCalculator implements DailySignalCalculator
         return new DailySignalResult(
             key: $this->key(),
             state: $hasConflict ? 'conflict_detected' : 'has_meetings',
-            value: ['meeting_count' => $meetingCount, 'has_conflict' => $hasConflict],
+            value: [
+                'meeting_count' => $meetingCount,
+                'event_count' => $eventCount,
+                'has_conflict' => $hasConflict,
+            ],
         );
     }
 }

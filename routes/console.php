@@ -95,3 +95,10 @@ $track(
     'Timeblock outbound sync dispatch',
     'timeblocks:sync-outbound --limit=100',
 );
+
+$track(
+    Schedule::command('daily-signals:reconcile')->daily()->at('03:30')->timezone('Europe/Amsterdam'),
+    'daily_signals_reconcile',
+    'Daily signals reconcile',
+    'daily-signals:reconcile',
+);

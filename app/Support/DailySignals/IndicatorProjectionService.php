@@ -27,12 +27,13 @@ class IndicatorProjectionService
 
         $birthdayCount = $this->signalIntValue($signals, 'birthday_or_special', 'birthday_count');
         $meetingCount = $this->signalIntValue($signals, 'meeting_load', 'meeting_count');
+        $eventCount = $this->signalIntValue($signals, 'meeting_load', 'event_count');
         $timeblockCount = $this->signalIntValue($signals, 'timeblock_health', 'timeblock_count');
         $taskOpenCount = $this->signalIntValue($signals, 'task_risk', 'open_count');
         $taskCompletedCount = $this->signalIntValue($signals, 'completion_trend', 'completed_count');
 
         $hasNote = in_array($captureState, ['has_content', 'high_activity', 'note_empty'], true);
-        $hasEvents = $meetingCount > 0 || $timeblockCount > 0 || $birthdayCount > 0;
+        $hasEvents = $eventCount > 0 || $meetingCount > 0 || $timeblockCount > 0 || $birthdayCount > 0;
 
         $structureState = $hasNote ? 'note_exists' : null;
         $calendarState = match (true) {
@@ -55,6 +56,8 @@ class IndicatorProjectionService
             'work_state' => $workState,
             'has_note' => $hasNote,
             'has_events' => $hasEvents,
+            'events_count' => max(0, $eventCount),
+            'birthday_count' => max(0, $birthdayCount),
             'tasks_open_count' => $taskOpenCount,
             'tasks_completed_count' => $taskCompletedCount,
         ];

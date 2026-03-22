@@ -134,6 +134,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('w/{workspace:slug}/calendar/refresh', [CalendarController::class, 'refreshAll'])
         ->middleware('throttle:5,1')
         ->name('calendar.refresh-all');
+    Route::post('w/{workspace:slug}/calendar/ensure-period-synced', [CalendarController::class, 'ensurePeriodSynced'])
+        ->middleware('throttle:30,1')
+        ->name('calendar.ensure-period-synced');
 
     Route::get('w/{workspace:slug}/events', [SidebarEventsController::class, 'index'])
         ->name('sidebar-events.index');

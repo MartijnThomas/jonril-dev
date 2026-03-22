@@ -5,7 +5,8 @@
     "scripts": {
         "build": "vite build",
         "build:ssr": "vite build && vite build --ssr",
-        "dev": "concurrently -c \"#fb7185,#93c5fd\" --names=vite,scheduler \"vite\" \"php artisan schedule:work --no-interaction\" --kill-others",
+        "dev": "concurrently -c \"#fb7185,#93c5fd,#c4b5fd\" --names=vite,scheduler,queue \"vite\" \"php artisan schedule:work --no-interaction\" \"npm run dev:queue\" --kill-others",
+        "dev:queue": "sh -c 'QUEUE_DRIVER=$(grep -E \"^QUEUE_CONNECTION=\" .env 2>/dev/null | tail -n1 | cut -d\"=\" -f2 | tr -d \"\\r\"); if [ -z \"$QUEUE_DRIVER\" ] || [ \"$QUEUE_DRIVER\" = \"sync\" ]; then echo \"[queue] QUEUE_CONNECTION=${QUEUE_DRIVER:-sync} (worker disabled)\"; while true; do sleep 3600; done; else echo \"[queue] starting queue:work for $QUEUE_DRIVER\"; php artisan queue:work --tries=1 --timeout=0 --queue=default,indexing; fi'",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",

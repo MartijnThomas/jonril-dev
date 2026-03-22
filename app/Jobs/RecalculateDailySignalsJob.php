@@ -19,9 +19,7 @@ class RecalculateDailySignalsJob implements ShouldQueue
     public function __construct(
         public readonly string $workspaceId,
         public readonly array $dates,
-    ) {
-        $this->onQueue('indexing');
-    }
+    ) {}
 
     public function handle(
         DailySignalPipeline $pipeline,

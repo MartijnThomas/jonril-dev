@@ -1,8 +1,10 @@
 <?php
 
 use App\Jobs\SyncCalendarJob;
+use App\Jobs\SyncCalendarRangeJob;
 use App\Models\Calendar;
 use App\Models\CalendarConnection;
+use App\Models\CalendarSyncedRange;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\CalDavService;
@@ -603,4 +605,110 @@ test('sync job is dispatched on login for user calendars', function () {
     event(new \Illuminate\Auth\Events\Login('web', $this->user, false));
 
     Bus::assertDispatched(SyncCalendarJob::class, fn ($job) => $job->calendar->id === $calendar->id);
+});
+
+test('workspace member can ensure period sync and dispatches stale active calendars', function () {
+    Bus::fake();
+
+    $activeCalendar = Calendar::query()->create([
+        'workspace_id' => $this->workspace->id,
+        'name' => 'Active Cal',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/active/',
+        'username' => 'user@example.com',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    Calendar::query()->create([
+        'workspace_id' => $this->workspace->id,
+        'name' => 'Inactive Cal',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/inactive/',
+        'username' => 'user@example.com',
+        'password' => 'secret',
+        'is_active' => false,
+    ]);
+
+    $response = $this->postJson("/w/{$this->workspace->slug}/calendar/ensure-period-synced", [
+        'period' => '2026-09',
+    ]);
+
+    $response->assertOk()->assertJson([
+        'ok' => true,
+        'period' => '2026-09',
+        'syncing' => true,
+        'dispatched_count' => 1,
+        'active_calendar_count' => 1,
+    ]);
+
+    Bus::assertDispatched(
+        SyncCalendarRangeJob::class,
+        fn (SyncCalendarRangeJob $job) => $job->calendar->id === $activeCalendar->id && $job->period === '2026-09',
+    );
+    Bus::assertDispatchedTimes(SyncCalendarRangeJob::class, 1);
+});
+
+test('ensure period sync does not dispatch when synced range is fresh', function () {
+    Bus::fake();
+
+    $activeCalendar = Calendar::query()->create([
+        'workspace_id' => $this->workspace->id,
+        'name' => 'Active Cal',
+        'provider' => 'caldav',
+        'url' => 'https://caldav.example.com/active/',
+        'username' => 'user@example.com',
+        'password' => 'secret',
+        'is_active' => true,
+    ]);
+
+    CalendarSyncedRange::query()->create([
+        'calendar_id' => $activeCalendar->id,
+        'period' => '2026-09',
+        'synced_at' => now()->subHours(1),
+    ]);
+
+    $response = $this->postJson("/w/{$this->workspace->slug}/calendar/ensure-period-synced", [
+        'period' => '2026-09',
+    ]);
+
+    $response->assertOk()->assertJson([
+        'ok' => true,
+        'period' => '2026-09',
+        'syncing' => false,
+        'dispatched_count' => 0,
+        'active_calendar_count' => 1,
+    ]);
+
+    Bus::assertNotDispatched(SyncCalendarRangeJob::class);
+});
+
+test('ensure period sync validates period format', function () {
+    Bus::fake();
+
+    $response = $this->postJson("/w/{$this->workspace->slug}/calendar/ensure-period-synced", [
+        'period' => '2026-13',
+    ]);
+
+    $response->assertStatus(422);
+    Bus::assertNotDispatched(SyncCalendarRangeJob::class);
+});
+
+test('ensure period sync is blocked for non-personal workspace', function () {
+    Bus::fake();
+
+    $workspace = Workspace::factory()->create([
+        'owner_id' => $this->user->id,
+        'is_personal' => false,
+    ]);
+    $workspace->users()->syncWithoutDetaching([
+        $this->user->id => ['role' => 'owner'],
+    ]);
+
+    $response = $this->postJson("/w/{$workspace->slug}/calendar/ensure-period-synced", [
+        'period' => '2026-09',
+    ]);
+
+    $response->assertStatus(409);
+    Bus::assertNotDispatched(SyncCalendarRangeJob::class);
 });

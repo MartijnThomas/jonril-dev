@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\RecalculateDailySignalsJob;
 use App\Jobs\SyncCalendarJob;
+use App\Jobs\SyncCalendarRangeJob;
 use App\Models\Calendar;
 use App\Models\CalendarConnection;
+use App\Models\CalendarSyncedRange;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\CalDavService;
@@ -12,6 +15,7 @@ use App\Support\Calendars\CalendarConnectionResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class CalendarController extends Controller
 {
@@ -260,6 +264,67 @@ class CalendarController extends Controller
         return back();
     }
 
+    public function ensurePeriodSynced(Request $request, Workspace $workspace): JsonResponse
+    {
+        abort_unless(
+            $workspace->users()->where('users.id', $request->user()->id)->exists(),
+            403,
+        );
+        $this->assertPersonalWorkspace($workspace);
+
+        $data = $request->validate([
+            'period' => ['required', 'regex:/^\d{4}-\d{2}$/'],
+        ]);
+
+        $period = (string) $data['period'];
+        if (! $this->isValidYearMonth($period)) {
+            return response()->json(['message' => 'Invalid period.'], 422);
+        }
+
+        $staleThreshold = now()->subHours(6);
+        $activeCalendars = Calendar::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('is_active', true)
+            ->get(['id']);
+
+        $dispatched = 0;
+
+        foreach ($activeCalendars as $calendar) {
+            $isFresh = CalendarSyncedRange::query()
+                ->where('calendar_id', $calendar->id)
+                ->where('period', $period)
+                ->where('synced_at', '>=', $staleThreshold)
+                ->exists();
+
+            if ($isFresh) {
+                continue;
+            }
+
+            SyncCalendarRangeJob::dispatch($calendar, $period);
+            $dispatched++;
+        }
+
+        $recalculateLockKey = implode(':', [
+            'daily-signals:ensure-period',
+            (string) $workspace->id,
+            $period,
+        ]);
+        if (Cache::add($recalculateLockKey, '1', now()->addSeconds(10))) {
+            RecalculateDailySignalsJob::dispatch(
+                $workspace->id,
+                $this->periodDates($period),
+            );
+        }
+
+        return response()->json([
+            'ok' => true,
+            'period' => $period,
+            'syncing' => $dispatched > 0,
+            'dispatched_count' => $dispatched,
+            'active_calendar_count' => $activeCalendars->count(),
+        ]);
+    }
+
     private function assertOwner(Request $request, Workspace $workspace): void
     {
         $isOwner = $workspace->users()
@@ -273,6 +338,40 @@ class CalendarController extends Controller
     private function assertPersonalWorkspace(Workspace $workspace): void
     {
         abort_unless($workspace->isPersonal(), 409, 'Calendars are only available in the personal workspace.');
+    }
+
+    private function isValidYearMonth(string $period): bool
+    {
+        try {
+            $parsed = \Carbon\Carbon::createFromFormat('Y-m', $period);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return $parsed !== false && $parsed->format('Y-m') === $period;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function periodDates(string $period): array
+    {
+        try {
+            $month = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $end = $month->copy()->endOfMonth();
+        $dates = [];
+        $cursor = $month->copy();
+
+        while ($cursor->lte($end)) {
+            $dates[] = $cursor->toDateString();
+            $cursor = $cursor->addDay();
+        }
+
+        return $dates;
     }
 
     /**

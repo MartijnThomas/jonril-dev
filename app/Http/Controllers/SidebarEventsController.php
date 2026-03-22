@@ -554,7 +554,14 @@ class SidebarEventsController extends Controller
 
     /**
      * @return array{
-     *     days: array<string, array{has_note: bool, has_events: bool, task_state: 'none'|'all_completed'|'open'|'open_past'}>,
+     *     days: array<string, array{
+     *         has_note: bool,
+     *         has_events: bool,
+     *         task_state: 'none'|'all_completed'|'open'|'open_past',
+     *         events_count: int,
+     *         birthday_count: int,
+     *         open_tasks_count: int
+     *     }>,
      *     pending_dates: array<int, string>,
      *     version: string
      * }
@@ -572,6 +579,9 @@ class SidebarEventsController extends Controller
                 'has_note' => false,
                 'has_events' => false,
                 'task_state' => 'none',
+                'events_count' => 0,
+                'birthday_count' => 0,
+                'open_tasks_count' => 0,
             ];
             $cursor = $cursor->addDay();
         }
@@ -580,7 +590,16 @@ class SidebarEventsController extends Controller
             ->where('workspace_id', $workspace->id)
             ->whereDate('date', '>=', $startDate->toDateString())
             ->whereDate('date', '<=', $endDate->toDateString())
-            ->get(['date', 'has_note', 'has_events', 'work_state', 'updated_at'])
+            ->get([
+                'date',
+                'has_note',
+                'has_events',
+                'work_state',
+                'events_count',
+                'birthday_count',
+                'tasks_open_count',
+                'updated_at',
+            ])
             ->keyBy(fn (WorkspaceDailyIndicator $indicator): string => $indicator->date->toDateString());
 
         foreach ($rows as $date => $indicator) {
@@ -588,20 +607,40 @@ class SidebarEventsController extends Controller
                 continue;
             }
 
+            $eventsCount = max(0, (int) $indicator->events_count);
+            $birthdayCount = max(0, (int) $indicator->birthday_count);
             $range[$date] = [
                 'has_note' => (bool) $indicator->has_note,
                 'has_events' => (bool) $indicator->has_events,
                 'task_state' => $this->mapWorkStateToTaskState($indicator->work_state, $date, $userTimezone),
+                'events_count' => $eventsCount,
+                'birthday_count' => $birthdayCount,
+                'open_tasks_count' => max(0, (int) $indicator->tasks_open_count),
             ];
         }
 
         $missingDates = array_values(array_diff(array_keys($range), $rows->keys()->all()));
+        $staleDates = $rows
+            ->filter(function (WorkspaceDailyIndicator $indicator): bool {
+                // Compatibility path for rows created before events_count / birthday_count were projected.
+                return (bool) $indicator->has_events
+                    && (int) $indicator->events_count === 0
+                    && (int) $indicator->birthday_count === 0;
+            })
+            ->keys()
+            ->values()
+            ->all();
+
+        $pendingDates = collect([...$missingDates, ...$staleDates])
+            ->unique()
+            ->values()
+            ->all();
         $maxUpdatedAt = $rows->max(fn (WorkspaceDailyIndicator $indicator) => $indicator->updated_at?->getTimestamp() ?? 0);
         $version = "{$maxUpdatedAt}:{$rows->count()}";
 
         return [
             'days' => $range,
-            'pending_dates' => $missingDates,
+            'pending_dates' => $pendingDates,
             'version' => $version,
         ];
     }

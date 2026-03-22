@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Calendar;
 use App\Models\NoteImage;
 use App\Models\TimeblockCalendarLink;
+use App\Models\WorkspaceDailyIndicator;
+use App\Models\WorkspaceDailySignal;
 use App\Support\System\ScheduledCommandHealthStore;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -46,6 +48,10 @@ class AdminOperationsController extends Controller
             ),
             'telescopeMetrics' => Inertia::defer(
                 fn (): array => $this->telescopeMetrics(),
+                'operations-metrics',
+            ),
+            'dailySignalMetrics' => Inertia::defer(
+                fn (): array => $this->dailySignalMetrics(),
                 'operations-metrics',
             ),
         ]);
@@ -302,6 +308,28 @@ class AdminOperationsController extends Controller
             'enabled' => true,
             'entries_count' => (int) DB::table('telescope_entries')->count(),
             'latest_created_at' => DB::table('telescope_entries')->max('created_at'),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     signals_count: int,
+     *     indicators_count: int,
+     *     latest_signal_at: string|null,
+     *     latest_indicator_at: string|null,
+     *     stale_indicator_count: int
+     * }
+     */
+    private function dailySignalMetrics(): array
+    {
+        return [
+            'signals_count' => WorkspaceDailySignal::query()->count(),
+            'indicators_count' => WorkspaceDailyIndicator::query()->count(),
+            'latest_signal_at' => WorkspaceDailySignal::query()->max('updated_at'),
+            'latest_indicator_at' => WorkspaceDailyIndicator::query()->max('updated_at'),
+            'stale_indicator_count' => WorkspaceDailyIndicator::query()
+                ->where('updated_at', '<', now()->subHours(24))
+                ->count(),
         ];
     }
 

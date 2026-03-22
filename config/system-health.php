@@ -44,6 +44,18 @@ return [
             'timezone' => 'Europe/Amsterdam',
             'stale_after_minutes' => 10,
         ],
+        'daily_signals_reconcile' => [
+            'label' => 'Daily signals reconcile',
+            'command' => 'daily-signals:reconcile',
+            'timezone' => 'Europe/Amsterdam',
+            'stale_after_minutes' => 36 * 60,
+        ],
+        'daily_signals_backfill' => [
+            'label' => 'Daily signals backfill',
+            'command' => 'daily-signals:backfill',
+            'timezone' => 'Europe/Amsterdam',
+            'stale_after_minutes' => 14 * 24 * 60,
+        ],
     ],
 
     'backup_profiles' => [

@@ -21,6 +21,8 @@ class WorkspaceDailyIndicator extends Model
         'work_state',
         'has_note',
         'has_events',
+        'events_count',
+        'birthday_count',
         'tasks_open_count',
         'tasks_completed_count',
     ];
@@ -34,6 +36,8 @@ class WorkspaceDailyIndicator extends Model
             'date' => 'date',
             'has_note' => 'boolean',
             'has_events' => 'boolean',
+            'events_count' => 'integer',
+            'birthday_count' => 'integer',
             'tasks_open_count' => 'integer',
             'tasks_completed_count' => 'integer',
         ];

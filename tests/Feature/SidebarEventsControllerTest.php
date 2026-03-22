@@ -408,6 +408,8 @@ test('sidebar event indicators endpoint reads projected indicator rows', functio
         'work_state' => 'orange',
         'has_note' => true,
         'has_events' => true,
+        'events_count' => 3,
+        'birthday_count' => 1,
         'tasks_open_count' => 2,
         'tasks_completed_count' => 1,
     ]);
@@ -420,6 +422,8 @@ test('sidebar event indicators endpoint reads projected indicator rows', functio
         'work_state' => 'green',
         'has_note' => true,
         'has_events' => false,
+        'events_count' => 0,
+        'birthday_count' => 0,
         'tasks_open_count' => 0,
         'tasks_completed_count' => 3,
     ]);
@@ -434,12 +438,47 @@ test('sidebar event indicators endpoint reads projected indicator rows', functio
     expect(data_get($days, '2026-10-01.has_note'))->toBeTrue();
     expect(data_get($days, '2026-10-01.has_events'))->toBeTrue();
     expect(data_get($days, '2026-10-01.task_state'))->toBe('open');
+    expect((int) data_get($days, '2026-10-01.events_count'))->toBe(3);
+    expect((int) data_get($days, '2026-10-01.birthday_count'))->toBe(1);
+    expect((int) data_get($days, '2026-10-01.open_tasks_count'))->toBe(2);
 
     expect(data_get($days, '2026-10-02.has_note'))->toBeTrue();
     expect(data_get($days, '2026-10-02.has_events'))->toBeFalse();
     expect(data_get($days, '2026-10-02.task_state'))->toBe('all_completed');
+    expect((int) data_get($days, '2026-10-02.events_count'))->toBe(0);
+    expect((int) data_get($days, '2026-10-02.birthday_count'))->toBe(0);
+    expect((int) data_get($days, '2026-10-02.open_tasks_count'))->toBe(0);
 
     expect(data_get($days, '2026-10-03.has_note'))->toBeFalse();
     expect(data_get($days, '2026-10-03.has_events'))->toBeFalse();
     expect(data_get($days, '2026-10-03.task_state'))->toBe('none');
+});
+
+test('sidebar event indicators marks legacy event rows as pending for backfill', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    WorkspaceDailyIndicator::query()->create([
+        'workspace_id' => $workspace->id,
+        'date' => '2026-03-17',
+        'structure_state' => 'note_exists',
+        'calendar_state' => 'active',
+        'work_state' => null,
+        'has_note' => true,
+        'has_events' => true,
+        'events_count' => 0,
+        'birthday_count' => 0,
+        'tasks_open_count' => 0,
+        'tasks_completed_count' => 0,
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->getJson("/w/{$workspace->slug}/events/indicators?start=2026-03-17&end=2026-03-17")
+        ->assertOk();
+
+    expect((array) $response->json('pending_dates'))->toContain('2026-03-17');
+    Queue::assertPushed(\App\Jobs\RecalculateDailySignalsJob::class);
 });
