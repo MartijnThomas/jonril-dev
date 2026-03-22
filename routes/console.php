@@ -40,7 +40,7 @@ $telescopePruneEvent = Schedule::command($telescopePruneCommand)->timezone('Euro
 if (app()->environment('local')) {
     $telescopePruneEvent->everyThirtyMinutes();
 } else {
-    $telescopePruneEvent->daily()->pingOnSuccess('https://heartbeats.laravel.com/01kmb53gvybqgnthgn9c5yaxw5/ping');
+    $telescopePruneEvent->daily()->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmb53gvybqgnthgn9c5yaxw5/ping');
 }
 
 $track(
@@ -54,28 +54,28 @@ $shouldScheduleBackups = ! app()->environment('local');
 
 if ($shouldScheduleBackups) {
     $track(
-        Schedule::command('backup:clean')->daily()->at('05:45')->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmb54vkwbjbw8g5rya18z3da/ping'),
+        Schedule::command('backup:clean')->daily()->at('05:45')->timezone('Europe/Amsterdam')->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmb54vkwbjbw8g5rya18z3da/ping'),
         'backup_clean_full',
         'Backup cleanup (full)',
         'backup:clean',
     );
 
     $track(
-        Schedule::command('backup:run')->daily()->at('06:00')->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmaw027pcpjbcr6798emgv5e/ping'),
+        Schedule::command('backup:run')->daily()->at('06:00')->timezone('Europe/Amsterdam')->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmaw027pcpjbcr6798emgv5e/ping'),
         'backup_run_full',
         'Backup run (full)',
         'backup:run',
     );
 
     $track(
-        Schedule::command('backup:run --only-db --config=backup_hourly_db')->hourlyAt(15)->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmavy4hb265bxc60tvk1rsn4/ping'),
+        Schedule::command('backup:run --only-db --config=backup_hourly_db')->hourlyAt(15)->timezone('Europe/Amsterdam')->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmavy4hb265bxc60tvk1rsn4/ping'),
         'backup_run_hourly_db',
         'Backup run (hourly database)',
         'backup:run --only-db --config=backup_hourly_db',
     );
 
     $track(
-        Schedule::command('backup:clean --config=backup_hourly_db')->hourlyAt(25)->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmb5adse8512had0r8djapxb/ping'),
+        Schedule::command('backup:clean --config=backup_hourly_db')->hourlyAt(25)->timezone('Europe/Amsterdam')->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmb5adse8512had0r8djapxb/ping'),
         'backup_clean_hourly_db',
         'Backup cleanup (hourly database)',
         'backup:clean --config=backup_hourly_db',
@@ -83,21 +83,21 @@ if ($shouldScheduleBackups) {
 }
 
 $track(
-    Schedule::command('notes:prune-images')->daily()->at('04:45')->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmb5c8f1p7pe75xpnqbdjmyc/ping'),
+    Schedule::command('notes:prune-images')->daily()->at('04:45')->timezone('Europe/Amsterdam')->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmb5c8f1p7pe75xpnqbdjmyc/ping'),
     'note_images_prune',
     'Note image prune',
     'notes:prune-images',
 );
 
 $track(
-    Schedule::command('timeblocks:sync-outbound --limit=100')->everyMinute()->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmb5dzacg9x4gn6z34rkr8qz/ping'),
+    Schedule::command('timeblocks:sync-outbound --limit=100')->everyMinute()->timezone('Europe/Amsterdam')->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmb5dzacg9x4gn6z34rkr8qz/ping'),
     'timeblocks_sync_outbound',
     'Timeblock outbound sync dispatch',
     'timeblocks:sync-outbound --limit=100',
 );
 
 $track(
-    Schedule::command('daily-signals:reconcile')->daily()->at('03:30')->timezone('Europe/Amsterdam')->pingOnSuccess('https://heartbeats.laravel.com/01kmb5ey1n96pmzj722wgf90h1/ping'),
+    Schedule::command('daily-signals:reconcile')->daily()->at('03:30')->timezone('Europe/Amsterdam')->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmb5ey1n96pmzj722wgf90h1/ping'),
     'daily_signals_reconcile',
     'Daily signals reconcile',
     'daily-signals:reconcile',
