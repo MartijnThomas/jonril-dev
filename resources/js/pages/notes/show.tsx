@@ -225,7 +225,10 @@ export default function Dashboard({
                 meetingEvent={meetingEvent}
                 showRelatedPanel={
                     noteType !== 'journal' ||
-                    (noteType === 'journal' && journalGranularity === 'daily')
+                    (noteType === 'journal' &&
+                        ['daily', 'weekly', 'monthly'].includes(
+                            journalGranularity ?? '',
+                        ))
                 }
                 language={language}
                 noteType={noteType}

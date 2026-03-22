@@ -2703,6 +2703,92 @@ test('weekly and monthly journal related panels include period token scheduled t
         );
 });
 
+test('weekly and monthly related panels include block editor task period tokens from a daily note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $daily = $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_DAILY,
+        'journal_date' => '2026-03-22',
+        'title' => 'Zondag 22 maart 2026',
+        'content' => [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'heading',
+                    'attrs' => ['level' => 1],
+                    'content' => [['type' => 'text', 'text' => 'Zondag 22 maart 2026']],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'week-13-task',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'text',
+                        'text' => 'This will be for week 13 >2026-W13',
+                    ]],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'april-task',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [[
+                        'type' => 'text',
+                        'text' => 'This will be for April >>2026-04',
+                    ]],
+                ],
+            ],
+        ],
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_WEEKLY,
+        'journal_date' => '2026-03-23',
+        'title' => 'Week 13 2026',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $workspace->notes()->create([
+        'type' => Note::TYPE_JOURNAL,
+        'journal_granularity' => Note::JOURNAL_MONTHLY,
+        'journal_date' => '2026-04-01',
+        'title' => 'April 2026',
+        'content' => ['type' => 'doc', 'content' => []],
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/2026-W13')
+        ->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('relatedTasks', 1)
+                ->where('relatedTasks.0.note_id', $daily->id)
+                ->where('relatedTasks.0.block_id', 'week-13-task')
+                ->where('relatedTasks.0.due_date_token', '2026-W13'),
+            ),
+        );
+
+    $this
+        ->actingAs($user)
+        ->get('/journal/2026-04')
+        ->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps('related-panel', fn (Assert $deferred) => $deferred
+                ->has('relatedTasks', 1)
+                ->where('relatedTasks.0.note_id', $daily->id)
+                ->where('relatedTasks.0.block_id', 'april-task')
+                ->where('relatedTasks.0.deadline_date_token', '2026-04'),
+            ),
+        );
+});
+
 test('regular note includes related tasks that link to it', function () {
     $user = User::factory()->create();
     $workspace = $user->currentWorkspace();
