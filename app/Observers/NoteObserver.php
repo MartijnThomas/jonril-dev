@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Cache;
 
 class NoteObserver
 {
+    private const NOTES_TREE_CACHE_VERSION = 'v2';
+
     public function __construct(
         private readonly NoteMetaExtractor $noteMetaExtractor,
         private readonly NoteTaskCountExtractor $noteTaskCountExtractor,
@@ -143,6 +145,7 @@ class NoteObserver
         Cache::forget("notes_dropdown_linkable_{$workspaceId}");
         Cache::forget("notes_dropdown_parents_{$workspaceId}");
         Cache::forget("notes_tree_{$workspaceId}");
+        Cache::forget(sprintf('notes_tree_%s_%s', self::NOTES_TREE_CACHE_VERSION, $workspaceId));
         Cache::forget("notes_count_{$workspaceId}");
 
         WarmNoteSharedCacheJob::dispatch($workspaceId);

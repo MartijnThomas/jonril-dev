@@ -15,6 +15,8 @@ use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    private const NOTES_TREE_CACHE_VERSION = 'v2';
+
     public function __construct(
         private readonly NoteSlugService $noteSlugService,
         private readonly PersonalWorkspaceResolver $personalWorkspaceResolver,
@@ -164,8 +166,8 @@ class HandleInertiaRequests extends Middleware
             return [];
         }
 
-        return Cache::remember(
-            "notes_tree_{$workspace->id}",
+        $tree = Cache::remember(
+            $this->notesTreeCacheKey($workspace->id),
             now()->addDay(),
             function () use ($workspace): array {
                 /** @var Collection<int, Note> $roots */
@@ -210,6 +212,60 @@ class HandleInertiaRequests extends Middleware
                     ->all();
             },
         );
+
+        return $this->normalizeRootOnlyNotesTree($tree);
+    }
+
+    private function notesTreeCacheKey(string $workspaceId): string
+    {
+        return sprintf('notes_tree_%s_%s', self::NOTES_TREE_CACHE_VERSION, $workspaceId);
+    }
+
+    /**
+     * @return array<int, array{
+     *   id: string,
+     *   title: string,
+     *   href: string,
+     *   icon: string|null,
+     *   icon_color: string|null,
+     *   icon_bg: string|null,
+     *   has_children: bool,
+     *   children: array<int, mixed>
+     * }>
+     */
+    private function normalizeRootOnlyNotesTree(mixed $tree): array
+    {
+        if (! is_array($tree)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($tree as $node) {
+            if (! is_array($node)) {
+                continue;
+            }
+
+            $id = (string) ($node['id'] ?? '');
+            $title = (string) ($node['title'] ?? '');
+            $href = (string) ($node['href'] ?? '');
+            if ($id === '' || $title === '' || $href === '') {
+                continue;
+            }
+
+            $children = is_array($node['children'] ?? null) ? $node['children'] : [];
+            $normalized[] = [
+                'id' => $id,
+                'title' => $title,
+                'href' => $href,
+                'icon' => isset($node['icon']) && is_string($node['icon']) ? $node['icon'] : null,
+                'icon_color' => isset($node['icon_color']) && is_string($node['icon_color']) ? $node['icon_color'] : null,
+                'icon_bg' => isset($node['icon_bg']) && is_string($node['icon_bg']) ? $node['icon_bg'] : null,
+                'has_children' => (bool) ($node['has_children'] ?? false) || count($children) > 0,
+                'children' => [],
+            ];
+        }
+
+        return $normalized;
     }
 
     /**

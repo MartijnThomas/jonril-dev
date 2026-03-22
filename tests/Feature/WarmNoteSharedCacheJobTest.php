@@ -16,7 +16,7 @@ it('warms all four cache keys for a workspace', function () {
     Note::factory()->for($workspace)->create(['title' => 'Beta', 'type' => Note::TYPE_NOTE]);
     Note::factory()->for($workspace)->create(['title' => 'Journal note', 'type' => Note::TYPE_JOURNAL]);
 
-    $treeKey = "notes_tree_{$workspace->id}";
+    $treeKey = "notes_tree_v2_{$workspace->id}";
     $countKey = "notes_count_{$workspace->id}";
     $linkableKey = "notes_dropdown_linkable_{$workspace->id}";
     $parentsKey = "notes_dropdown_parents_{$workspace->id}";
@@ -61,7 +61,7 @@ it('populates notes tree excluding journal and meeting notes', function () {
         app(\App\Support\Notes\NoteSlugService::class),
     );
 
-    $tree = Cache::get("notes_tree_{$workspace->id}");
+    $tree = Cache::get("notes_tree_v2_{$workspace->id}");
     $titles = array_column($tree, 'title');
     expect($titles)->toContain('Regular');
     expect($titles)->not->toContain('Meeting');

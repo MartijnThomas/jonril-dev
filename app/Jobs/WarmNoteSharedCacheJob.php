@@ -13,6 +13,8 @@ class WarmNoteSharedCacheJob implements ShouldQueue
 {
     use Queueable;
 
+    private const NOTES_TREE_CACHE_VERSION = 'v2';
+
     public function __construct(
         public readonly string $workspaceId,
     ) {
@@ -73,7 +75,12 @@ class WarmNoteSharedCacheJob implements ShouldQueue
             ->values()
             ->all();
 
-        Cache::put("notes_tree_{$workspace->id}", $tree, now()->addDay());
+        Cache::put($this->notesTreeCacheKey($workspace->id), $tree, now()->addDay());
+    }
+
+    private function notesTreeCacheKey(string $workspaceId): string
+    {
+        return sprintf('notes_tree_%s_%s', self::NOTES_TREE_CACHE_VERSION, $workspaceId);
     }
 
     private function warmNoteCount(Workspace $workspace): void
