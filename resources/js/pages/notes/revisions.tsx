@@ -36,6 +36,14 @@ type Props = {
     revisions: Revision[];
 };
 
+const EMPTY_PROPERTIES: Record<string, string> = {};
+const EMPTY_LINKABLE_NOTES: [] = [];
+const EMPTY_WORKSPACE_SUGGESTIONS = { mentions: [], hashtags: [] };
+const EMPTY_RELATED_TASKS: [] = [];
+const EMPTY_BACKLINKS: [] = [];
+const EMPTY_MEETING_CHILDREN: [] = [];
+const EMPTY_TIMEBLOCK_SYNC: Record<string, unknown> = {};
+
 export default function NoteRevisions({
     noteId,
     noteTitle,
@@ -179,18 +187,19 @@ export default function NoteRevisions({
                             id={`revision-${editorKey}`}
                             noteUpdateUrl=""
                             content={content as string}
-                            properties={{}}
-                            linkableNotes={[]}
-                            workspaceSuggestions={{ mentions: [], hashtags: [] }}
-                            relatedTasks={[]}
-                            backlinks={[]}
-                            meetingChildren={[]}
+                            properties={EMPTY_PROPERTIES}
+                            linkableNotes={EMPTY_LINKABLE_NOTES}
+                            workspaceSuggestions={EMPTY_WORKSPACE_SUGGESTIONS}
+                            relatedTasks={EMPTY_RELATED_TASKS}
+                            backlinks={EMPTY_BACKLINKS}
+                            meetingChildren={EMPTY_MEETING_CHILDREN}
                             meetingEvent={null}
                             showRelatedPanel={false}
                             language={language}
                             noteType="note"
                             journalGranularity={null}
                             journalDate={null}
+                            timeblockSyncByBlockId={EMPTY_TIMEBLOCK_SYNC}
                             defaultTimeblockDurationMinutes={60}
                             editorMode={editorMode}
                             readOnly={true}

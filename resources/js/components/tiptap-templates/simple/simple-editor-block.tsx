@@ -349,12 +349,8 @@ function SimpleEditorComponent({
         workspaceSuggestions?.mentions ?? EMPTY_SUGGESTIONS;
     const hashtagSuggestions =
         workspaceSuggestions?.hashtags ?? EMPTY_SUGGESTIONS;
-    const [meetingParticipantOptions, setMeetingParticipantOptions] = useState<string[]>(
-        mentionSuggestions,
-    );
-    useEffect(() => {
-        setMeetingParticipantOptions(mentionSuggestions);
-    }, [mentionSuggestions]);
+    const [meetingParticipantOptionsOverride, setMeetingParticipantOptionsOverride] = useState<string[] | null>(null);
+    const meetingParticipantOptions = meetingParticipantOptionsOverride ?? mentionSuggestions;
     const [mobileKeyboardInset, setMobileKeyboardInset] = useState(0);
 
     useEffect(() => {
@@ -447,7 +443,7 @@ function SimpleEditorComponent({
 
         const payload = (await response.json()) as { items?: string[] };
         const items = Array.isArray(payload.items) ? payload.items : [];
-        setMeetingParticipantOptions(items);
+        setMeetingParticipantOptionsOverride(items);
 
         return items;
     };
