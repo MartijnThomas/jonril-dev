@@ -125,6 +125,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('notes.index');
     Route::get('notes/tree', [NotesController::class, 'tree'])
         ->name('notes.tree');
+    Route::get('notes/sidebar-tree', [NotesController::class, 'sidebarTree'])
+        ->name('notes.sidebar-tree');
+    Route::get('notes/sidebar-tree-path', [NotesController::class, 'sidebarTreePath'])
+        ->name('notes.sidebar-tree-path');
 
     Route::get('notes/create', [NotesController::class, 'start'])
         ->name('notes.start');

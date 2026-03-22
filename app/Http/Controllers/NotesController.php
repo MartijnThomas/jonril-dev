@@ -207,6 +207,78 @@ class NotesController extends Controller
         ]);
     }
 
+    public function sidebarTree(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'parent_id' => ['nullable', 'uuid'],
+        ]);
+
+        $workspace = $this->currentWorkspace();
+        $this->assertWorkspaceMembership($workspace);
+
+        $nodes = $this->buildSidebarTreeLevel(
+            workspaceId: $workspace->id,
+            parentId: $data['parent_id'] ?? null,
+        );
+
+        return response()->json([
+            'nodes' => $nodes,
+        ]);
+    }
+
+    public function sidebarTreePath(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'note_id' => ['required', 'uuid'],
+        ]);
+
+        $workspace = $this->currentWorkspace();
+        $this->assertWorkspaceMembership($workspace);
+
+        $note = Note::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('id', $data['note_id'])
+            ->where(function ($query): void {
+                $query->whereNull('type')
+                    ->orWhere('type', Note::TYPE_NOTE);
+            })
+            ->first(['id', 'parent_id']);
+
+        if (! $note) {
+            return response()->json(['path' => []]);
+        }
+
+        $path = [];
+        $visited = [];
+        $cursor = $note;
+
+        while ($cursor !== null) {
+            if (isset($visited[$cursor->id])) {
+                break;
+            }
+
+            $visited[$cursor->id] = true;
+            array_unshift($path, $cursor->id);
+
+            if (! $cursor->parent_id) {
+                break;
+            }
+
+            $cursor = Note::query()
+                ->where('workspace_id', $workspace->id)
+                ->where('id', $cursor->parent_id)
+                ->where(function ($query): void {
+                    $query->whereNull('type')
+                        ->orWhere('type', Note::TYPE_NOTE);
+                })
+                ->first(['id', 'parent_id']);
+        }
+
+        return response()->json([
+            'path' => $path,
+        ]);
+    }
+
     public function options(Request $request, Workspace $workspace): JsonResponse
     {
         $this->assertWorkspaceMembership($workspace);
@@ -1904,6 +1976,61 @@ class NotesController extends Controller
             ->all();
 
         return $combined;
+    }
+
+    /**
+     * @return array<int, array{
+     *   id:string,
+     *   title:string,
+     *   href:string,
+     *   icon:string|null,
+     *   icon_color:string|null,
+     *   icon_bg:string|null,
+     *   has_children:bool,
+     *   children:array<int, array>
+     * }>
+     */
+    private function buildSidebarTreeLevel(string $workspaceId, ?string $parentId): array
+    {
+        $nodes = Note::query()
+            ->where('workspace_id', $workspaceId)
+            ->where('parent_id', $parentId)
+            ->where(function ($query): void {
+                $query->whereNull('type')
+                    ->orWhere('type', Note::TYPE_NOTE);
+            })
+            ->withExists([
+                'children as has_children' => function ($query): void {
+                    $query->where(function ($inner): void {
+                        $inner->whereNull('type')
+                            ->orWhere('type', Note::TYPE_NOTE);
+                    });
+                },
+            ])
+            ->get(['id', 'workspace_id', 'slug', 'title', 'properties', 'type']);
+
+        return $nodes
+            ->map(function (Note $note): array {
+                return [
+                    'id' => $note->id,
+                    'title' => $note->display_title,
+                    'href' => $this->noteSlugService->urlFor($note),
+                    'icon' => $note->icon,
+                    'icon_color' => $note->icon_color,
+                    'icon_bg' => $note->icon_bg,
+                    'has_children' => (bool) ($note->has_children ?? false),
+                    'children' => [],
+                ];
+            })
+            ->sort(function (array $a, array $b): int {
+                if ($a['has_children'] !== $b['has_children']) {
+                    return $a['has_children'] ? -1 : 1;
+                }
+
+                return strcasecmp((string) $a['title'], (string) $b['title']);
+            })
+            ->values()
+            ->all();
     }
 
     /**

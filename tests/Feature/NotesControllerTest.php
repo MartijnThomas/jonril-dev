@@ -10,6 +10,7 @@ use App\Models\TimeblockCalendarLink;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Carbon;
+use Illuminate\Testing\Fluent\AssertableJson;
 use Inertia\Testing\AssertableInertia as Assert;
 
 function scoped_note_url($workspace, string $note): string
@@ -152,9 +153,15 @@ test('show includes linkable note headings metadata for wiki-link heading sugges
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $viewer->id))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('linkableNotes', function ($linkableNotes) use ($target): bool {
+        ->getJson(route('notes.options', [
+            'workspace' => $workspace->slug,
+            'for' => 'wikilink',
+            'note_id' => $viewer->id,
+            'include_headings' => 1,
+        ]))
+        ->assertOk()
+        ->assertJson(fn (AssertableJson $json) => $json
+            ->where('options', function ($linkableNotes) use ($target): bool {
                 $match = collect($linkableNotes)->first(
                     fn (array $item) => ($item['id'] ?? null) === $target->id,
                 );
@@ -205,7 +212,7 @@ test('journal page linkable notes include member workspaces and exclude non-memb
         'title' => 'Outsider Target',
     ]);
 
-    $personalWorkspace->notes()->create([
+    $journalNote = $personalWorkspace->notes()->create([
         'type' => Note::TYPE_JOURNAL,
         'title' => 'Friday 7 March 2026',
         'journal_granularity' => Note::JOURNAL_DAILY,
@@ -214,9 +221,16 @@ test('journal page linkable notes include member workspaces and exclude non-memb
 
     $this
         ->actingAs($user)
-        ->get('/journal/2026-03-07')
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('linkableNotes', function ($linkableNotes) use ($memberNote, $outsiderNote, $migratedNote): bool {
+        ->getJson(route('notes.options', [
+            'workspace' => $personalWorkspace->slug,
+            'for' => 'wikilink',
+            'note_id' => $journalNote->id,
+            'cross_workspace' => 1,
+            'include_headings' => 1,
+        ]))
+        ->assertOk()
+        ->assertJson(fn (AssertableJson $json) => $json
+            ->where('options', function ($linkableNotes) use ($memberNote, $outsiderNote, $migratedNote): bool {
                 $items = collect($linkableNotes);
                 $member = $items->first(fn (array $item) => ($item['id'] ?? null) === $memberNote->id);
                 if (! is_array($member)) {
@@ -262,9 +276,15 @@ test('regular note linkable notes remain scoped to active workspace', function (
 
     $this
         ->actingAs($user)
-        ->get(scoped_note_url($workspace, $localSource->id))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('linkableNotes', function ($linkableNotes) use ($sharedNote): bool {
+        ->getJson(route('notes.options', [
+            'workspace' => $workspace->slug,
+            'for' => 'wikilink',
+            'note_id' => $localSource->id,
+            'include_headings' => 1,
+        ]))
+        ->assertOk()
+        ->assertJson(fn (AssertableJson $json) => $json
+            ->where('options', function ($linkableNotes) use ($sharedNote): bool {
                 return collect($linkableNotes)->every(
                     fn (array $item) => ($item['id'] ?? null) !== $sharedNote->id,
                 );
@@ -1109,6 +1129,63 @@ test('notes tree endpoint lazily returns children for parent', function () {
         ->assertJsonPath('nodes.0.title', 'Project 1')
         ->assertJsonPath('nodes.0.tasks_total', 0)
         ->assertJsonPath('nodes.0.tasks_open', 0);
+});
+
+test('sidebar tree endpoint returns only direct children for requested parent', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Root',
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Child',
+        'parent_id' => $root->id,
+    ]);
+    $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Grandchild',
+        'parent_id' => $child->id,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/sidebar-tree?parent_id='.$root->id)
+        ->assertOk()
+        ->assertJsonCount(1, 'nodes')
+        ->assertJsonPath('nodes.0.id', $child->id)
+        ->assertJsonPath('nodes.0.has_children', true)
+        ->assertJsonPath('nodes.0.children', []);
+});
+
+test('sidebar tree path endpoint returns ancestor path for note', function () {
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $root = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Root',
+    ]);
+    $child = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Child',
+        'parent_id' => $root->id,
+    ]);
+    $leaf = $workspace->notes()->create([
+        'type' => Note::TYPE_NOTE,
+        'title' => 'Leaf',
+        'parent_id' => $child->id,
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get('/notes/sidebar-tree-path?note_id='.$leaf->id)
+        ->assertOk()
+        ->assertJsonPath('path.0', $root->id)
+        ->assertJsonPath('path.1', $child->id)
+        ->assertJsonPath('path.2', $leaf->id);
 });
 
 test('notes tree endpoint returns task totals and open counts per note', function () {
@@ -2160,7 +2237,7 @@ test('update rejects moving a note under its own descendant', function () {
     expect($root->parent_id)->toBeNull();
 });
 
-test('sidebar notes tree excludes journal notes and keeps hierarchy', function () {
+test('sidebar notes tree excludes journal notes and returns root level nodes only', function () {
     $user = User::factory()->create();
 
     $root = $user->notes()->create([
@@ -2201,12 +2278,8 @@ test('sidebar notes tree excludes journal notes and keeps hierarchy', function (
         ->where('notesTree.0.icon', 'alarm-clock')
         ->where('notesTree.0.icon_color', 'blue')
         ->where('notesTree.0.icon_bg', 'stone')
-        ->has('notesTree.0.children', 1)
-        ->where('notesTree.0.children.0.id', $project->id)
-        ->where('notesTree.0.children.0.title', 'Project 1')
-        ->has('notesTree.0.children.0.children', 1)
-        ->where('notesTree.0.children.0.children.0.id', $leaf->id)
-        ->where('notesTree.0.children.0.children.0.title', 'Some note'),
+        ->where('notesTree.0.has_children', true)
+        ->where('notesTree.0.children', []),
     );
 });
 

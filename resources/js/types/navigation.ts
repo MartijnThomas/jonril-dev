@@ -23,5 +23,6 @@ export type SidebarNoteTreeItem = {
     icon?: string | null;
     icon_color?: string | null;
     icon_bg?: string | null;
+    has_children?: boolean;
     children: SidebarNoteTreeItem[];
 };

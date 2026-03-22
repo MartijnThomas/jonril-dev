@@ -171,7 +171,7 @@ class HandleInertiaRequests extends Middleware
      *   icon: string|null,
      *   icon_color: string|null,
      *   icon_bg: string|null,
-     *   parent_id: string|null,
+     *   has_children: bool,
      *   children: array
      * }>
      */
@@ -190,72 +190,46 @@ class HandleInertiaRequests extends Middleware
             "notes_tree_{$workspace->id}",
             now()->addDay(),
             function () use ($workspace): array {
-                /** @var Collection<int, Note> $notes */
-                $notes = Note::query()
+                /** @var Collection<int, Note> $roots */
+                $roots = Note::query()
                     ->where('workspace_id', $workspace->id)
                     ->where(function ($query) {
                         $query->whereNull('type')
                             ->orWhere('type', Note::TYPE_NOTE);
                     })
-                    ->orderBy('created_at')
-                    ->get(['id', 'workspace_id', 'slug', 'title', 'properties', 'parent_id', 'type']);
+                    ->whereNull('parent_id')
+                    ->withExists([
+                        'children as has_children' => function ($query): void {
+                            $query->where(function ($inner): void {
+                                $inner->whereNull('type')
+                                    ->orWhere('type', Note::TYPE_NOTE);
+                            });
+                        },
+                    ])
+                    ->get(['id', 'workspace_id', 'slug', 'title', 'properties', 'type']);
 
-                $nodes = [];
-                foreach ($notes as $note) {
-                    $nodes[$note->id] = [
-                        'id' => $note->id,
-                        'title' => $note->display_title,
-                        'href' => $this->noteSlugService->urlFor($note),
-                        'icon' => $note->icon,
-                        'icon_color' => $note->icon_color,
-                        'icon_bg' => $note->icon_bg,
-                        'parent_id' => $note->parent_id,
-                        'children' => [],
-                    ];
-                }
-
-                $tree = [];
-
-                foreach ($nodes as $id => $node) {
-                    $parentId = $node['parent_id'];
-                    if ($parentId && isset($nodes[$parentId])) {
-                        $nodes[$parentId]['children'][] = &$nodes[$id];
-                    } else {
-                        $tree[] = &$nodes[$id];
-                    }
-                }
-
-                $sortTree = function (array &$items) use (&$sortTree): void {
-                    usort($items, function (array $a, array $b): int {
-                        $aHasChildren = count($a['children']) > 0;
-                        $bHasChildren = count($b['children']) > 0;
-
-                        if ($aHasChildren !== $bHasChildren) {
-                            return $aHasChildren ? -1 : 1;
+                return $roots
+                    ->map(function (Note $note): array {
+                        return [
+                            'id' => $note->id,
+                            'title' => $note->display_title,
+                            'href' => $this->noteSlugService->urlFor($note),
+                            'icon' => $note->icon,
+                            'icon_color' => $note->icon_color,
+                            'icon_bg' => $note->icon_bg,
+                            'has_children' => (bool) ($note->has_children ?? false),
+                            'children' => [],
+                        ];
+                    })
+                    ->sort(function (array $a, array $b): int {
+                        if ($a['has_children'] !== $b['has_children']) {
+                            return $a['has_children'] ? -1 : 1;
                         }
 
                         return strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
-                    });
-
-                    foreach ($items as &$item) {
-                        if (! empty($item['children'])) {
-                            $sortTree($item['children']);
-                        }
-                    }
-                };
-
-                $sortTree($tree);
-
-                $stripParent = function (array &$items) use (&$stripParent): void {
-                    foreach ($items as &$item) {
-                        unset($item['parent_id']);
-                        $stripParent($item['children']);
-                    }
-                };
-
-                $stripParent($tree);
-
-                return $tree;
+                    })
+                    ->values()
+                    ->all();
             },
         );
     }
