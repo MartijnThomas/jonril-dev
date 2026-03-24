@@ -1147,13 +1147,13 @@ export function RightSidebarTodayEvents({
                                                 </p>
 
                                                 {/* title row */}
-                                                <div className="flex items-center gap-1.5">
+                                                <div className="flex items-start gap-1.5">
                                                     {event.meeting_note_href ? (
                                                         <Link
                                                             href={
                                                                 event.meeting_note_href
                                                             }
-                                                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                                                            className="mt-px shrink-0 text-muted-foreground hover:text-foreground"
                                                             aria-label="Open meeting note"
                                                         >
                                                             <FileText className="size-3" />

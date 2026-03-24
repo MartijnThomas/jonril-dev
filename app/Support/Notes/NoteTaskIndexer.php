@@ -27,6 +27,7 @@ class NoteTaskIndexer
             'type',
             'journal_granularity',
             'journal_date',
+            'meta',
             'content',
         ]);
 
@@ -128,6 +129,7 @@ class NoteTaskIndexer
                     'journal_date' => $note->type === Note::TYPE_JOURNAL && $note->journal_granularity === Note::JOURNAL_DAILY
                         ? $note->journal_date
                         : null,
+                    'originated_at' => $this->resolveOriginatedAt($note),
                     'mentions' => json_encode(array_values(array_unique($mentions))),
                     'hashtags' => json_encode(array_values(array_unique($hashtags))),
                     'created_at' => now(),
@@ -140,6 +142,26 @@ class NoteTaskIndexer
         if ($rows !== []) {
             NoteTask::query()->insert($rows);
         }
+    }
+
+    private function resolveOriginatedAt(Note $note): ?string
+    {
+        if ($note->type === Note::TYPE_JOURNAL && $note->journal_granularity === Note::JOURNAL_DAILY) {
+            return $note->journal_date?->toDateString();
+        }
+
+        if ($note->type === Note::TYPE_MEETING) {
+            $startsAt = is_array($note->meta) ? ($note->meta['starts_at'] ?? null) : null;
+            if (is_string($startsAt) && $startsAt !== '') {
+                try {
+                    return Carbon::parse($startsAt)->toDateString();
+                } catch (Throwable) {
+                    return null;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

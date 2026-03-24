@@ -59,6 +59,7 @@ class NoteTask extends Model
         'due_date_token',
         'deadline_date_token',
         'journal_date',
+        'originated_at',
         'mentions',
         'hashtags',
     ];
@@ -77,6 +78,7 @@ class NoteTask extends Model
             'due_date' => 'date',
             'deadline_date' => 'date',
             'journal_date' => 'date',
+            'originated_at' => 'date',
             'render_fragments' => 'array',
             'children' => 'array',
             'mentions' => 'array',
@@ -148,6 +150,7 @@ class NoteTask extends Model
             'due_date' => $this->due_date?->toDateString(),
             'deadline_date' => $this->deadline_date?->toDateString(),
             'journal_date' => $this->journal_date?->toDateString(),
+            'originated_at' => $this->originated_at?->toDateString(),
         ];
     }
 
