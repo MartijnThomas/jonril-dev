@@ -1,4 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
+import { resolveTaskCheckboxStatus } from '@/lib/task-status-icons';
 import {
     format,
     formatDistance,
@@ -152,7 +153,7 @@ type Props = {
     filters: Filters;
     filterPresets: FilterPreset[];
     workspaces: { id: string; name: string }[];
-    noteTreeOptions: { id: string; title: string; depth: number; workspace_name: string | null; workspace_id: string; is_journal: boolean; is_virtual: boolean }[];
+    noteTreeOptions?: { id: string; title: string; depth: number; workspace_name: string | null; workspace_id: string; is_journal: boolean; is_virtual: boolean }[];
 };
 
 type NoteTreeNode = {
@@ -177,7 +178,7 @@ export default function TasksIndex({
     filters,
     filterPresets,
     workspaces,
-    noteTreeOptions,
+    noteTreeOptions = [],
 }: Props) {
     const { t } = useI18n();
     const page = usePage();
@@ -621,32 +622,6 @@ export default function TasksIndex({
         }
     };
 
-    const taskVisualStatus = (
-        task: Pick<TaskItem, 'task_status' | 'checked'>,
-    ): 'open' | 'completed' | 'canceled' | 'migrated' | 'in_progress' | 'backlog' | 'assigned' => {
-        if (task.task_status === 'canceled') {
-            return 'canceled';
-        }
-
-        if (task.task_status === 'migrated') {
-            return 'migrated';
-        }
-
-        if (task.task_status === 'in_progress') {
-            return 'in_progress';
-        }
-
-        if (task.task_status === 'backlog') {
-            return 'backlog';
-        }
-
-        if (task.task_status === 'assigned') {
-            return 'assigned';
-        }
-
-        return task.checked ? 'completed' : 'open';
-    };
-
     const hasTaskChildren = (task: TaskItem) =>
         Array.isArray(task.children) && task.children.length > 0;
 
@@ -694,10 +669,7 @@ export default function TasksIndex({
                         childStatusToken === 'deferred'
                             ? childStatusToken
                             : null;
-                    const childVisualStatus = taskVisualStatus({
-                        task_status: childTaskStatus,
-                        checked: child.checked === true,
-                    });
+                    const childVisualStatus = resolveTaskCheckboxStatus(childTaskStatus, child.checked === true);
 
                     return (
                         <li key={`${child.block_id ?? child.content_text}-${level}-${index}`}>
@@ -902,7 +874,7 @@ export default function TasksIndex({
                         <TaskToggleCheckbox
                             className="mt-1.5"
                             checked={task.checked}
-                            status={taskVisualStatus(task)}
+                            status={resolveTaskCheckboxStatus(task.task_status, task.checked)}
                             disabled={
                                 pendingTaskIds.includes(task.id) ||
                                 task.task_status === 'canceled' ||

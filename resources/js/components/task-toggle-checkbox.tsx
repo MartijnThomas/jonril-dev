@@ -1,10 +1,11 @@
 import type { ChangeEvent } from 'react';
+import type { TaskStatus } from '@/lib/task-status-icons';
 import { cn } from '@/lib/utils';
 
 type TaskToggleCheckboxProps = {
     checked: boolean;
     disabled?: boolean;
-    status?: 'open' | 'completed' | 'canceled' | 'migrated' | 'backlog' | 'in_progress' | 'assigned';
+    status?: TaskStatus;
     onCheckedChange: (checked: boolean) => void;
     ariaLabel: string;
     className?: string;

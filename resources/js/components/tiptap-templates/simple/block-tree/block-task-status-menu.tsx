@@ -1,5 +1,5 @@
-import { ChevronLeft, Circle, Pause, Slash, Star, UserRound, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { TASK_CHECKBOX_STATUS_ICONS } from '@/lib/task-status-icons';
 import { cn } from '@/lib/utils';
 
 type BlockTaskStatus =
@@ -23,15 +23,14 @@ type BlockTaskStatusMenuProps = {
 const STATUS_OPTIONS: Array<{
     value: BlockTaskStatus;
     label: string;
-    icon: typeof Circle;
 }> = [
-    { value: null, label: 'Open', icon: Circle },
-    { value: 'assigned', label: 'Assigned', icon: UserRound },
-    { value: 'deferred', label: 'Deferred', icon: ChevronLeft },
-    { value: 'backlog', label: 'Backlog', icon: Pause },
-    { value: 'in_progress', label: 'In progress', icon: Slash },
-    { value: 'starred', label: 'Starred', icon: Star },
-    { value: 'canceled', label: 'Canceled', icon: X },
+    { value: null, label: TASK_CHECKBOX_STATUS_ICONS.open.label },
+    { value: 'assigned', label: TASK_CHECKBOX_STATUS_ICONS.assigned.label },
+    { value: 'deferred', label: TASK_CHECKBOX_STATUS_ICONS.deferred.label },
+    { value: 'backlog', label: TASK_CHECKBOX_STATUS_ICONS.backlog.label },
+    { value: 'in_progress', label: TASK_CHECKBOX_STATUS_ICONS.in_progress.label },
+    { value: 'starred', label: TASK_CHECKBOX_STATUS_ICONS.starred.label },
+    { value: 'canceled', label: TASK_CHECKBOX_STATUS_ICONS.canceled.label },
 ];
 
 export function BlockTaskStatusMenu({
@@ -85,7 +84,9 @@ export function BlockTaskStatusMenu({
             style={{ left: x, top: y }}
         >
             {STATUS_OPTIONS.map((option) => {
-                const Icon = option.icon;
+                const Icon = option.value === null
+                    ? TASK_CHECKBOX_STATUS_ICONS.open.icon
+                    : TASK_CHECKBOX_STATUS_ICONS[option.value].icon;
                 const isActive = status === option.value;
 
                 return (

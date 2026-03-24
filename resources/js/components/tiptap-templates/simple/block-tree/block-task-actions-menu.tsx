@@ -20,9 +20,12 @@ type TaskStatus =
     | null;
 
 type MigrateTarget = {
-    id: string;
-    title: string;
-    path?: string;
+    key: string;
+    label: string;
+    subtitle?: string;
+    target_note_id?: string | null;
+    target_journal_granularity?: string | null;
+    target_journal_period?: string | null;
 };
 
 type BlockTaskActionsMenuProps = {
@@ -35,7 +38,7 @@ type BlockTaskActionsMenuProps = {
     onToggleTask: () => void;
     onSetStatus: (status: TaskStatus) => void;
     onOpenMigratePicker: () => void;
-    onQuickMigrate: (noteId: string) => void;
+    onQuickMigrate: (target: MigrateTarget) => void;
 };
 
 export function BlockTaskActionsMenu({
@@ -95,17 +98,17 @@ export function BlockTaskActionsMenu({
                     <DropdownMenuSubContent>
                         {defaultMigrateTargets.map((target) => (
                             <DropdownMenuItem
-                                key={target.id}
+                                key={target.key}
                                 onClick={() => {
-                                    onQuickMigrate(target.id);
+                                    onQuickMigrate(target);
                                     onClose();
                                 }}
                             >
                                 <div className="min-w-0">
-                                    <div className="truncate">{target.title}</div>
-                                    {target.path ? (
+                                    <div className="truncate">{target.label}</div>
+                                    {target.subtitle ? (
                                         <div className="text-muted-foreground truncate text-xs">
-                                            {target.path}
+                                            {target.subtitle}
                                         </div>
                                     ) : null}
                                 </div>

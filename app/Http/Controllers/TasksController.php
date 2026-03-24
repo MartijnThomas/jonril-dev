@@ -323,49 +323,7 @@ class TasksController extends Controller
             $this->transformTaskCollection($tasks->getCollection(), $workspaceNamesById),
         );
 
-        $notes = Note::query()
-            ->whereIn('workspace_id', $workspaceIds)
-            ->where(function ($query) {
-                $query->whereNull('type')->orWhere('type', '!=', Note::TYPE_JOURNAL);
-            })
-            ->when(! $selectedWorkspaceIds->isEmpty(), fn ($query) => $query->whereIn('workspace_id', $selectedWorkspaceIds->all()))
-            ->orderBy('title')
-            ->get(['id', 'title', 'workspace_id'])
-            ->map(fn (Note $note) => [
-                'id' => $note->id,
-                'title' => $note->title ?? 'Untitled',
-                'workspace_id' => $note->workspace_id,
-                'workspace_name' => $workspaceNamesById[$note->workspace_id] ?? null,
-            ])
-            ->values();
-
-        $journalNotes = Note::query()
-            ->whereIn('workspace_id', $workspaceIds)
-            ->where('type', Note::TYPE_JOURNAL)
-            ->when(! $selectedWorkspaceIds->isEmpty(), fn ($query) => $query->whereIn('workspace_id', $selectedWorkspaceIds->all()))
-            ->whereNotNull('journal_granularity')
-            ->whereNotNull('journal_date')
-            ->orderByDesc('journal_date')
-            ->get(['id', 'title', 'workspace_id', 'journal_granularity', 'journal_date']);
-
-        $showWorkspacePrefixForNoteTree = $selectedWorkspaceIds->isEmpty()
-            ? count($workspaceIds) > 1
-            : $selectedWorkspaceIds->count() > 1;
-
-        $noteTreeOptions = $this->buildNoteTreeOptions(
-            $workspaceNamesById,
-            $notes->toArray(),
-            $selectedWorkspaceIds->all(),
-            $showWorkspacePrefixForNoteTree,
-        );
-
-        foreach (($selectedWorkspaceIds->isEmpty() ? collect($workspaceIds) : $selectedWorkspaceIds) as $wsId) {
-            $wsJournalNotes = $journalNotes->where('workspace_id', $wsId)->values();
-            if ($wsJournalNotes->isNotEmpty()) {
-                $journalRows = $this->buildJournalTreeOptions((string) $wsId, $wsJournalNotes, $showWorkspacePrefixForNoteTree ? ($workspaceNamesById[$wsId] ?? null) : null);
-                $noteTreeOptions = array_merge($noteTreeOptions, $journalRows);
-            }
-        }
+        $selectedWorkspaceIdsArray = $selectedWorkspaceIds->values()->all();
 
         $props = [
             'tasks' => $tasks,
@@ -380,8 +338,14 @@ class TasksController extends Controller
                 'q' => $searchQuery,
             ],
             'filterPresets' => $this->taskFilterPresetsForUser($user),
-            'notes' => $notes,
-            'noteTreeOptions' => $noteTreeOptions,
+            'noteTreeOptions' => Inertia::defer(
+                fn () => $this->buildTaskNoteTreeOptions(
+                    $workspaceIds,
+                    $selectedWorkspaceIdsArray,
+                    $workspaceNamesById,
+                ),
+                'task-note-options',
+            ),
             'workspaces' => $workspaces
                 ->map(fn ($workspace) => [
                     'id' => $workspace->id,
@@ -403,6 +367,75 @@ class TasksController extends Controller
         }
 
         return Inertia::render($component, $props);
+    }
+
+    /**
+     * @param  array<int, string>  $workspaceIds
+     * @param  array<int, string>  $selectedWorkspaceIds
+     * @param  array<string, string>  $workspaceNamesById
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildTaskNoteTreeOptions(
+        array $workspaceIds,
+        array $selectedWorkspaceIds,
+        array $workspaceNamesById,
+    ): array {
+        $workspaceScope = $selectedWorkspaceIds !== []
+            ? $selectedWorkspaceIds
+            : $workspaceIds;
+
+        $notes = Note::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->where(function ($query) {
+                $query->whereNull('type')->orWhere('type', '!=', Note::TYPE_JOURNAL);
+            })
+            ->when($selectedWorkspaceIds !== [], fn ($query) => $query->whereIn('workspace_id', $selectedWorkspaceIds))
+            ->orderBy('title')
+            ->get(['id', 'title', 'workspace_id'])
+            ->map(fn (Note $note) => [
+                'id' => $note->id,
+                'title' => $note->title ?? 'Untitled',
+                'workspace_id' => $note->workspace_id,
+                'workspace_name' => $workspaceNamesById[$note->workspace_id] ?? null,
+            ])
+            ->values()
+            ->all();
+
+        $showWorkspacePrefixForNoteTree = $selectedWorkspaceIds === []
+            ? count($workspaceIds) > 1
+            : count($selectedWorkspaceIds) > 1;
+
+        $noteTreeOptions = $this->buildNoteTreeOptions(
+            $workspaceNamesById,
+            $notes,
+            $selectedWorkspaceIds,
+            $showWorkspacePrefixForNoteTree,
+        );
+
+        $journalNotes = Note::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->where('type', Note::TYPE_JOURNAL)
+            ->when($selectedWorkspaceIds !== [], fn ($query) => $query->whereIn('workspace_id', $selectedWorkspaceIds))
+            ->whereNotNull('journal_granularity')
+            ->whereNotNull('journal_date')
+            ->orderByDesc('journal_date')
+            ->get(['id', 'title', 'workspace_id', 'journal_granularity', 'journal_date']);
+
+        foreach ($workspaceScope as $wsId) {
+            $wsJournalNotes = $journalNotes->where('workspace_id', $wsId)->values();
+            if ($wsJournalNotes->isEmpty()) {
+                continue;
+            }
+
+            $journalRows = $this->buildJournalTreeOptions(
+                (string) $wsId,
+                $wsJournalNotes,
+                $showWorkspacePrefixForNoteTree ? ($workspaceNamesById[$wsId] ?? null) : null,
+            );
+            $noteTreeOptions = array_merge($noteTreeOptions, $journalRows);
+        }
+
+        return $noteTreeOptions;
     }
 
     /**

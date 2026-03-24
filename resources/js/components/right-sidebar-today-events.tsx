@@ -2,7 +2,6 @@ import { Link, router, usePage } from '@inertiajs/react';
 import { format, isValid, parseISO } from 'date-fns';
 import { enUS, nl } from 'date-fns/locale';
 import {
-    Check,
     FileText,
     MoreHorizontal,
     RotateCw,
@@ -27,6 +26,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useI18n } from '@/lib/i18n';
+import { TASK_CHECKBOX_STATUS_ICONS, resolveTaskCheckboxStatus } from '@/lib/task-status-icons';
 import {
     formatClockTime,
     formatClockTimeInTimeZone,
@@ -72,6 +72,7 @@ type RightSidebarTodayEventsProps = {
     isRefreshing?: boolean;
     className?: string;
 };
+
 
 function formatTimeRange(
     startsAt: string | null,
@@ -506,7 +507,7 @@ export function RightSidebarTodayEvents({
                 noteTitle={attachDialogNoteTitle}
             />
 
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1 pb-20">
                 {allDayEvents.length > 0 ? (
                     <ul className="mb-2 space-y-0.5">
                         {allDayEvents.map((event) => {
@@ -825,6 +826,16 @@ export function RightSidebarTodayEvents({
                             const isTimeblock = event.type === 'timeblock';
                             const hasLinkedTask =
                                 isTimeblock && !!event.task_block_id;
+                            const linkedTaskCheckboxStatus = hasLinkedTask
+                                ? resolveTaskCheckboxStatus(
+                                      event.task_status,
+                                      Boolean(event.task_checked),
+                                  )
+                                : null;
+                            const LinkedTaskStatusIcon =
+                                linkedTaskCheckboxStatus !== null
+                                    ? TASK_CHECKBOX_STATUS_ICONS[linkedTaskCheckboxStatus].icon
+                                    : null;
                             const isLinkedTaskCompleted =
                                 hasLinkedTask && Boolean(event.task_checked);
                             const { isActiveNow, hasPassed } =
@@ -833,9 +844,14 @@ export function RightSidebarTodayEvents({
                                     event.ends_at,
                                     now,
                                 );
+                            const isLinkedTaskDimmed =
+                                isLinkedTaskCompleted ||
+                                event.task_status === 'migrated' ||
+                                event.task_status === 'deferred' ||
+                                event.task_status === 'backlog';
                             const shouldDim =
                                 (isTimeblock && !hasLinkedTask && hasPassed) ||
-                                isLinkedTaskCompleted;
+                                isLinkedTaskDimmed;
                             const eventAccent = isTimeblock
                                 ? { className: timeblockAccent }
                                 : resolveAccentClassAndStyle(
@@ -1068,11 +1084,16 @@ export function RightSidebarTodayEvents({
                                                               )
                                                             : cn(
                                                                   checkboxBorderClass,
-                                                                  'bg-transparent text-transparent',
+                                                                  linkedTaskCheckboxStatus !== null && linkedTaskCheckboxStatus !== 'open'
+                                                                      ? checkboxAccentClass
+                                                                      : 'text-transparent',
+                                                                  'bg-transparent',
                                                               ),
                                                     )}
                                                 >
-                                                    <Check className="h-3.5 w-3.5 stroke-4" />
+                                                    {LinkedTaskStatusIcon ? (
+                                                        <LinkedTaskStatusIcon className="h-3.5 w-3.5" />
+                                                    ) : null}
                                                 </button>
                                             ) : (
                                                 <span

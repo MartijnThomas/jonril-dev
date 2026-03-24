@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import type { Editor } from '@tiptap/core';
-import { useEffect, useMemo, useState } from 'react';
+import { addDays, addMonths, addWeeks, format, getISOWeek, getISOWeekYear } from 'date-fns';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TaskMigratePicker } from '@/components/task-migrate-picker';
 import { BlockNodeToolbar } from '@/components/tiptap-templates/simple/block-tree/block-node-toolbar';
 import { BlockTaskActionsMenu } from '@/components/tiptap-templates/simple/block-tree/block-task-actions-menu';
@@ -305,14 +306,55 @@ export function useBlockEditorUi({
                     x={blockTaskActionsMenu.x}
                     y={blockTaskActionsMenu.y}
                     status={blockTaskActionsMenu.status}
-                    defaultMigrateTargets={linkableNotes
-                        .filter((note) => note.id !== noteId)
-                        .slice(0, 6)
-                        .map((note) => ({
-                            id: note.id,
-                            title: note.title,
-                            path: note.path,
-                        }))}
+                    defaultMigrateTargets={(() => {
+                        const today = new Date();
+                        const tomorrow = addDays(today, 1);
+                        const nextWeek = addWeeks(today, 1);
+                        const nextMonth = addMonths(today, 1);
+                        const isNl = language === 'nl';
+
+                        const dailyPeriod = (d: Date) => format(d, 'yyyy-MM-dd');
+                        const weekPeriod = (d: Date) => `${getISOWeekYear(d)}-W${String(getISOWeek(d)).padStart(2, '0')}`;
+                        const monthPeriod = (d: Date) => format(d, 'yyyy-MM');
+
+                        return [
+                            {
+                                key: `journal:daily:${dailyPeriod(today)}`,
+                                label: isNl ? 'Vandaag' : 'Today',
+                                subtitle: format(today, 'd MMM yyyy'),
+                                target_journal_granularity: 'daily',
+                                target_journal_period: dailyPeriod(today),
+                            },
+                            {
+                                key: `journal:daily:${dailyPeriod(tomorrow)}`,
+                                label: isNl ? 'Morgen' : 'Tomorrow',
+                                subtitle: format(tomorrow, 'd MMM yyyy'),
+                                target_journal_granularity: 'daily',
+                                target_journal_period: dailyPeriod(tomorrow),
+                            },
+                            {
+                                key: `journal:weekly:${weekPeriod(today)}`,
+                                label: isNl ? 'Deze week' : 'This week',
+                                subtitle: `Week ${getISOWeek(today)} ${getISOWeekYear(today)}`,
+                                target_journal_granularity: 'weekly',
+                                target_journal_period: weekPeriod(today),
+                            },
+                            {
+                                key: `journal:weekly:${weekPeriod(nextWeek)}`,
+                                label: isNl ? 'Volgende week' : 'Next week',
+                                subtitle: `Week ${getISOWeek(nextWeek)} ${getISOWeekYear(nextWeek)}`,
+                                target_journal_granularity: 'weekly',
+                                target_journal_period: weekPeriod(nextWeek),
+                            },
+                            {
+                                key: `journal:monthly:${monthPeriod(nextMonth)}`,
+                                label: isNl ? 'Volgende maand' : 'Next month',
+                                subtitle: format(nextMonth, 'MMMM yyyy'),
+                                target_journal_granularity: 'monthly',
+                                target_journal_period: monthPeriod(nextMonth),
+                            },
+                        ];
+                    })()}
                     onClose={() => {
                         setBlockTaskActionsMenu((current) => ({
                             ...current,
@@ -359,7 +401,7 @@ export function useBlockEditorUi({
                             },
                         });
                     }}
-                    onQuickMigrate={(targetNoteId) => {
+                    onQuickMigrate={(target) => {
                         const sourceNoteId = resolveSourceNoteId();
                         if (
                             sourceNoteId === null ||
@@ -375,9 +417,9 @@ export function useBlockEditorUi({
                                 source_note_id: sourceNoteId,
                                 block_id: blockTaskActionsMenu.blockId,
                                 position: blockTaskActionsMenu.pos,
-                                target_note_id: targetNoteId,
-                                target_journal_granularity: null,
-                                target_journal_period: null,
+                                target_note_id: target.target_note_id ?? null,
+                                target_journal_granularity: target.target_journal_granularity ?? null,
+                                target_journal_period: target.target_journal_period ?? null,
                             },
                             {
                                 preserveState: true,

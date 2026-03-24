@@ -1,5 +1,6 @@
 import { Link, router, usePage, useRemember } from '@inertiajs/react';
 import { ArrowRightToLine, Ban, Ellipsis, FileText } from 'lucide-react';
+import { resolveTaskCheckboxStatus } from '@/lib/task-status-icons';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -680,21 +681,7 @@ export function NoteRelatedPanel({
                                                                             <TaskToggleCheckbox
                                                                                 className="mt-1"
                                                                                 checked={task.checked}
-                                                                                status={
-                                                                                    task.task_status === 'canceled'
-                                                                                        ? 'canceled'
-                                                                                        : task.task_status === 'migrated'
-                                                                                          ? 'migrated'
-                                                                                          : task.task_status === 'in_progress'
-                                                                                            ? 'in_progress'
-                                                                                          : task.task_status === 'backlog'
-                                                                                            ? 'backlog'
-                                                                                          : task.task_status === 'assigned'
-                                                                                            ? 'assigned'
-                                                                                          : task.checked
-                                                                                            ? 'completed'
-                                                                                            : 'open'
-                                                                                }
+                                                                                status={resolveTaskCheckboxStatus(task.task_status, task.checked)}
                                                                                 disabled={
                                                                                     workspaceReadOnly ||
                                                                                     pendingTaskIds.includes(

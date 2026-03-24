@@ -110,7 +110,7 @@ type Props = {
     filters: Filters;
     filterPresets: FilterPreset[];
     workspaces: { id: string; name: string }[];
-    noteTreeOptions: {
+    noteTreeOptions?: {
         id: string;
         title: string;
         depth: number;
@@ -495,7 +495,7 @@ export default function TasksKanban({
     filters,
     filterPresets,
     workspaces,
-    noteTreeOptions,
+    noteTreeOptions = [],
 }: Props): JSX.Element {
     const { t } = useI18n();
     const page = usePage();
