@@ -1,6 +1,7 @@
 import { TaskItem } from '@tiptap/extension-list';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { addMonths, addWeeks, getISOWeek, getISOWeekYear } from 'date-fns';
 import {
     canLiftRegularListItemSafelyInTaskContext,
     canLiftCheckItemSafelyInTaskContext,
@@ -38,11 +39,17 @@ type TaskToken = {
 };
 
 const TASK_TOKEN_REGEX =
-    /(>>?)(\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}|[a-zA-Z]+)/g;
+    /(>>?)(\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}|\+\d+[WwMm]|[Ww]\d{1,2}-|[a-zA-Z]+(?:[-\s][a-zA-Z]+)?)/g;
 const HELPER_KEYWORDS = [
     'today',
     'tomorrow',
     'yesterday',
+    'this-week',
+    'next-week',
+    'this week',
+    'next week',
+    'this-month',
+    'next-month',
     'monday',
     'tuesday',
     'wednesday',
@@ -165,6 +172,136 @@ function resolveDateKeyword(keyword: string, now: Date): string | null {
     return null;
 }
 
+function normalizeIsoWeekToken(value: string): string | null {
+    const match = /^(?<year>\d{4})-[Ww](?<week>\d{1,2})$/.exec(value);
+    if (!match?.groups) {
+        return null;
+    }
+
+    const week = Number(match.groups.week);
+    const year = Number(match.groups.year);
+    if (week < 1 || week > 53) {
+        return null;
+    }
+
+    return `${String(year).padStart(4, '0')}-W${String(week).padStart(2, '0')}`;
+}
+
+function normalizeIsoMonthToken(value: string): string | null {
+    const match = /^(?<year>\d{4})-(?<month>\d{1,2})$/.exec(value);
+    if (!match?.groups) {
+        return null;
+    }
+
+    const month = Number(match.groups.month);
+    const year = Number(match.groups.year);
+    if (month < 1 || month > 12) {
+        return null;
+    }
+
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+}
+
+function toIsoWeekToken(date: Date): string {
+    const isoYear = getISOWeekYear(date);
+    const isoWeek = getISOWeek(date);
+
+    return `${String(isoYear).padStart(4, '0')}-W${String(isoWeek).padStart(2, '0')}`;
+}
+
+function toIsoMonthToken(date: Date): string {
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+}
+
+function resolveNearestWeekToken(value: string, now: Date): string | null {
+    const match = /^[Ww](?<week>\d{1,2})-$/.exec(value);
+    if (!match?.groups) {
+        return null;
+    }
+
+    const targetWeek = Number(match.groups.week);
+    if (targetWeek < 1 || targetWeek > 53) {
+        return null;
+    }
+
+    const currentIsoWeek = getISOWeek(now);
+    const currentIsoYear = getISOWeekYear(now);
+    const resolvedYear = currentIsoWeek <= targetWeek ? currentIsoYear : currentIsoYear + 1;
+
+    return `${String(resolvedYear).padStart(4, '0')}-W${String(targetWeek).padStart(2, '0')}`;
+}
+
+function resolveOffsetToken(value: string, now: Date): string | null {
+    const match = /^\+(?<amount>\d+)(?<unit>[WwMm])$/.exec(value);
+    if (!match?.groups) {
+        return null;
+    }
+
+    const amount = Number(match.groups.amount);
+    if (!Number.isFinite(amount) || amount < 1) {
+        return null;
+    }
+
+    const unit = match.groups.unit.toLowerCase();
+    if (unit === 'w') {
+        return toIsoWeekToken(addWeeks(now, amount));
+    }
+
+    if (unit === 'm') {
+        return toIsoMonthToken(addMonths(now, amount));
+    }
+
+    return null;
+}
+
+function resolveTaskTokenValue(value: string, now: Date): string | null {
+    if (isValidIsoDate(value)) {
+        return value;
+    }
+
+    const normalizedWeek = normalizeIsoWeekToken(value);
+    if (normalizedWeek) {
+        return normalizedWeek;
+    }
+
+    const normalizedMonth = normalizeIsoMonthToken(value);
+    if (normalizedMonth) {
+        return normalizedMonth;
+    }
+
+    const nearestWeek = resolveNearestWeekToken(value, now);
+    if (nearestWeek) {
+        return nearestWeek;
+    }
+
+    const offsetValue = resolveOffsetToken(value, now);
+    if (offsetValue) {
+        return offsetValue;
+    }
+
+    const normalized = value.toLowerCase().replace(/\s+/g, '-');
+    if (normalized === 'this-week') {
+        return toIsoWeekToken(now);
+    }
+
+    if (normalized === 'next-week') {
+        return toIsoWeekToken(addWeeks(now, 1));
+    }
+
+    if (normalized === 'this-month') {
+        return toIsoMonthToken(now);
+    }
+
+    if (normalized === 'next-month') {
+        return toIsoMonthToken(addMonths(now, 1));
+    }
+
+    return resolveDateKeyword(normalized, now);
+}
+
 function formatLocalizedDate(isoDate: string, localeTag: string): string {
     if (!isValidIsoDate(isoDate)) {
         return isoDate;
@@ -264,9 +401,7 @@ function parseTaskDates(text: string): ParsedTaskDates {
 
     for (const token of parseTaskTokens(text)) {
         const lowerValue = token.value.toLowerCase();
-        const resolvedValue = isValidIsoDate(token.value)
-            ? token.value
-            : resolveDateKeyword(token.value, now);
+        const resolvedValue = resolveTaskTokenValue(token.value, now);
 
         if (!resolvedValue) {
             continue;
@@ -320,7 +455,7 @@ function isInsideTaskItem(doc: any, pos: number): boolean {
 }
 
 function findHelperSuggestion(textBeforeCursor: string): string | null {
-    const helperMatch = /(?:^|\s)(>>?)([a-zA-Z]+)$/.exec(textBeforeCursor);
+    const helperMatch = /(?:^|\s)(>>?)([a-zA-Z]+(?:[-\s][a-zA-Z]*)?)$/.exec(textBeforeCursor);
     if (!helperMatch) {
         return null;
     }
@@ -398,7 +533,7 @@ function getHelperTokenAtSelection(state: any): HelperTokenAtSelection | null {
 
         const localOffset = from - pos;
         const textBeforeCursor = node.text.slice(0, localOffset);
-        const helperMatch = /(?:^|\s)(>>?)([a-zA-Z]+)$/.exec(textBeforeCursor);
+        const helperMatch = /(?:^|\s)(>>?)([a-zA-Z]+(?:[-\s][a-zA-Z]*)?)$/.exec(textBeforeCursor);
         if (!helperMatch) {
             return;
         }
@@ -1036,15 +1171,11 @@ export const TaskItemWithDates = TaskItem.extend({
                     const now = new Date();
 
                     for (const token of parseTaskTokens(text)) {
-                        const lowerValue = token.value.toLowerCase();
-                        if (
-                            lowerValue === 'today' ||
-                            isValidIsoDate(token.value)
-                        ) {
+                        if (isValidIsoDate(token.value) || isIsoWeekToken(token.value) || isIsoMonthToken(token.value)) {
                             continue;
                         }
 
-                        const resolved = resolveDateKeyword(token.value, now);
+                        const resolved = resolveTaskTokenValue(token.value, now);
                         if (!resolved) {
                             continue;
                         }

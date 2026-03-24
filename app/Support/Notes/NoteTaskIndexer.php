@@ -7,6 +7,7 @@ use App\Models\NoteTask;
 use App\Models\Workspace;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\CarbonInterface;
 use Throwable;
 
 class NoteTaskIndexer
@@ -59,6 +60,12 @@ class NoteTaskIndexer
                 $fallbackDates = $this->extractDatesFromText($text);
 
                 $attrs = Arr::get($taskItem, 'attrs', []);
+                $dueDateFromAttrs = $this->normalizeTaskDateValue(
+                    Arr::get($attrs, 'dueDate'),
+                );
+                $deadlineDateFromAttrs = $this->normalizeTaskDateValue(
+                    Arr::get($attrs, 'deadlineDate'),
+                );
                 $priorityFromAttrs = $this->normalizePriority(
                     Arr::get($attrs, 'priority'),
                 );
@@ -114,10 +121,10 @@ class NoteTaskIndexer
                     'content_text' => $text,
                     'render_fragments' => json_encode($fragments),
                     'children' => json_encode($children),
-                    'due_date' => $this->normalizeIsoDateValue(Arr::get($attrs, 'dueDate')) ?? $fallbackDates['due_date'],
-                    'deadline_date' => $this->normalizeIsoDateValue(Arr::get($attrs, 'deadlineDate')) ?? $fallbackDates['deadline_date'],
-                    'due_date_token' => $fallbackDates['due_date_token'],
-                    'deadline_date_token' => $fallbackDates['deadline_date_token'],
+                    'due_date' => $dueDateFromAttrs['date'] ?? $fallbackDates['due_date'],
+                    'deadline_date' => $deadlineDateFromAttrs['date'] ?? $fallbackDates['deadline_date'],
+                    'due_date_token' => $dueDateFromAttrs['token'] ?? $fallbackDates['due_date_token'],
+                    'deadline_date_token' => $deadlineDateFromAttrs['token'] ?? $fallbackDates['deadline_date_token'],
                     'journal_date' => $note->type === Note::TYPE_JOURNAL && $note->journal_granularity === Note::JOURNAL_DAILY
                         ? $note->journal_date
                         : null,
@@ -348,6 +355,12 @@ class NoteTaskIndexer
         }
 
         $attrs = Arr::get($itemNode, 'attrs', []);
+        $dueDateFromAttrs = $this->normalizeTaskDateValue(
+            Arr::get($attrs, 'dueDate'),
+        );
+        $deadlineDateFromAttrs = $this->normalizeTaskDateValue(
+            Arr::get($attrs, 'deadlineDate'),
+        );
         $itemType = (string) ($itemNode['type'] ?? '');
 
         return [
@@ -361,8 +374,10 @@ class NoteTaskIndexer
             'render_fragments' => $fragments,
             'mentions' => array_values(array_unique($mentions)),
             'hashtags' => array_values(array_unique($hashtags)),
-            'due_date' => Arr::get($attrs, 'dueDate') ?? $fallbackDates['due_date'],
-            'deadline_date' => Arr::get($attrs, 'deadlineDate') ?? $fallbackDates['deadline_date'],
+            'due_date' => $dueDateFromAttrs['date'] ?? $fallbackDates['due_date'],
+            'deadline_date' => $deadlineDateFromAttrs['date'] ?? $fallbackDates['deadline_date'],
+            'due_date_token' => $dueDateFromAttrs['token'] ?? $fallbackDates['due_date_token'],
+            'deadline_date_token' => $deadlineDateFromAttrs['token'] ?? $fallbackDates['deadline_date_token'],
             'children' => $nestedChildren,
         ];
     }
@@ -647,7 +662,9 @@ class NoteTaskIndexer
             $text = substr($text, $consumedLength) ?: '';
         }
 
-        if (! preg_match('/(>>(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2})|>(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}))/', $text)) {
+        $tokenPattern = '(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}|\+\d+[WwMm]|[Ww]\d{1,2}-|[a-zA-Z]+(?:[-\s][a-zA-Z]+)?)';
+
+        if (! preg_match("/(>>{$tokenPattern}|>{$tokenPattern})/", $text)) {
             if ($text !== '') {
                 $leadingFragments[] = [
                     'type' => 'text',
@@ -659,7 +676,7 @@ class NoteTaskIndexer
         }
 
         $parts = preg_split(
-            '/(>>(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2})|>(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}))/',
+            "/(>>{$tokenPattern}|>{$tokenPattern})/",
             $text,
             -1,
             PREG_SPLIT_DELIM_CAPTURE,
@@ -744,7 +761,8 @@ class NoteTaskIndexer
             'deadline_date_token' => null,
         ];
 
-        if (preg_match_all('/(^|\s)(>>|>)(\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2})(?=\s|$)/', $text, $matches, PREG_SET_ORDER)) {
+        $tokenPattern = '(?:\d{4}-\d{2}-\d{2}|\d{4}-[Ww]\d{1,2}|\d{4}-\d{1,2}|\+\d+[WwMm]|[Ww]\d{1,2}-|[a-zA-Z]+(?:[-\s][a-zA-Z]+)?)';
+        if (preg_match_all("/(^|\\s)(>>|>)({$tokenPattern})(?=\\s|$)/", $text, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $prefix = $match[2] ?? null;
                 $dateValue = trim((string) ($match[3] ?? ''));
@@ -804,6 +822,71 @@ class NoteTaskIndexer
             return sprintf('%04d-%02d', (int) $matches['year'], $month);
         }
 
+        if (preg_match('/^[Ww](?<week>\d{1,2})-$/', $normalized, $matches)) {
+            $week = (int) ($matches['week'] ?? 0);
+            if ($week < 1 || $week > 53) {
+                return null;
+            }
+
+            $now = Carbon::now();
+            $currentWeek = $now->isoWeek();
+            $year = $currentWeek <= $week
+                ? $now->isoWeekYear()
+                : $now->copy()->addYear()->isoWeekYear();
+
+            return sprintf('%04d-W%02d', $year, $week);
+        }
+
+        if (preg_match('/^\+(?<amount>\d+)(?<unit>[WwMm])$/', $normalized, $matches)) {
+            $amount = (int) ($matches['amount'] ?? 0);
+            $unit = strtolower((string) ($matches['unit'] ?? ''));
+
+            if ($amount < 1) {
+                return null;
+            }
+
+            $now = Carbon::now();
+            if ($unit === 'w') {
+                $target = $now->copy()->addWeeks($amount);
+
+                return sprintf('%04d-W%02d', $target->isoWeekYear(), $target->isoWeek());
+            }
+
+            if ($unit === 'm') {
+                $target = $now->copy()->addMonths($amount);
+
+                return sprintf('%04d-%02d', (int) $target->year, (int) $target->month);
+            }
+        }
+
+        $keyword = str_replace(' ', '-', strtolower($normalized));
+        $now = Carbon::now();
+
+        if ($keyword === 'this-week') {
+            return sprintf('%04d-W%02d', $now->isoWeekYear(), $now->isoWeek());
+        }
+
+        if ($keyword === 'next-week') {
+            $target = $now->copy()->addWeek();
+
+            return sprintf('%04d-W%02d', $target->isoWeekYear(), $target->isoWeek());
+        }
+
+        if ($keyword === 'this-month') {
+            return sprintf('%04d-%02d', (int) $now->year, (int) $now->month);
+        }
+
+        if ($keyword === 'next-month') {
+            $target = $now->copy()->addMonth();
+
+            return sprintf('%04d-%02d', (int) $target->year, (int) $target->month);
+        }
+
+        $dateKeyword = $this->resolveDateKeyword($keyword, $now);
+        if ($dateKeyword !== null) {
+            return $dateKeyword->toDateString();
+        }
+
         return null;
     }
 
@@ -842,6 +925,51 @@ class NoteTaskIndexer
         }
 
         return $normalized;
+    }
+
+    /**
+     * @return array{date: string|null, token: string|null}
+     */
+    private function normalizeTaskDateValue(mixed $value): array
+    {
+        $normalized = $this->normalizeSupportedTaskDateToken(trim((string) $value));
+        if ($normalized === null) {
+            return ['date' => null, 'token' => null];
+        }
+
+        if ($this->isIsoDateToken($normalized)) {
+            return ['date' => $normalized, 'token' => null];
+        }
+
+        return ['date' => null, 'token' => $normalized];
+    }
+
+    private function resolveDateKeyword(string $keyword, CarbonInterface $now): ?CarbonInterface
+    {
+        return match ($keyword) {
+            'today' => $now,
+            'tomorrow' => $now->copy()->addDay(),
+            'yesterday' => $now->copy()->subDay(),
+            'monday', 'mon' => $this->nextWeekday($now, 1),
+            'tuesday', 'tue' => $this->nextWeekday($now, 2),
+            'wednesday', 'wed' => $this->nextWeekday($now, 3),
+            'thursday', 'thu' => $this->nextWeekday($now, 4),
+            'friday', 'fri' => $this->nextWeekday($now, 5),
+            'saturday', 'sat' => $this->nextWeekday($now, 6),
+            'sunday', 'sun' => $this->nextWeekday($now, 7),
+            default => null,
+        };
+    }
+
+    private function nextWeekday(CarbonInterface $now, int $targetIsoWeekday): CarbonInterface
+    {
+        $currentIsoWeekday = $now->dayOfWeekIso;
+        $diff = ($targetIsoWeekday - $currentIsoWeekday + 7) % 7;
+        if ($diff === 0) {
+            $diff = 7;
+        }
+
+        return $now->copy()->addDays($diff);
     }
 
     private function extractPriorityFromText(string $text): ?string

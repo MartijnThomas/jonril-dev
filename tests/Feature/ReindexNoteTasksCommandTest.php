@@ -2,6 +2,7 @@
 
 use App\Models\NoteTask;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -451,4 +452,129 @@ test('reindex tasks command stores week and month tokens from block editor task 
     expect(
         NoteTask::query()->where('note_id', $noteId)->where('block_id', 'block-month-token')->value('deadline_date'),
     )->toBeNull();
+});
+
+test('reindex tasks command resolves helper date tokens to canonical week and month tokens', function () {
+    Carbon::setTestNow('2026-03-22 10:00:00');
+
+    $user = User::factory()->create();
+    $workspace = $user->currentWorkspace();
+
+    $noteId = (string) Str::uuid();
+
+    DB::table('notes')->insert([
+        'id' => $noteId,
+        'workspace_id' => $workspace?->id,
+        'title' => 'Helper token note',
+        'type' => 'note',
+        'content' => json_encode([
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'helper-this-week',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Task >this-week'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'helper-next-week',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Task >next week'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'helper-nearest-week',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Task >W13-'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'helper-plus-weeks',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Task >+6w'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'helper-this-month',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Task >>this-month'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'helper-next-month',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Task >>next-month'],
+                    ],
+                ],
+                [
+                    'type' => 'paragraph',
+                    'attrs' => [
+                        'id' => 'helper-plus-month',
+                        'blockStyle' => 'task',
+                        'checked' => false,
+                    ],
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Task >+1m'],
+                    ],
+                ],
+            ],
+        ]),
+        'properties' => json_encode([]),
+        'parent_id' => null,
+        'slug' => 'helper-token-note',
+        'journal_granularity' => null,
+        'journal_date' => null,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->artisan('notes:reindex-tasks')->assertSuccessful();
+
+    expect(NoteTask::query()->where('note_id', $noteId)->where('block_id', 'helper-this-week')->value('due_date_token'))
+        ->toBe('2026-W12');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('block_id', 'helper-next-week')->value('due_date_token'))
+        ->toBe('2026-W13');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('block_id', 'helper-nearest-week')->value('due_date_token'))
+        ->toBe('2026-W13');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('block_id', 'helper-plus-weeks')->value('due_date_token'))
+        ->toBe('2026-W18');
+
+    expect(NoteTask::query()->where('note_id', $noteId)->where('block_id', 'helper-this-month')->value('deadline_date_token'))
+        ->toBe('2026-03');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('block_id', 'helper-next-month')->value('deadline_date_token'))
+        ->toBe('2026-04');
+    expect(NoteTask::query()->where('note_id', $noteId)->where('block_id', 'helper-plus-month')->value('due_date_token'))
+        ->toBe('2026-04');
+
+    Carbon::setTestNow();
 });

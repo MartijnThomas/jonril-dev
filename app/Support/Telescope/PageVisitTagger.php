@@ -29,6 +29,14 @@ class PageVisitTagger
             return ['page-visit', 'page:settings'];
         }
 
+        if ($path === '/tasks' || str_starts_with($path, '/tasks/')) {
+            if (str_starts_with($path, '/tasks/kanban')) {
+                return ['page-visit', 'page:kanban'];
+            }
+
+            return ['page-visit', 'page:tasks'];
+        }
+
         return ['page-visit'];
     }
 
@@ -43,12 +51,12 @@ class PageVisitTagger
             return false;
         }
 
-        if (self::isInertiaPartialRequest($entry)) {
+        $method = strtoupper((string) data_get($entry->content, 'method', ''));
+        if ($method !== 'GET') {
             return false;
         }
 
-        $method = strtoupper((string) data_get($entry->content, 'method', ''));
-        if ($method !== 'GET') {
+        if (self::isInertiaPartialRequest($entry)) {
             return false;
         }
 
@@ -62,8 +70,11 @@ class PageVisitTagger
             return true;
         }
 
-        if (! str_starts_with($path, '/settings/')) {
-            return false;
+        if ($path === '/tasks' || str_starts_with($path, '/tasks/')) {
+            return preg_match(
+                '#^/tasks(?:/kanban)?$#',
+                $path,
+            ) === 1;
         }
 
         return preg_match(

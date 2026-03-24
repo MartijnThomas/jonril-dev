@@ -14,17 +14,23 @@ function makeRequestEntry(string $method, string $uri, array $headers = []): Inc
     ])->type(EntryType::REQUEST);
 }
 
-test('it tags note show, journal show and settings page visits', function (): void {
+test('it tags note show, journal show, settings, tasks and kanban page visits', function (): void {
     $note = makeRequestEntry('GET', '/notes/019cf580-9d17-73b6-9eb0-26c883f09e74');
     $journal = makeRequestEntry('GET', '/journal/2026-03-18');
     $journalScoped = makeRequestEntry('GET', '/w/bullet-journal-2/journal/2026-03-18');
     $settings = makeRequestEntry('GET', '/settings/profile');
+    $tasks = makeRequestEntry('GET', '/tasks');
+    $kanban = makeRequestEntry('GET', '/tasks/kanban');
 
     expect(PageVisitTagger::tagsFor($note))->toContain('page-visit', 'page:note-show');
     expect(PageVisitTagger::tagsFor($journal))->toContain('page-visit', 'page:journal-show');
     expect(PageVisitTagger::tagsFor($journalScoped))->toContain('page-visit', 'page:journal-show');
     expect(PageVisitTagger::tagsFor($settings))->toContain('page-visit', 'page:settings');
     expect(PageVisitTagger::shouldRecordInProduction($settings))->toBeTrue();
+    expect(PageVisitTagger::tagsFor($tasks))->toContain('page-visit', 'page:tasks');
+    expect(PageVisitTagger::shouldRecordInProduction($tasks))->toBeTrue();
+    expect(PageVisitTagger::tagsFor($kanban))->toContain('page-visit', 'page:kanban');
+    expect(PageVisitTagger::shouldRecordInProduction($kanban))->toBeTrue();
 });
 
 test('it does not tag async backend requests', function (): void {
