@@ -1,13 +1,16 @@
-import { Deferred, Head } from '@inertiajs/react';
+import { Deferred, Head, router } from '@inertiajs/react';
 import {
     CheckCircle2,
     Clock3,
     Database,
     HardDrive,
+    Loader2,
+    RefreshCw,
     TriangleAlert,
     XCircle,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { refreshBackups } from '@/actions/App/Http/Controllers/Settings/AdminOperationsController';
+import { useMemo, useState } from 'react';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -73,9 +76,15 @@ type BackupProfileItem = {
     stale_after_minutes: number;
 };
 
+type BackupProfilesData = {
+    status: 'pending' | 'refreshing' | 'ready';
+    cached_at: string | null;
+    profiles: BackupProfileItem[];
+};
+
 type Props = {
     scheduledHealth?: ScheduledHealthItem[];
-    backupProfiles?: BackupProfileItem[];
+    backupProfiles?: BackupProfilesData;
     timeblockSyncMetrics?: {
         total: number;
         pending: number;
@@ -186,7 +195,7 @@ function statusBadgeClass(status: string): string | undefined {
 
 export default function AdminOperations({
     scheduledHealth = [],
-    backupProfiles = [],
+    backupProfiles = { status: 'pending', cached_at: null, profiles: [] },
     timeblockSyncMetrics = {
         total: 0,
         pending: 0,
@@ -222,6 +231,7 @@ export default function AdminOperations({
     },
 }: Props) {
     const { t } = useI18n();
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const breadcrumbs: BreadcrumbItem[] = useMemo(
         () => [
@@ -233,19 +243,33 @@ export default function AdminOperations({
         [t],
     );
 
-    const totalBackups = backupProfiles.reduce(
+    const backupProfileList = backupProfiles.profiles;
+
+    const totalBackups = backupProfileList.reduce(
         (sum, profile) => sum + profile.total_backups,
         0,
     );
-    const totalBackupStorage = backupProfiles.reduce(
+    const totalBackupStorage = backupProfileList.reduce(
         (sum, profile) => sum + profile.total_size_bytes,
         0,
     );
     const latestBackupAt =
-        backupProfiles
+        backupProfileList
             .map((profile) => profile.latest_backup_at)
             .filter((value): value is string => typeof value === 'string')
             .sort((a, b) => b.localeCompare(a))[0] ?? null;
+
+    function handleRefreshBackups() {
+        setIsRefreshing(true);
+        router.post(
+            refreshBackups.url(),
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setIsRefreshing(false),
+            },
+        );
+    }
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head
@@ -489,21 +513,51 @@ export default function AdminOperations({
 
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-base">
-                                    {t(
-                                        'settings_operations.backups_title',
-                                        'Backups',
-                                    )}
-                                </CardTitle>
-                                <CardDescription>
-                                    {t(
-                                        'settings_operations.backups_description',
-                                        'Daily full backup and hourly database backup profiles.',
-                                    )}
-                                </CardDescription>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <CardTitle className="text-base">
+                                            {t(
+                                                'settings_operations.backups_title',
+                                                'Backups',
+                                            )}
+                                        </CardTitle>
+                                        <CardDescription>
+                                            {t(
+                                                'settings_operations.backups_description',
+                                                'Daily full backup and hourly database backup profiles.',
+                                            )}
+                                        </CardDescription>
+                                    </div>
+                                    <div className="flex shrink-0 flex-col items-end gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={handleRefreshBackups}
+                                            disabled={isRefreshing || backupProfiles.status === 'refreshing'}
+                                            className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                                        >
+                                            {isRefreshing || backupProfiles.status === 'refreshing' ? (
+                                                <Loader2 className="size-3 animate-spin" />
+                                            ) : (
+                                                <RefreshCw className="size-3" />
+                                            )}
+                                            {t('settings_operations.refresh', 'Refresh')}
+                                        </button>
+                                        {backupProfiles.cached_at ? (
+                                            <p className="text-[11px] text-muted-foreground/60">
+                                                {t('settings_operations.cached_at', 'Updated')}{' '}
+                                                {formatDate(backupProfiles.cached_at)}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                {backupProfiles.map((profile) => (
+                                {backupProfiles.status === 'pending' && backupProfileList.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {t('settings_operations.backups_pending', 'Backup data is being collected, check back in a moment.')}
+                                    </p>
+                                ) : null}
+                                {backupProfileList.map((profile) => (
                                     <div
                                         key={profile.key}
                                         className="space-y-3 rounded-lg border p-3"

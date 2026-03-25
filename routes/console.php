@@ -53,6 +53,12 @@ $track(
 $shouldScheduleBackups = ! app()->environment('local');
 
 if ($shouldScheduleBackups) {
+    Schedule::job(\App\Jobs\RefreshBackupProfilesCacheJob::class)
+        ->everyFiveMinutes()
+        ->timezone('Europe/Amsterdam')
+        ->name('refresh_backup_profiles_cache')
+        ->withoutOverlapping();
+
     $track(
         Schedule::command('backup:clean')->daily()->at('05:45')->timezone('Europe/Amsterdam')->pingOnSuccessIf(app()->environment('production'), 'https://heartbeats.laravel.com/01kmb54vkwbjbw8g5rya18z3da/ping'),
         'backup_clean_full',

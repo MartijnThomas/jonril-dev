@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\TriggerAdminMaintenanceCommandRequest;
+use App\Jobs\RefreshBackupProfilesCacheJob;
 use App\Jobs\RunAdminMaintenanceCommandJob;
 use App\Models\Calendar;
 use App\Models\NoteImage;
 use App\Models\TimeblockCalendarLink;
 use App\Models\WorkspaceDailyIndicator;
 use App\Models\WorkspaceDailySignal;
+use App\Support\System\BackupProfilesCache;
 use App\Support\System\ScheduledCommandHealthStore;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -20,9 +22,6 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
-use Spatie\Backup\BackupDestination\BackupDestination;
-use Spatie\Backup\BackupDestination\BackupDestinationFactory;
-use Spatie\Backup\Config\Config as BackupConfig;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class AdminOperationsController extends Controller
@@ -299,98 +298,28 @@ class AdminOperationsController extends Controller
             ->all();
     }
 
+    public function refreshBackups(Request $request): HttpResponse
+    {
+        $this->assertAdmin($request);
+
+        BackupProfilesCache::markRefreshing();
+        RefreshBackupProfilesCacheJob::dispatch();
+
+        return back(303);
+    }
+
     /**
-     * @return array<int, array<string, mixed>>
+     * @return array{status: string, cached_at: string|null, profiles: array<int, array<string, mixed>>}
      */
     private function backupProfiles(): array
     {
-        return collect(config('system-health.backup_profiles', []))
-            ->filter(fn ($item): bool => is_array($item))
-            ->map(function (array $profile, string $key): array {
-                $configKey = (string) ($profile['config'] ?? 'backup');
-                $profileConfig = config($configKey);
-                $label = (string) ($profile['label'] ?? $key);
-                $commandKey = (string) ($profile['command_key'] ?? '');
-                $staleAfterMinutes = max(1, (int) ($profile['stale_after_minutes'] ?? 120));
+        $cached = BackupProfilesCache::get();
 
-                if (! is_array($profileConfig)) {
-                    return [
-                        'key' => $key,
-                        'label' => $label,
-                        'config' => $configKey,
-                        'error' => "Missing config key [{$configKey}]",
-                        'destinations' => [],
-                        'latest_backup_at' => null,
-                        'latest_backup_size_bytes' => null,
-                        'total_backups' => 0,
-                        'total_size_bytes' => 0,
-                        'health_state' => 'error',
-                        'stale_after_minutes' => $staleAfterMinutes,
-                        'tracked_command_key' => $commandKey !== '' ? $commandKey : null,
-                    ];
-                }
+        if ($cached['status'] === 'pending') {
+            RefreshBackupProfilesCacheJob::dispatch();
+        }
 
-                $destinations = BackupDestinationFactory::createFromArray(
-                    BackupConfig::fromArray($profileConfig)
-                );
-
-                $mappedDestinations = $destinations
-                    ->map(function (BackupDestination $destination): array {
-                        $backups = $destination->backups();
-                        $newest = $destination->newestBackup();
-                        $oldest = $destination->oldestBackup();
-                        $recentBackups = $backups
-                            ->take(20)
-                            ->map(fn ($backup): array => [
-                                'path' => $backup->path(),
-                                'size_bytes' => (int) $backup->sizeInBytes(),
-                                'date' => $backup->date()->toIso8601String(),
-                            ])
-                            ->values()
-                            ->all();
-
-                        return [
-                            'disk' => $destination->diskName(),
-                            'backup_name' => $destination->backupName(),
-                            'reachable' => $destination->isReachable(),
-                            'connection_error' => $destination->connectionError()?->getMessage(),
-                            'count' => $backups->count(),
-                            'size_bytes' => (int) $destination->usedStorage(),
-                            'newest_backup_at' => $newest?->date()->toIso8601String(),
-                            'newest_backup_size_bytes' => $newest ? (int) $newest->sizeInBytes() : null,
-                            'oldest_backup_at' => $oldest?->date()->toIso8601String(),
-                            'oldest_backup_size_bytes' => $oldest ? (int) $oldest->sizeInBytes() : null,
-                            'recent_backups' => $recentBackups,
-                        ];
-                    })
-                    ->values();
-
-                $latestBackup = $mappedDestinations
-                    ->flatMap(fn (array $destination): array => $destination['recent_backups'])
-                    ->sortByDesc(fn (array $backup): string => (string) $backup['date'])
-                    ->first();
-                $healthState = $this->resolveBackupHealthState(
-                    latestBackupAt: $latestBackup['date'] ?? null,
-                    destinations: $mappedDestinations->all(),
-                    staleAfterMinutes: $staleAfterMinutes,
-                );
-
-                return [
-                    'key' => $key,
-                    'label' => $label,
-                    'config' => $configKey,
-                    'tracked_command_key' => $commandKey !== '' ? $commandKey : null,
-                    'destinations' => $mappedDestinations->all(),
-                    'latest_backup_at' => $latestBackup['date'] ?? null,
-                    'latest_backup_size_bytes' => $latestBackup['size_bytes'] ?? null,
-                    'total_backups' => $mappedDestinations->sum(fn (array $item): int => (int) $item['count']),
-                    'total_size_bytes' => $mappedDestinations->sum(fn (array $item): int => (int) $item['size_bytes']),
-                    'health_state' => $healthState,
-                    'stale_after_minutes' => $staleAfterMinutes,
-                ];
-            })
-            ->values()
-            ->all();
+        return $cached;
     }
 
     /**
@@ -543,30 +472,6 @@ class AdminOperationsController extends Controller
         }
 
         if ($lastSuccess->lt(now()->subMinutes($staleAfterMinutes))) {
-            return 'stale';
-        }
-
-        return 'healthy';
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $destinations
-     */
-    private function resolveBackupHealthState(mixed $latestBackupAt, array $destinations, int $staleAfterMinutes): string
-    {
-        $hasUnreachableDestination = collect($destinations)
-            ->contains(fn (array $destination): bool => ($destination['reachable'] ?? false) !== true);
-
-        if ($hasUnreachableDestination) {
-            return 'error';
-        }
-
-        $latest = $this->parseTimestamp($latestBackupAt);
-        if (! $latest) {
-            return 'stale';
-        }
-
-        if ($latest->lt(now()->subMinutes($staleAfterMinutes))) {
             return 'stale';
         }
 

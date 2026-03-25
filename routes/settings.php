@@ -46,6 +46,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('settings.admin.maintenance');
     Route::post('settings/admin/operations/maintenance', [AdminOperationsController::class, 'trigger'])
         ->name('settings.admin.operations.maintenance.trigger');
+    Route::post('settings/admin/operations/backups/refresh', [AdminOperationsController::class, 'refreshBackups'])
+        ->name('settings.admin.operations.backups.refresh');
 
     Route::get('settings/workspaces/{workspace}', [WorkspaceController::class, 'edit'])
         ->name('workspaces.settings.edit');

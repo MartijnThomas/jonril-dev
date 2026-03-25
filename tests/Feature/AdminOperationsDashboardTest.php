@@ -1,10 +1,12 @@
 <?php
 
+use App\Jobs\RefreshBackupProfilesCacheJob;
 use App\Models\Calendar;
 use App\Models\CalendarConnection;
 use App\Models\NoteImage;
 use App\Models\TimeblockCalendarLink;
 use App\Models\User;
+use App\Support\System\BackupProfilesCache;
 use App\Support\System\ScheduledCommandHealthStore;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
@@ -23,6 +25,8 @@ test('admin can view operations dashboard with metrics', function (): void {
 
     Storage::disk('backups')->put('app-full/2026-03-21-06-00-00.zip', 'full-backup');
     Storage::disk('backups')->put('app-hourly-db/2026-03-21-09-15-00.zip', 'hourly-db-backup');
+
+    BackupProfilesCache::refresh();
 
     ScheduledCommandHealthStore::markSuccess('backup_run_full', [
         'label' => 'Backup run (full)',
@@ -79,7 +83,8 @@ test('admin can view operations dashboard with metrics', function (): void {
         ->assertInertia(fn (Assert $page) => $page
             ->component('settings/admin-operations')
             ->loadDeferredProps('operations-backups', fn (Assert $deferred) => $deferred
-                ->has('backupProfiles', 2)
+                ->where('backupProfiles.status', 'ready')
+                ->has('backupProfiles.profiles', 2)
             )
             ->loadDeferredProps('operations-scheduled', fn (Assert $deferred) => $deferred
                 ->has('scheduledHealth')
@@ -240,6 +245,8 @@ test('backup profile health states are derived correctly', function (): void {
         ],
     ]);
 
+    BackupProfilesCache::refresh();
+
     $admin = User::factory()->create(['role' => 'admin']);
 
     $this
@@ -247,7 +254,8 @@ test('backup profile health states are derived correctly', function (): void {
         ->get(route('settings.admin.operations', absolute: false))
         ->assertInertia(fn (Assert $page) => $page
             ->loadDeferredProps('operations-backups', fn (Assert $deferred) => $deferred
-                ->where('backupProfiles', function ($profiles): bool {
+                ->where('backupProfiles.status', 'ready')
+                ->where('backupProfiles.profiles', function ($profiles): bool {
                     $states = collect($profiles)->mapWithKeys(
                         fn (array $profile): array => [(string) $profile['key'] => (string) $profile['health_state']]
                     );
@@ -256,6 +264,51 @@ test('backup profile health states are derived correctly', function (): void {
                         && $states->get('stale') === 'stale'
                         && $states->get('error') === 'error';
                 })));
+});
+
+test('backup profiles deferred prop returns pending state and dispatches job when cache is cold', function (): void {
+    Queue::fake();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this
+        ->actingAs($admin)
+        ->get(route('settings.admin.operations', absolute: false))
+        ->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps('operations-backups', fn (Assert $deferred) => $deferred
+                ->where('backupProfiles.status', 'pending')
+                ->where('backupProfiles.cached_at', null)
+                ->has('backupProfiles.profiles', 0)
+            )
+        );
+
+    Queue::assertPushed(RefreshBackupProfilesCacheJob::class);
+});
+
+test('admin can refresh backup profiles cache', function (): void {
+    Queue::fake();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this
+        ->actingAs($admin)
+        ->post(route('settings.admin.operations.backups.refresh', absolute: false))
+        ->assertRedirect();
+
+    Queue::assertPushed(RefreshBackupProfilesCacheJob::class);
+});
+
+test('non admin cannot refresh backup profiles cache', function (): void {
+    Queue::fake();
+
+    $user = User::factory()->create(['role' => 'user']);
+
+    $this
+        ->actingAs($user)
+        ->post(route('settings.admin.operations.backups.refresh', absolute: false))
+        ->assertForbidden();
+
+    Queue::assertNothingPushed();
 });
 
 test('admin can dispatch maintenance action from operations page', function (): void {
