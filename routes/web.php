@@ -16,10 +16,17 @@ use App\Support\Workspaces\PersonalWorkspaceResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Sanctum\PersonalAccessToken;
 
-Route::inertia('/', 'welcome', [
+Route::get('/', function () {
+    if (Auth::check()) {
+        return redirect()->route('journal.landing');
+    }
+
+    return Inertia::render('welcome');
+}, [
     'canRegister' => Features::enabled(Features::registration()),
 ])->name('home');
 
