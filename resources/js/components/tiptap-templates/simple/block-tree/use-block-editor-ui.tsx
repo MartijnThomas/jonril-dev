@@ -229,6 +229,26 @@ export function useBlockEditorUi({
     }, [editor]);
 
     useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        window.dispatchEvent(
+            new CustomEvent('editor-focus-state', {
+                detail: { active: isEditorActive },
+            }),
+        );
+
+        return () => {
+            window.dispatchEvent(
+                new CustomEvent('editor-focus-state', {
+                    detail: { active: false },
+                }),
+            );
+        };
+    }, [isEditorActive]);
+
+    useEffect(() => {
         const openTaskMigratePicker = (event: Event) => {
             const customEvent = event as CustomEvent<{
                 blockId?: string | null;

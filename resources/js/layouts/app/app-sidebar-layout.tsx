@@ -177,10 +177,24 @@ export default function AppSidebarLayout({
 
         return defaultRightSidebarOpen;
     });
+    const [isEditorFocused, setIsEditorFocused] = useState(false);
 
     useEffect(() => {
         document.cookie = `right_sidebar_state=${isRightSidebarOpen}; path=/; max-age=${60 * 60 * 24 * 7}`;
     }, [isRightSidebarOpen]);
+
+    useEffect(() => {
+        const handleEditorFocusState = (event: Event) => {
+            const customEvent = event as CustomEvent<{ active?: boolean }>;
+            setIsEditorFocused(customEvent.detail?.active === true);
+        };
+
+        window.addEventListener('editor-focus-state', handleEditorFocusState as EventListener);
+
+        return () => {
+            window.removeEventListener('editor-focus-state', handleEditorFocusState as EventListener);
+        };
+    }, []);
 
     return (
         <AppShell
@@ -230,7 +244,7 @@ export default function AppSidebarLayout({
             >
                 {rightSidebar}
             </AppRightSidebar>
-            <AppFab />
+            <AppFab className={isEditorFocused ? 'pointer-events-none opacity-0' : undefined} />
             <AppCommandPalette />
         </AppShell>
     );
