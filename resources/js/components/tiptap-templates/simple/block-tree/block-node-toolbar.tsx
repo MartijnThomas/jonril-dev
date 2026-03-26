@@ -546,7 +546,9 @@ export function BlockNodeToolbar({
     return (
         <div
             data-bt-editor-toolbar="true"
-            className={`fixed inset-x-0 z-[95] px-3 md:hidden ${visible ? '' : 'hidden'}`}
+            className={`fixed inset-x-0 z-[95] px-3 transition-opacity duration-150 md:hidden ${
+                visible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
             style={{
                 bottom: `calc(${Math.max(8, keyboardInset + 8)}px + env(safe-area-inset-bottom, 0px))`,
             }}

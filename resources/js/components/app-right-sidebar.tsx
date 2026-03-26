@@ -19,8 +19,8 @@ export function AppRightSidebar({
         return (
             <aside
                 className={cn(
-                    'fixed inset-y-0 right-0 z-30 w-[18rem] bg-sidebar p-0 text-sidebar-foreground transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden',
-                    open ? 'translate-x-0' : 'translate-x-full',
+                    'fixed inset-y-0 right-0 z-30 w-[18rem] bg-sidebar p-0 text-sidebar-foreground transform-gpu will-change-transform transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden',
+                    open ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-95',
                 )}
                 aria-hidden={!open}
             >

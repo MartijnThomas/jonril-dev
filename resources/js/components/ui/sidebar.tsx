@@ -322,14 +322,14 @@ function Sidebar({
         data-side={side}
         aria-hidden={!openMobile}
         className={cn(
-          "fixed inset-y-0 z-30 w-(--sidebar-width-mobile) transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden",
+          "fixed inset-y-0 z-30 w-(--sidebar-width-mobile) transform-gpu will-change-transform transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden",
           side === "left"
             ? openMobile
-              ? "translate-x-0 left-0"
-              : "-translate-x-full left-0"
+              ? "translate-x-0 left-0 opacity-100"
+              : "-translate-x-full left-0 opacity-95"
             : openMobile
-              ? "translate-x-0 right-0"
-              : "translate-x-full right-0",
+              ? "translate-x-0 right-0 opacity-100"
+              : "translate-x-full right-0 opacity-95",
           className
         )}
         style={
@@ -456,7 +456,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-background relative flex max-w-full min-h-svh min-w-0 flex-1 flex-col transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+        "bg-background relative flex max-w-full min-h-svh min-w-0 flex-1 flex-col transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
         isMobile &&
           "group-data-[mobile-sidebar-open=true]/sidebar-wrapper:translate-x-[var(--sidebar-width-mobile)]",
         isMobile &&

@@ -165,15 +165,33 @@ export function useBlockEditorUi({
         }
 
         let blurTimeoutId: number | null = null;
+        let editorDom: HTMLElement | null = null;
+
+        try {
+            editorDom = editor.view?.dom ?? null;
+        } catch {
+            editorDom = null;
+        }
+
+        const syncActiveStateFromDom = () => {
+            const activeElement = document.activeElement;
+            const isActiveInsideEditor =
+                editorDom instanceof HTMLElement &&
+                activeElement instanceof HTMLElement &&
+                editorDom.contains(activeElement);
+
+            setIsEditorActive(editor.isFocused || isActiveInsideEditor);
+        };
+
         const initialSyncId = window.requestAnimationFrame(() => {
-            setIsEditorActive(editor.isFocused);
+            syncActiveStateFromDom();
         });
         const setFocused = () => {
             if (blurTimeoutId !== null) {
                 window.clearTimeout(blurTimeoutId);
                 blurTimeoutId = null;
             }
-            setIsEditorActive(true);
+            syncActiveStateFromDom();
         };
         const setBlurred = () => {
             blurTimeoutId = window.setTimeout(() => {
@@ -190,12 +208,13 @@ export function useBlockEditorUi({
                     return;
                 }
 
-                setIsEditorActive(false);
+                syncActiveStateFromDom();
             }, 0);
         };
 
         editor.on('focus', setFocused);
         editor.on('blur', setBlurred);
+        editor.on('selectionUpdate', syncActiveStateFromDom);
 
         const markToolbarInteraction = (event: Event) => {
             const target = event.target;
@@ -214,6 +233,10 @@ export function useBlockEditorUi({
         document.addEventListener('pointerdown', markToolbarInteraction, true);
         document.addEventListener('touchstart', markToolbarInteraction, true);
         document.addEventListener('mousedown', markToolbarInteraction, true);
+        editorDom?.addEventListener('focusin', setFocused, true);
+        editorDom?.addEventListener('touchstart', setFocused, true);
+        editorDom?.addEventListener('pointerdown', setFocused, true);
+        editorDom?.addEventListener('click', setFocused, true);
 
         return () => {
             window.cancelAnimationFrame(initialSyncId);
@@ -222,9 +245,14 @@ export function useBlockEditorUi({
             }
             editor.off('focus', setFocused);
             editor.off('blur', setBlurred);
+            editor.off('selectionUpdate', syncActiveStateFromDom);
             document.removeEventListener('pointerdown', markToolbarInteraction, true);
             document.removeEventListener('touchstart', markToolbarInteraction, true);
             document.removeEventListener('mousedown', markToolbarInteraction, true);
+            editorDom?.removeEventListener('focusin', setFocused, true);
+            editorDom?.removeEventListener('touchstart', setFocused, true);
+            editorDom?.removeEventListener('pointerdown', setFocused, true);
+            editorDom?.removeEventListener('click', setFocused, true);
         };
     }, [editor]);
 
