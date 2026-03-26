@@ -258,7 +258,9 @@ export function BlockNodeToolbar({
 
     const currentBlock = getCurrentBlockNode(editor);
     const isParagraphBlock = currentBlock?.type === 'paragraph';
-    const squareButtonBaseClass = 'size-7 rounded-lg p-0 [&>svg]:size-3.5';
+    const squareButtonBaseClass = mode === 'mobile'
+        ? 'size-9 rounded-xl p-0 [&>svg]:size-4.5'
+        : 'size-7 rounded-lg p-0 [&>svg]:size-3.5';
     const subtleActiveSquareButtonClass = `${squareButtonBaseClass} border border-violet-200/70 bg-violet-50 text-violet-600 shadow-none dark:border-violet-400/40 dark:bg-violet-500/20 dark:text-violet-200`;
     const activeSquareButtonHoverClass = `${subtleActiveSquareButtonClass} hover:bg-violet-100/70 dark:hover:bg-violet-500/30`;
     const inactiveSquareButtonClass = `${squareButtonBaseClass} border border-transparent text-muted-foreground hover:bg-muted hover:text-foreground`;
@@ -345,8 +347,8 @@ export function BlockNodeToolbar({
                                 variant="ghost"
                                 className={
                                     currentMarks.highlight
-                                        ? 'h-7 gap-0.5 rounded-lg border border-violet-200/70 bg-violet-50 px-1.5 text-foreground shadow-none hover:bg-violet-100/70 dark:border-violet-400/40 dark:bg-violet-500/20 dark:text-violet-100 dark:hover:bg-violet-500/30'
-                                        : 'h-7 gap-0.5 rounded-lg border border-transparent px-1.5 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground'
+                                        ? `${mode === 'mobile' ? 'h-9 rounded-xl px-2' : 'h-7 rounded-lg px-1.5'} gap-0.5 border border-violet-200/70 bg-violet-50 text-foreground shadow-none hover:bg-violet-100/70 dark:border-violet-400/40 dark:bg-violet-500/20 dark:text-violet-100 dark:hover:bg-violet-500/30`
+                                        : `${mode === 'mobile' ? 'h-9 rounded-xl px-2' : 'h-7 rounded-lg px-1.5'} gap-0.5 border border-transparent text-muted-foreground shadow-none hover:bg-muted hover:text-foreground`
                                 }
                                 onPointerDown={(event) => {
                                     const target = event.target as HTMLElement | null;
@@ -384,7 +386,7 @@ export function BlockNodeToolbar({
                                                 DEFAULT_HIGHLIGHT_COLOR,
                                         }}
                                     />
-                                    <ChevronDown className="size-2.5 text-muted-foreground" />
+                                    <ChevronDown className={`${mode === 'mobile' ? 'size-3' : 'size-2.5'} text-muted-foreground`} />
                                 </span>
                                 <span className="sr-only">Toggle default highlight or pick color</span>
                             </Button>
@@ -549,7 +551,7 @@ export function BlockNodeToolbar({
                 bottom: `calc(${Math.max(8, keyboardInset + 8)}px + env(safe-area-inset-bottom, 0px))`,
             }}
         >
-            <div className="mx-auto w-fit max-w-[calc(100vw-1.5rem)] overflow-x-auto rounded-xl border border-border/70 bg-background/95 p-1 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85">
+            <div className="mx-auto w-fit max-w-[calc(100vw-1.5rem)] overflow-x-auto rounded-xl border border-border/70 bg-background/95 p-1.5 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85">
                 <div
                     className="flex items-center gap-2"
                     onMouseDownCapture={preserveEditorSelectionOnToolbarMouseDown}

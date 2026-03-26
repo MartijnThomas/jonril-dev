@@ -322,6 +322,7 @@ function SimpleEditorComponent({
     timeblockSyncByBlockId = {},
     defaultTimeblockDurationMinutes = 60,
 }: SimpleEditorProps) {
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const { setVersion } = useEditorVersion();
     useEffect(() => {
         if (noteHashUrl && contentHash) {
@@ -382,13 +383,13 @@ function SimpleEditorComponent({
     }, []);
 
     const mobileScrollInsetStyle = useMemo<CSSProperties>(() => {
-        if (mobileKeyboardInset <= 0) {
-            return {};
-        }
+        const baseBottomInset = 132;
+        const dynamicInset = mobileKeyboardInset > 0 ? mobileKeyboardInset : 0;
+        const totalInset = baseBottomInset + dynamicInset;
 
         return {
-            paddingBottom: `calc(${mobileKeyboardInset + 132}px + env(safe-area-inset-bottom, 0px))`,
-            scrollPaddingBottom: `calc(${mobileKeyboardInset + 132}px + env(safe-area-inset-bottom, 0px))`,
+            paddingBottom: `calc(${totalInset}px + env(safe-area-inset-bottom, 0px))`,
+            scrollPaddingBottom: `calc(${totalInset}px + env(safe-area-inset-bottom, 0px))`,
         };
     }, [mobileKeyboardInset]);
 
@@ -550,6 +551,62 @@ function SimpleEditorComponent({
 
         editor.setEditable(!readOnly, false);
     }, [editor, readOnly]);
+
+    useEffect(() => {
+        if (!editor || typeof window === 'undefined') {
+            return;
+        }
+
+        const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
+        if (!isMobileViewport) {
+            return;
+        }
+
+        const ensureSelectionInTopHalf = () => {
+            if (editor.isDestroyed || !editor.isFocused) {
+                return;
+            }
+
+            const scrollContainer = scrollContainerRef.current;
+            if (!scrollContainer) {
+                return;
+            }
+
+            try {
+                const selectionFrom = editor.state.selection.from;
+                const coords = editor.view.coordsAtPos(selectionFrom);
+                const viewport = window.visualViewport;
+                const viewportTop = viewport?.offsetTop ?? 0;
+                const viewportHeight = viewport?.height ?? window.innerHeight;
+                const desiredLineY = viewportTop + viewportHeight * 0.42;
+                const delta = coords.top - desiredLineY;
+
+                if (delta > 14) {
+                    scrollContainer.scrollBy({
+                        top: delta,
+                        left: 0,
+                        behavior: 'smooth',
+                    });
+                }
+            } catch {
+                // Editor view can be temporarily unavailable during remounts.
+            }
+        };
+
+        const scheduleEnsureSelectionInTopHalf = () => {
+            window.requestAnimationFrame(() => {
+                ensureSelectionInTopHalf();
+            });
+        };
+
+        editor.on('focus', scheduleEnsureSelectionInTopHalf);
+        editor.on('selectionUpdate', scheduleEnsureSelectionInTopHalf);
+
+        return () => {
+            editor.off('focus', scheduleEnsureSelectionInTopHalf);
+            editor.off('selectionUpdate', scheduleEnsureSelectionInTopHalf);
+        };
+    }, [editor]);
 
     useEffect(() => {
         if (typeof window === 'undefined' || !editor || !imageUploadHandler) {
@@ -915,7 +972,7 @@ function SimpleEditorComponent({
 
     return (
         <div className="flex h-full w-full min-h-0 overflow-hidden">
-            <div className="flex-1 min-w-0 overflow-y-auto" style={mobileScrollInsetStyle}>
+            <div ref={scrollContainerRef} className="flex-1 min-w-0 overflow-y-auto" style={mobileScrollInsetStyle}>
                 <EditorContext.Provider value={{ editor }}>
                     {!readOnly ? blockUi : null}
                     {showRelatedPanel ? (
