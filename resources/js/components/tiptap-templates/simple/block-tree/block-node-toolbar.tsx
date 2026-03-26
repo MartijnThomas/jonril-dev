@@ -22,7 +22,6 @@ import {
     ListOrdered,
     Link2,
     ImagePlus,
-    CalendarDays,
     Minus,
     NotebookText,
     SendToBack,
@@ -158,18 +157,10 @@ type CurrentMarkState = Record<BlockMarkType, boolean> & {
 
 type BlockNodeToolbarProps = {
     editor: Editor;
-    hasMeetingNotes?: boolean;
-    showMeetingNotes?: boolean;
-    meetingNotesCount?: number;
-    onToggleMeetingNotes?: () => void;
 };
 
 export function BlockNodeToolbar({
     editor,
-    hasMeetingNotes = false,
-    showMeetingNotes = false,
-    meetingNotesCount = 0,
-    onToggleMeetingNotes,
 }: BlockNodeToolbarProps) {
     const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
     const [linkInputValue, setLinkInputValue] = useState('');
@@ -543,11 +534,12 @@ export function BlockNodeToolbar({
     const paragraphOption = BLOCK_NODE_OPTIONS.find((option) => option.value === 'paragraph') ?? BLOCK_NODE_OPTIONS[0];
     const nonParagraphBlockOptions = BLOCK_NODE_OPTIONS.filter((option) => option.value !== 'paragraph');
 
-    const hasMeetingToggle = hasMeetingNotes && !showMeetingNotes;
-
     return (
-        <div className="sticky top-0 z-30 w-full overflow-hidden border-b border-border/60 bg-background/95 shadow-xs backdrop-blur supports-backdrop-filter:bg-background/85">
-            <div className={`mx-auto w-full overflow-x-auto overflow-y-hidden px-2 py-1.5 md:px-4 ${hasMeetingToggle ? 'pr-20!' : ''}`}>
+        <div
+            data-bt-editor-toolbar="true"
+            className="sticky top-0 z-30 w-full overflow-hidden border-b border-border/60 bg-background/95 shadow-xs backdrop-blur supports-backdrop-filter:bg-background/85"
+        >
+            <div className="mx-auto w-full overflow-x-auto overflow-y-hidden px-2 py-1.5 md:px-4">
                 <div className="mx-auto flex w-max min-w-full items-center justify-center gap-2.5">
                         <div className="flex items-center gap-2">
                         <Button
@@ -943,20 +935,6 @@ export function BlockNodeToolbar({
                         </div>
                 </div>
             </div>
-            {hasMeetingToggle ? (
-                <button
-                    type="button"
-                    onClick={onToggleMeetingNotes}
-                    aria-label="Toggle meeting notes"
-                    aria-pressed={showMeetingNotes}
-                    className={`absolute inset-y-0 right-0 flex items-center gap-1.5 pl-3 pr-2.5 rounded-l-full border-l border-y border-sidebar-border/60 bg-sidebar transition-colors hover:text-foreground ${showMeetingNotes ? 'text-foreground' : 'text-muted-foreground'}`}
-                >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sidebar-border/60 bg-sidebar-accent text-[0.68rem] font-medium tabular-nums">
-                        {meetingNotesCount}
-                    </span>
-                    <CalendarDays className="size-4" />
-                </button>
-            ) : null}
         </div>
     );
 }

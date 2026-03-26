@@ -24,8 +24,8 @@ const edgeTabClass =
     'absolute top-1/2 z-20 flex -translate-y-1/2 items-center justify-center rounded-sm border border-sidebar-border/60 bg-sidebar/60 text-muted-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-12 w-5 md:h-11 md:w-4';
 
 function LeftSidebarEdgeToggle() {
-    const { state, toggleSidebar } = useSidebar();
-    const isCollapsed = state === 'collapsed';
+    const { state, toggleSidebar, isMobile, openMobile } = useSidebar();
+    const isCollapsed = isMobile ? !openMobile : state === 'collapsed';
     return (
         <button
             type="button"
@@ -49,6 +49,23 @@ function RightSidebarEdgeToggle({ open, onToggle }: { open: boolean; onToggle: (
             {open ? <ChevronRight className="size-4 md:size-3.5" /> : <ChevronLeft className="size-4 md:size-3.5" />}
         </button>
     );
+}
+
+function MobileSidebarInteractionShield({
+    isMobile,
+    isRightSidebarOpen,
+}: {
+    isMobile: boolean;
+    isRightSidebarOpen: boolean;
+}) {
+    const { openMobile: isLeftSidebarOpenMobile } = useSidebar();
+    const isVisible = isMobile && (isLeftSidebarOpenMobile || isRightSidebarOpen);
+
+    if (!isVisible) {
+        return null;
+    }
+
+    return <div aria-hidden="true" className="absolute inset-0 z-20 bg-transparent md:hidden" />;
 }
 
 function ResponsiveSidebarManager({
@@ -166,13 +183,21 @@ export default function AppSidebarLayout({
     }, [isRightSidebarOpen]);
 
     return (
-        <AppShell variant="sidebar">
+        <AppShell
+            variant="sidebar"
+            rightSidebarOpen={isRightSidebarOpen}
+            onRightSidebarOpenChange={setIsRightSidebarOpen}
+        >
             <ResponsiveSidebarManager
                 rightSidebarOpen={isRightSidebarOpen}
                 setRightSidebarOpen={setIsRightSidebarOpen}
             />
             <AppSidebar />
             <AppContent variant="sidebar" className="h-full min-h-0 overflow-hidden">
+                <MobileSidebarInteractionShield
+                    isMobile={isMobile}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                />
                 <LeftSidebarEdgeToggle />
                 <RightSidebarEdgeToggle
                     open={isRightSidebarOpen}

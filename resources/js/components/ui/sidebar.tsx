@@ -7,13 +7,6 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -29,6 +22,9 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
+const MOBILE_EDGE_GESTURE_ZONE_PX = 24
+const MOBILE_SWIPE_DISTANCE_PX = 72
+const MOBILE_SWIPE_VELOCITY_PX_PER_MS = 0.35
 
 type SidebarContext = {
   state: "expanded" | "collapsed"
@@ -55,6 +51,8 @@ function SidebarProvider({
   defaultOpen = true,
   open: openProp,
   onOpenChange: setOpenProp,
+  rightSidebarOpenMobile = false,
+  onRightSidebarOpenMobileChange,
   className,
   style,
   children,
@@ -63,9 +61,12 @@ function SidebarProvider({
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  rightSidebarOpenMobile?: boolean
+  onRightSidebarOpenMobileChange?: (open: boolean) => void
 }) {
   const isMobile = useIsMobile()
-  const [openMobile, setOpenMobile] = React.useState(false)
+  const [openMobile, setOpenMobileState] = React.useState(false)
+  const wrapperRef = React.useRef<HTMLDivElement | null>(null)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -84,6 +85,18 @@ function SidebarProvider({
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
     [setOpenProp, open]
+  )
+
+  const setOpenMobile = React.useCallback(
+    (value: boolean | ((value: boolean) => boolean)) => {
+      const nextValue = typeof value === "function" ? value(openMobile) : value
+      setOpenMobileState(nextValue)
+
+      if (nextValue) {
+        onRightSidebarOpenMobileChange?.(false)
+      }
+    },
+    [onRightSidebarOpenMobileChange, openMobile]
   )
 
   // Helper to toggle the sidebar.
@@ -108,14 +121,150 @@ function SidebarProvider({
     [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
   )
 
+  React.useEffect(() => {
+    if (!isMobile) {
+      return
+    }
+
+    if (rightSidebarOpenMobile && openMobile) {
+      setOpenMobileState(false)
+    }
+  }, [isMobile, openMobile, rightSidebarOpenMobile])
+
+  React.useEffect(() => {
+    if (!isMobile) {
+      return
+    }
+
+    const node = wrapperRef.current
+    if (!node) {
+      return
+    }
+
+    let startX = 0
+    let startY = 0
+    let lastX = 0
+    let startAt = 0
+    let activeGesture: "open-left" | "open-right" | "close-left" | "close-right" | null = null
+    let horizontalIntent: boolean | null = null
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        activeGesture = null
+        return
+      }
+
+      const touch = event.touches[0]
+      startX = touch.clientX
+      lastX = touch.clientX
+      startY = touch.clientY
+      startAt = Date.now()
+      horizontalIntent = null
+
+      const viewportWidth = window.innerWidth
+      const nearLeftEdge = startX <= MOBILE_EDGE_GESTURE_ZONE_PX
+      const nearRightEdge = startX >= viewportWidth - MOBILE_EDGE_GESTURE_ZONE_PX
+
+      if (openMobile) {
+        activeGesture = "close-left"
+        return
+      }
+
+      if (rightSidebarOpenMobile) {
+        activeGesture = "close-right"
+        return
+      }
+
+      if (nearLeftEdge) {
+        activeGesture = "open-left"
+        return
+      }
+
+      if (nearRightEdge) {
+        activeGesture = "open-right"
+        return
+      }
+
+      activeGesture = null
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (!activeGesture || event.touches.length !== 1) {
+        return
+      }
+
+      const touch = event.touches[0]
+      lastX = touch.clientX
+      const deltaX = touch.clientX - startX
+      const deltaY = touch.clientY - startY
+
+      if (horizontalIntent === null) {
+        if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) {
+          return
+        }
+
+        horizontalIntent = Math.abs(deltaX) > Math.abs(deltaY)
+      }
+
+      if (horizontalIntent) {
+        event.preventDefault()
+      }
+    }
+
+    const onTouchEnd = () => {
+      if (!activeGesture) {
+        return
+      }
+
+      const elapsed = Math.max(1, Date.now() - startAt)
+      const deltaX = lastX - startX
+      const velocityX = deltaX / elapsed
+
+      const passedDistance = Math.abs(deltaX) >= MOBILE_SWIPE_DISTANCE_PX
+      const passedVelocity = Math.abs(velocityX) >= MOBILE_SWIPE_VELOCITY_PX_PER_MS
+
+      const commitSwipe = passedDistance || passedVelocity
+
+      if (commitSwipe) {
+        if (activeGesture === "open-left" && deltaX > 0) {
+          setOpenMobile(true)
+        } else if (activeGesture === "open-right" && deltaX < 0) {
+          onRightSidebarOpenMobileChange?.(true)
+          setOpenMobile(false)
+        } else if (activeGesture === "close-left" && deltaX < 0) {
+          setOpenMobile(false)
+        } else if (activeGesture === "close-right" && deltaX > 0) {
+          onRightSidebarOpenMobileChange?.(false)
+        }
+      }
+
+      activeGesture = null
+      horizontalIntent = null
+    }
+
+    node.addEventListener("touchstart", onTouchStart, { passive: true })
+    node.addEventListener("touchmove", onTouchMove, { passive: false })
+    node.addEventListener("touchend", onTouchEnd, { passive: true })
+    node.addEventListener("touchcancel", onTouchEnd, { passive: true })
+
+    return () => {
+      node.removeEventListener("touchstart", onTouchStart)
+      node.removeEventListener("touchmove", onTouchMove)
+      node.removeEventListener("touchend", onTouchEnd)
+      node.removeEventListener("touchcancel", onTouchEnd)
+    }
+  }, [isMobile, onRightSidebarOpenMobileChange, openMobile, rightSidebarOpenMobile, setOpenMobile])
+
   return (
     <SidebarContext.Provider value={contextValue}>
       <TooltipProvider delayDuration={0}>
         <div
+          ref={wrapperRef}
           data-slot="sidebar-wrapper"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH,
+              "--sidebar-width-mobile": SIDEBAR_WIDTH_MOBILE,
               "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
               ...style,
             } as React.CSSProperties
@@ -124,6 +273,8 @@ function SidebarProvider({
             "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
             className
           )}
+          data-mobile-sidebar-open={openMobile ? "true" : "false"}
+          data-mobile-right-sidebar-open={rightSidebarOpenMobile ? "true" : "false"}
           {...props}
         >
           {children}
@@ -145,7 +296,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile, state, openMobile } = useSidebar()
 
   if (collapsible === "none") {
     return (
@@ -164,27 +315,37 @@ function Sidebar({
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
-        <SheetHeader className="sr-only">
-          <SheetTitle>Sidebar</SheetTitle>
-          <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-        </SheetHeader>
-        <SheetContent
+      <div
+        data-sidebar="sidebar"
+        data-slot="sidebar"
+        data-mobile="true"
+        data-side={side}
+        aria-hidden={!openMobile}
+        className={cn(
+          "fixed inset-y-0 z-30 w-(--sidebar-width-mobile) transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden",
+          side === "left"
+            ? openMobile
+              ? "translate-x-0 left-0"
+              : "-translate-x-full left-0"
+            : openMobile
+              ? "translate-x-0 right-0"
+              : "translate-x-full right-0",
+          className
+        )}
+        style={
+          {
+            "--sidebar-width-mobile": SIDEBAR_WIDTH_MOBILE,
+          } as React.CSSProperties
+        }
+        {...props}
+      >
+        <div
           data-sidebar="sidebar"
-          data-slot="sidebar"
-          data-mobile="true"
-          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden"
-          overlayClassName="bg-black/20"
-          style={
-            {
-              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-            } as React.CSSProperties
-          }
-          side={side}
+          className="bg-sidebar text-sidebar-foreground flex h-full w-full flex-col"
         >
-          <div className="flex h-full w-full flex-col">{children}</div>
-        </SheetContent>
-      </Sheet>
+          {children}
+        </div>
+      </div>
     )
   }
 
@@ -289,11 +450,17 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
 }
 
 function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
+  const { isMobile } = useSidebar()
+
   return (
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-background relative flex max-w-full min-h-svh min-w-0 flex-1 flex-col",
+        "bg-background relative flex max-w-full min-h-svh min-w-0 flex-1 flex-col transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+        isMobile &&
+          "group-data-[mobile-sidebar-open=true]/sidebar-wrapper:translate-x-[var(--sidebar-width-mobile)]",
+        isMobile &&
+          "group-data-[mobile-right-sidebar-open=true]/sidebar-wrapper:-translate-x-[var(--sidebar-width-mobile)]",
         "peer-data-[variant=inset]:min-h-[calc(100svh-(--spacing(4)))] md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-0",
         className
       )}

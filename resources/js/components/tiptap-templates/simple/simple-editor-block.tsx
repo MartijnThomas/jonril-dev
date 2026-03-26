@@ -309,7 +309,6 @@ function SimpleEditorComponent({
     workspaceSuggestions,
     relatedTasks = [],
     backlinks = [],
-    meetingChildren = [],
     meetingEvent = null,
     showRelatedPanel = false,
     language = 'nl',
@@ -330,13 +329,6 @@ function SimpleEditorComponent({
         }
         return () => setVersion(null);
     }, [noteHashUrl, contentHash, setVersion]);
-
-    const isJournal = noteType === 'journal';
-    const hasMeetingNotes = meetingChildren.length > 0 && !isJournal;
-    // Default open on ≥768 px, closed on small screens. Lazy initializer runs once on mount.
-    const [showMeetingNotes, setShowMeetingNotes] = useState(
-        () => typeof window === 'undefined' || window.innerWidth >= 768,
-    );
 
     const [documentProperties, setDocumentProperties] =
         useState<DocumentPropertiesValue>(() => ({ ...properties }));
@@ -362,7 +354,6 @@ function SimpleEditorComponent({
 
         const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
         if (!isMobileViewport) {
-            setMobileKeyboardInset(0);
             return;
         }
 
@@ -638,10 +629,6 @@ function SimpleEditorComponent({
             mentions: mentionSuggestions,
             hashtags: hashtagSuggestions,
         },
-        hasMeetingNotes,
-        showMeetingNotes,
-        meetingNotesCount: meetingChildren.length,
-        onToggleMeetingNotes: () => setShowMeetingNotes((current) => !current),
     });
 
     useEffect(() => {

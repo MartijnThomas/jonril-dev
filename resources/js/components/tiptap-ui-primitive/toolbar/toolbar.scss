@@ -195,4 +195,12 @@
       );
     }
   }
+
+  .group\/sidebar-wrapper[data-mobile-sidebar-open="true"] .mobile-editor-toolbar,
+  .group\/sidebar-wrapper[data-mobile-right-sidebar-open="true"] .mobile-editor-toolbar,
+  .group\/sidebar-wrapper[data-mobile-sidebar-open="true"] [data-bt-editor-toolbar="true"],
+  .group\/sidebar-wrapper[data-mobile-right-sidebar-open="true"] [data-bt-editor-toolbar="true"] {
+    pointer-events: none;
+    touch-action: none;
+  }
 }

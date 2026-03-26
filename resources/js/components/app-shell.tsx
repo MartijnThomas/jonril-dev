@@ -11,6 +11,8 @@ import { useSessionGuard } from '@/hooks/use-session-guard';
 type Props = {
     children: ReactNode;
     variant?: 'header' | 'sidebar';
+    rightSidebarOpen?: boolean;
+    onRightSidebarOpenChange?: (open: boolean) => void;
 };
 
 function SessionCheckOverlay() {
@@ -24,7 +26,12 @@ function SessionCheckOverlay() {
     );
 }
 
-export function AppShell({ children, variant = 'header' }: Props) {
+export function AppShell({
+    children,
+    variant = 'header',
+    rightSidebarOpen = false,
+    onRightSidebarOpenChange,
+}: Props) {
     const [editorVersion, setEditorVersion] = useState<EditorVersion>(null);
     const { isChecking } = useSessionGuard(editorVersion);
     const isMobile = useIsMobile();
@@ -115,6 +122,8 @@ export function AppShell({ children, variant = 'header' }: Props) {
                 style={{ height: mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh' }}
                 open={leftSidebarOpen}
                 onOpenChange={setLeftSidebarOpen}
+                rightSidebarOpenMobile={isMobile && rightSidebarOpen}
+                onRightSidebarOpenMobileChange={onRightSidebarOpenChange}
             >
                 {children}
             </SidebarProvider>
