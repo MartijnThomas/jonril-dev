@@ -93,15 +93,13 @@
     }
 
     .bt-heading-collapse-toggle {
-        position: absolute;
-        left: -4.8rem;
-        top: 50%;
-        z-index: 3;
+        position: static;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 1.7rem;
-        height: 1.7rem;
+        width: 1em;
+        height: 1em;
+        margin-left: 0.25em;
         border: 0;
         background: transparent;
         color: color-mix(in srgb, currentColor 60%, transparent);
@@ -109,31 +107,19 @@
         opacity: 0;
         cursor: pointer;
         user-select: none;
-        transform: translateY(-50%);
+        pointer-events: none;
+        transform: none;
+        vertical-align: middle;
         transition: opacity 120ms ease, transform 120ms ease, color 120ms ease;
     }
 
-    .bt-heading > .bt-heading-collapse-toggle,
-    .bt-paragraph.bt-paragraph-collapsible:not([data-block-style='task']) > .bt-heading-collapse-toggle {
-        left: -3.2rem;
-    }
-
     .bt-heading-collapse-toggle--collapsed {
-        transform: translateY(-50%) rotate(-90deg);
-    }
-
-    .bt-heading-collapse-toggle--paragraph {
-        top: calc(-0.16em + 1px);
-        transform: none;
-    }
-
-    .bt-heading-collapse-toggle--paragraph.bt-heading-collapse-toggle--collapsed {
         transform: rotate(-90deg);
     }
 
     .bt-heading-collapse-icon {
-        width: 1.12rem;
-        height: 1.12rem;
+        width: 0.9em;
+        height: 0.9em;
         display: block;
     }
 
@@ -145,7 +131,7 @@
 
     .bt-task-actions-trigger {
         position: absolute;
-        left: -3.2rem;
+        left: -4.8rem;
         top: calc(-0.16em + 1px);
         z-index: 3;
         display: inline-flex;
@@ -169,6 +155,32 @@
         display: block;
     }
 
+    .bt-block-add-trigger {
+        position: absolute;
+        left: -3.2rem;
+        top: calc(-0.16em + 1px);
+        z-index: 3;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.7rem;
+        height: 1.7rem;
+        border: 0;
+        background: transparent;
+        color: color-mix(in srgb, currentColor 60%, transparent);
+        line-height: 1;
+        opacity: 0;
+        cursor: pointer;
+        user-select: none;
+        transition: opacity 120ms ease, color 120ms ease;
+    }
+
+    .bt-block-add-icon {
+        width: 1.08rem;
+        height: 1.08rem;
+        display: block;
+    }
+
     .bt-paragraph > .bt-block-handle {
         top: calc(-0.16em + 1px);
     }
@@ -178,10 +190,18 @@
         transform: translateY(-50%);
     }
 
-    .bt-heading:hover .bt-heading-collapse-toggle,
-    .bt-paragraph.bt-paragraph-collapsible:hover .bt-heading-collapse-toggle,
+    .bt-heading > .bt-block-add-trigger {
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    .bt-heading-collapsible:hover .bt-heading-collapse-toggle,
+    .bt-paragraph-collapsible:hover .bt-heading-collapse-toggle,
+    .bt-heading-collapsible:focus-within .bt-heading-collapse-toggle,
+    .bt-paragraph-collapsible:focus-within .bt-heading-collapse-toggle,
     .bt-heading-collapse-toggle:focus-visible {
         opacity: 1;
+        pointer-events: auto;
     }
 
     .bt-heading-collapse-toggle:hover {
@@ -194,12 +214,34 @@
         opacity: 1;
     }
 
+    .bt-block-handle[data-bt-gutter-active='true'] {
+        opacity: 1;
+    }
+
     .bt-paragraph[data-block-style='task']:hover .bt-task-actions-trigger,
     .bt-task-actions-trigger:focus-visible {
         opacity: 1;
     }
 
+    .bt-task-actions-trigger[data-bt-gutter-active='true'] {
+        opacity: 1;
+    }
+
+    .bt-heading:hover .bt-block-add-trigger,
+    .bt-paragraph:hover .bt-block-add-trigger,
+    .bt-block-add-trigger:focus-visible {
+        opacity: 1;
+    }
+
+    .bt-block-add-trigger[data-bt-gutter-active='true'] {
+        opacity: 1;
+    }
+
     .bt-task-actions-trigger:hover {
+        color: color-mix(in srgb, currentColor 84%, transparent);
+    }
+
+    .bt-block-add-trigger:hover {
         color: color-mix(in srgb, currentColor 84%, transparent);
     }
 

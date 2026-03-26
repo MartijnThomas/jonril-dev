@@ -130,14 +130,18 @@ function collectCollapsibleEntries(doc: ProseMirrorNode): HeadingEntry[] {
     return [...collectHeadings(doc), ...collectParagraphSections(doc)];
 }
 
-function createCollapseToggleWidget(entry: HeadingEntry, collapsed: boolean): Decoration {
+function createCollapseToggleWidget(
+    entry: HeadingEntry,
+    collapsed: boolean,
+    nodeSize: number,
+): Decoration {
     return Decoration.widget(
-        entry.pos + 1,
+        entry.pos + nodeSize - 1,
         () => {
             const button = document.createElement('button');
             const classes = [
                 'bt-heading-collapse-toggle',
-                entry.type === 'paragraph' ? 'bt-heading-collapse-toggle--paragraph' : '',
+                'bt-heading-collapse-toggle--inline',
                 collapsed ? 'bt-heading-collapse-toggle--collapsed' : '',
             ].filter(Boolean);
 
@@ -155,7 +159,7 @@ function createCollapseToggleWidget(entry: HeadingEntry, collapsed: boolean): De
 
             return button;
         },
-        { side: -2 },
+        { side: 1 },
     );
 }
 
@@ -199,7 +203,9 @@ function buildDecorations(doc: ProseMirrorNode, collapsedHeadingIds: Set<string>
             return;
         }
 
-        decorations.push(createCollapseToggleWidget(heading, collapsed));
+        if (heading.hasChildren) {
+            decorations.push(createCollapseToggleWidget(heading, collapsed, headingNode.nodeSize));
+        }
 
         const headingClasses = [
             heading.type === 'heading' ? 'bt-heading-collapsible' : 'bt-paragraph-collapsible',

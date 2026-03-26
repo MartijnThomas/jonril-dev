@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
 import { BlockDragHandleExtension } from '@/components/tiptap-templates/simple/block-tree/block-drag-handle-extension';
 import { BlockHeadingCollapseExtension } from '@/components/tiptap-templates/simple/block-tree/block-heading-collapse-extension';
+import { BlockLineActionsExtension } from '@/components/tiptap-templates/simple/block-tree/block-line-actions-extension';
 import { BlockLinkBehaviorExtension } from '@/components/tiptap-templates/simple/block-tree/block-link-behavior-extension';
 import { BlockTaskActionsExtension } from '@/components/tiptap-templates/simple/block-tree/block-task-actions-extension';
 import { BlockTaskMigrationMetaExtension } from '@/components/tiptap-templates/simple/block-tree/block-task-migration-meta-extension';
@@ -276,6 +277,7 @@ export function createBlockTreeEditorExtensions(
         }),
         UndoRedo,
         BlockHeadingCollapseExtension,
+        BlockLineActionsExtension,
         BlockTaskActionsExtension,
         BlockDragHandleExtension,
         BlockLinkBehaviorExtension,
