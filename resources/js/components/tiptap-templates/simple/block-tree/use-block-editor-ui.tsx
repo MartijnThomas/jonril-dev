@@ -1,14 +1,23 @@
 import { router } from '@inertiajs/react';
 import type { Editor } from '@tiptap/core';
 import { addDays, addMonths, addWeeks, format, getISOWeek, getISOWeekYear } from 'date-fns';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TaskMigratePicker } from '@/components/task-migrate-picker';
+import {
+    BlockLineActionsMenu,
+} from '@/components/tiptap-templates/simple/block-tree/block-line-actions-menu';
+import type { BlockLineAction } from '@/components/tiptap-templates/simple/block-tree/block-line-actions-menu';
 import { BlockNodeToolbar } from '@/components/tiptap-templates/simple/block-tree/block-node-toolbar';
 import { BlockTaskActionsMenu } from '@/components/tiptap-templates/simple/block-tree/block-task-actions-menu';
 import { BlockTaskStatusMenu } from '@/components/tiptap-templates/simple/block-tree/block-task-status-menu';
 import { BlockTokenSuggestionMenu } from '@/components/tiptap-templates/simple/block-tree/block-token-suggestion-menu';
 import {
+    convertCurrentHeadingToParagraph,
+    getCurrentBlockNode,
+    normalizeParagraphAttrs,
     setParagraphTaskStatusAtPos,
+    setCurrentHeadingLevel,
+    setCurrentParagraphStyle,
     toggleParagraphTaskAtPos,
 } from '@/components/tiptap-templates/simple/block-tree/block-tree-model';
 import { BlockWikiLinkSuggestionMenu } from '@/components/tiptap-templates/simple/block-tree/wiki-link/block-wiki-link-suggestion-menu';
@@ -26,6 +35,7 @@ type UseBlockEditorUiOptions = {
     editor: Editor | null;
     noteId: string;
     language: 'nl' | 'en';
+    mobileKeyboardInset?: number;
     linkableNotes: {
         id: string;
         title: string;
@@ -43,6 +53,7 @@ export function useBlockEditorUi({
     editor,
     noteId,
     language,
+    mobileKeyboardInset = 0,
     linkableNotes,
     workspaceSuggestions,
 }: UseBlockEditorUiOptions) {
@@ -110,6 +121,112 @@ export function useBlockEditorUi({
         blockId: null,
         status: null,
     });
+    const [blockLineActionsMenu, setBlockLineActionsMenu] = useState<{
+        open: boolean;
+        x: number;
+        y: number;
+        pos: number | null;
+    }>({
+        open: false,
+        x: 0,
+        y: 0,
+        pos: null,
+    });
+    const [isEditorActive, setIsEditorActive] = useState<boolean>(() => editor?.isFocused ?? false);
+    const interactingWithToolbarRef = useRef(false);
+    const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+
+        return window.matchMedia('(max-width: 767px)').matches;
+    });
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const sync = () => {
+            setIsMobileViewport(mediaQuery.matches);
+        };
+        sync();
+        mediaQuery.addEventListener('change', sync);
+
+        return () => {
+            mediaQuery.removeEventListener('change', sync);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!editor || typeof window === 'undefined') {
+            return;
+        }
+
+        let blurTimeoutId: number | null = null;
+        const initialSyncId = window.requestAnimationFrame(() => {
+            setIsEditorActive(editor.isFocused);
+        });
+        const setFocused = () => {
+            if (blurTimeoutId !== null) {
+                window.clearTimeout(blurTimeoutId);
+                blurTimeoutId = null;
+            }
+            setIsEditorActive(true);
+        };
+        const setBlurred = () => {
+            blurTimeoutId = window.setTimeout(() => {
+                if (interactingWithToolbarRef.current) {
+                    setIsEditorActive(true);
+                    interactingWithToolbarRef.current = false;
+                    return;
+                }
+
+                const toolbar = document.querySelector('[data-bt-editor-toolbar="true"]');
+                const activeElement = document.activeElement;
+                if (toolbar instanceof HTMLElement && activeElement instanceof HTMLElement && toolbar.contains(activeElement)) {
+                    setIsEditorActive(true);
+                    return;
+                }
+
+                setIsEditorActive(false);
+            }, 0);
+        };
+
+        editor.on('focus', setFocused);
+        editor.on('blur', setBlurred);
+
+        const markToolbarInteraction = (event: Event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                interactingWithToolbarRef.current = false;
+                return;
+            }
+
+            interactingWithToolbarRef.current =
+                target.closest('[data-bt-editor-toolbar="true"]') !== null;
+            if (interactingWithToolbarRef.current) {
+                setIsEditorActive(true);
+            }
+        };
+
+        document.addEventListener('pointerdown', markToolbarInteraction, true);
+        document.addEventListener('touchstart', markToolbarInteraction, true);
+        document.addEventListener('mousedown', markToolbarInteraction, true);
+
+        return () => {
+            window.cancelAnimationFrame(initialSyncId);
+            if (blurTimeoutId !== null) {
+                window.clearTimeout(blurTimeoutId);
+            }
+            editor.off('focus', setFocused);
+            editor.off('blur', setBlurred);
+            document.removeEventListener('pointerdown', markToolbarInteraction, true);
+            document.removeEventListener('touchstart', markToolbarInteraction, true);
+            document.removeEventListener('mousedown', markToolbarInteraction, true);
+        };
+    }, [editor]);
 
     useEffect(() => {
         const openTaskMigratePicker = (event: Event) => {
@@ -243,14 +360,186 @@ export function useBlockEditorUi({
         };
     }, []);
 
+    useEffect(() => {
+        const openLineActionsMenu = (event: Event) => {
+            const customEvent = event as CustomEvent<{
+                x?: number;
+                y?: number;
+                pos?: number | null;
+            }>;
+
+            setBlockLineActionsMenu({
+                open: true,
+                x: typeof customEvent.detail?.x === 'number' ? customEvent.detail.x : 0,
+                y: typeof customEvent.detail?.y === 'number' ? customEvent.detail.y : 0,
+                pos:
+                    typeof customEvent.detail?.pos === 'number'
+                        ? customEvent.detail.pos
+                        : null,
+            });
+        };
+
+        window.addEventListener(
+            'block-line-actions:open',
+            openLineActionsMenu as EventListener,
+        );
+
+        return () => {
+            window.removeEventListener(
+                'block-line-actions:open',
+                openLineActionsMenu as EventListener,
+            );
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+
+        let editorDom: HTMLElement | null = null;
+        try {
+            editorDom = editor.view?.dom ?? null;
+        } catch {
+            return;
+        }
+
+        if (!editorDom) {
+            return;
+        }
+
+        const activePos = blockTaskActionsMenu.open
+            ? blockTaskActionsMenu.pos
+            : blockTaskStatusMenu.open
+                ? blockTaskStatusMenu.pos
+                : blockLineActionsMenu.open
+                    ? blockLineActionsMenu.pos
+                    : null;
+
+        editorDom
+            .querySelectorAll<HTMLElement>(
+                '[data-bt-block-handle="true"], [data-bt-task-actions-trigger="true"], [data-bt-block-add-trigger="true"]',
+            )
+            .forEach((trigger) => {
+                const triggerPos = Number.parseInt(
+                    trigger.getAttribute('data-block-pos') ?? '',
+                    10,
+                );
+                if (Number.isFinite(triggerPos) && activePos !== null && triggerPos === activePos) {
+                    trigger.setAttribute('data-bt-gutter-active', 'true');
+                } else {
+                    trigger.removeAttribute('data-bt-gutter-active');
+                }
+            });
+
+        return () => {
+            editorDom
+                ?.querySelectorAll<HTMLElement>(
+                    '[data-bt-block-handle="true"], [data-bt-task-actions-trigger="true"], [data-bt-block-add-trigger="true"]',
+                )
+                .forEach((trigger) => {
+                    trigger.removeAttribute('data-bt-gutter-active');
+                });
+        };
+    }, [
+        blockLineActionsMenu.open,
+        blockLineActionsMenu.pos,
+        blockTaskActionsMenu.open,
+        blockTaskActionsMenu.pos,
+        blockTaskStatusMenu.open,
+        blockTaskStatusMenu.pos,
+        editor,
+    ]);
+
     const blockUi = useMemo(() => {
         if (!editor) {
             return null;
         }
 
+        const applyLineAction = (action: BlockLineAction) => {
+            if (blockLineActionsMenu.pos === null) {
+                return;
+            }
+
+            const selectionPos = Math.max(1, blockLineActionsMenu.pos + 1);
+            editor.chain().focus().setTextSelection(selectionPos).run();
+
+            if (action.startsWith('heading-')) {
+                const level = Number(action.replace('heading-', ''));
+                setCurrentHeadingLevel(editor, Math.min(6, Math.max(1, level)));
+                return;
+            }
+
+            if (action === 'paragraph') {
+                const currentBlock = getCurrentBlockNode(editor);
+                if (currentBlock?.type === 'heading') {
+                    convertCurrentHeadingToParagraph(editor);
+                    return;
+                }
+
+                setCurrentParagraphStyle(editor, 'paragraph');
+                return;
+            }
+
+            if (
+                action === 'task' ||
+                action === 'checklist' ||
+                action === 'bullet' ||
+                action === 'ordered' ||
+                action === 'quote'
+            ) {
+                const currentBlock = getCurrentBlockNode(editor);
+                if (currentBlock?.type === 'heading') {
+                    convertCurrentHeadingToParagraph(editor);
+                }
+
+                const refreshedBlock = getCurrentBlockNode(editor);
+                if (refreshedBlock?.type === 'paragraph') {
+                    const attrs = normalizeParagraphAttrs(refreshedBlock.node.attrs);
+                    setCurrentParagraphStyle(editor, action, {
+                        order: action === 'ordered' ? Number(attrs.order ?? 1) : 1,
+                    });
+                    return;
+                }
+
+                editor.chain().focus().setNode('paragraph', normalizeParagraphAttrs({
+                    blockStyle: action,
+                })).run();
+                return;
+            }
+
+            if (action === 'code-block') {
+                editor.chain().focus().setTextSelection(selectionPos).toggleCodeBlock().run();
+                return;
+            }
+
+            if (action === 'horizontal-rule') {
+                editor.chain().focus().setTextSelection(selectionPos).setHorizontalRule().run();
+                return;
+            }
+
+            if (action === 'image') {
+                editor.chain().focus().setTextSelection(selectionPos).setImageUploadNode({}).run();
+                return;
+            }
+        };
+
         return (
             <>
-                <BlockNodeToolbar editor={editor} />
+                {isMobileViewport ? (
+                    <BlockNodeToolbar
+                        editor={editor}
+                        mode="mobile"
+                        visible={isEditorActive}
+                        keyboardInset={mobileKeyboardInset}
+                    />
+                ) : (
+                    <BlockNodeToolbar
+                        editor={editor}
+                        mode="bubble"
+                        visible={isEditorActive}
+                    />
+                )}
 
                 <TaskMigratePicker
                     open={taskMigratePicker.open}
@@ -451,9 +740,26 @@ export function useBlockEditorUi({
                         });
                     }}
                 />
+
+                <BlockLineActionsMenu
+                    open={blockLineActionsMenu.open}
+                    x={blockLineActionsMenu.x}
+                    y={blockLineActionsMenu.y}
+                    onClose={() => {
+                        setBlockLineActionsMenu((current) => ({
+                            ...current,
+                            open: false,
+                        }));
+                    }}
+                    onSelect={applyLineAction}
+                />
             </>
         );
     }, [
+        blockLineActionsMenu.open,
+        blockLineActionsMenu.pos,
+        blockLineActionsMenu.x,
+        blockLineActionsMenu.y,
         blockTaskActionsMenu.blockId,
         blockTaskActionsMenu.open,
         blockTaskActionsMenu.pos,
@@ -466,10 +772,13 @@ export function useBlockEditorUi({
         blockTaskStatusMenu.x,
         blockTaskStatusMenu.y,
         editor,
+        isEditorActive,
         language,
         linkableNotes,
+        mobileKeyboardInset,
         noteId,
         resolveSourceNoteId,
+        isMobileViewport,
         workspaceSuggestions,
         taskMigratePicker.anchorPoint,
         taskMigratePicker.blockId,

@@ -386,11 +386,9 @@ function SimpleEditorComponent({
             return {};
         }
 
-        const inset = mobileKeyboardInset + 96;
-
         return {
-            paddingBottom: `${inset}px`,
-            scrollPaddingBottom: `${inset}px`,
+            paddingBottom: `calc(${mobileKeyboardInset + 132}px + env(safe-area-inset-bottom, 0px))`,
+            scrollPaddingBottom: `calc(${mobileKeyboardInset + 132}px + env(safe-area-inset-bottom, 0px))`,
         };
     }, [mobileKeyboardInset]);
 
@@ -624,6 +622,7 @@ function SimpleEditorComponent({
         editor,
         noteId: id,
         language,
+        mobileKeyboardInset,
         linkableNotes,
         workspaceSuggestions: {
             mentions: mentionSuggestions,
