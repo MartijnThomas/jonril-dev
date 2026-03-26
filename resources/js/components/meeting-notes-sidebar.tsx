@@ -32,6 +32,8 @@ type MeetingNotesSidebarProps = {
     language?: 'nl' | 'en';
     currentNoteId?: string | null;
     onClose?: () => void;
+    embedded?: boolean;
+    className?: string;
 };
 
 function formatMeetingDateTime(startsAt: string | null | undefined, language: 'nl' | 'en'): string | null {
@@ -107,13 +109,30 @@ function MeetingNoteItem({ note, language, currentNoteId }: { note: MeetingNote;
     );
 }
 
-export function MeetingNotesSidebar({ meetingNotes, language = 'en', currentNoteId = null, onClose }: MeetingNotesSidebarProps) {
+export function MeetingNotesSidebar({
+    meetingNotes,
+    language = 'en',
+    currentNoteId = null,
+    onClose,
+    embedded = false,
+    className,
+}: MeetingNotesSidebarProps) {
     if (meetingNotes.length === 0) {
         return null;
     }
 
+    const Container = embedded ? 'div' : 'aside';
+
     return (
-        <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-l border-sidebar-border/60 bg-sidebar">
+        <Container
+            className={cn(
+                'flex min-h-0 flex-col overflow-hidden',
+                embedded
+                    ? 'h-full bg-sidebar'
+                    : 'w-64 shrink-0 border-l border-sidebar-border/60 bg-sidebar',
+                className,
+            )}
+        >
             <div className="flex h-12 items-center gap-2 border-b border-sidebar-border/60 px-4">
                 <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
                 <span className="text-sm font-medium">Meetings</span>
@@ -137,6 +156,6 @@ export function MeetingNotesSidebar({ meetingNotes, language = 'en', currentNote
                     <MeetingNoteItem key={note.id} note={note} language={language} currentNoteId={currentNoteId} />
                 ))}
             </ul>
-        </aside>
+        </Container>
     );
 }

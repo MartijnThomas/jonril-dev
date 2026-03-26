@@ -18,9 +18,12 @@ import {
     ChevronsRight,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MeetingNotesSidebar } from '@/components/meeting-notes-sidebar';
+import type { MeetingNote } from '@/components/meeting-notes-sidebar';
 import { RightSidebarTodayEvents } from '@/components/right-sidebar-today-events';
 import { Button } from '@/components/ui/button';
 import { Calendar, CalendarDayButton } from '@/components/ui/calendar';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
     Tooltip,
     TooltipContent,
@@ -52,9 +55,29 @@ type SidebarEvent = {
 };
 
 type JournalPageProps = {
+    noteId?: string;
     noteType?: string;
     journalGranularity?: string | null;
     journalPeriod?: string | null;
+    meetingChildren?: Array<{
+        id: string;
+        title: string;
+        href: string;
+        starts_at?: string | null;
+        event_deleted?: boolean;
+        task_counts?: {
+            total?: number;
+            open?: number;
+            completed?: number;
+            canceled?: number;
+            migrated?: number;
+            in_progress?: number;
+            backlog?: number;
+            assigned?: number;
+            deferred?: number;
+            starred?: number;
+        } | null;
+    }>;
     auth?: {
         user?: {
             settings?: {
@@ -387,6 +410,70 @@ export function RightSidebarCalendar() {
     const indicatorPendingAttemptRef = useRef<Record<string, number>>({});
     const indicatorErrorAttemptRef = useRef<Record<string, number>>({});
     const [indicatorRefreshNonce, setIndicatorRefreshNonce] = useState(0);
+    const meetingChildren = useMemo(
+        () => pageProps.meetingChildren ?? [],
+        [pageProps.meetingChildren],
+    );
+    const isDailyJournalNote =
+        pageProps.noteType === 'journal' &&
+        pageProps.journalGranularity === 'daily';
+    const dailyMeetingNotes = useMemo<MeetingNote[]>(() => {
+        if (!isDailyJournalNote || events.length === 0) {
+            return [];
+        }
+
+        const byMeetingId = new Map<string, MeetingNote>();
+
+        events.forEach((eventItem) => {
+            const meetingId = eventItem.meeting_note_id?.trim() ?? '';
+            const meetingHref = eventItem.meeting_note_href?.trim() ?? '';
+            const meetingTitle = eventItem.note_title?.trim() ?? '';
+
+            if (meetingId === '' || meetingHref === '' || meetingTitle === '') {
+                return;
+            }
+
+            const existing = byMeetingId.get(meetingId);
+            if (existing) {
+                return;
+            }
+
+            byMeetingId.set(meetingId, {
+                id: meetingId,
+                title: meetingTitle,
+                href: meetingHref,
+                starts_at: eventItem.starts_at,
+                event_deleted: eventItem.remote_deleted === true,
+                task_counts: null,
+            });
+        });
+
+        return Array.from(byMeetingId.values());
+    }, [events, isDailyJournalNote]);
+    const tabMeetingNotes = useMemo<MeetingNote[]>(() => {
+        if (pageProps.noteType === 'meeting') {
+            return meetingChildren;
+        }
+
+        if (isDailyJournalNote) {
+            return dailyMeetingNotes;
+        }
+
+        return [];
+    }, [dailyMeetingNotes, isDailyJournalNote, meetingChildren, pageProps.noteType]);
+    const hasMeetingsTab = tabMeetingNotes.length > 0;
+    const [activeSidebarTab, setActiveSidebarTab] = useState<
+        'events' | 'meetings'
+    >(hasMeetingsTab && !isDailyJournalNote ? 'meetings' : 'events');
+
+    useEffect(() => {
+        if (hasMeetingsTab && !isDailyJournalNote) {
+            setActiveSidebarTab('meetings');
+            return;
+        }
+
+        setActiveSidebarTab('events');
+    }, [hasMeetingsTab, isDailyJournalNote]);
 
     const readStorageCache = useCallback((): Record<string, CachedIndicatorPayload> => {
         if (typeof window === 'undefined') {
@@ -1348,27 +1435,69 @@ export function RightSidebarCalendar() {
                 />
             </div>
 
-            <RightSidebarTodayEvents
-                events={events}
-                language={language}
-                anchorDate={eventsDate}
-                timeblockColor={
-                    pageProps.currentWorkspace?.timeblock_color ??
-                    pageProps.currentWorkspace?.color ??
-                    null
+            <Tabs
+                value={activeSidebarTab}
+                onValueChange={(value) =>
+                    setActiveSidebarTab(value as 'events' | 'meetings')
                 }
-                workspaceColor={pageProps.currentWorkspace?.color ?? null}
-                dateLongFormat={
-                    pageProps.auth?.user?.settings?.date_long_format ?? null
-                }
-                timeFormat={pageProps.auth?.user?.settings?.time_format ?? null}
-                timezone={pageProps.auth?.user?.settings?.timezone ?? null}
-                onRefresh={
-                    eventsWorkspaceSlug !== '' ? refreshEvents : undefined
-                }
-                isRefreshing={isRefreshing || isSyncing}
-                className="min-h-0 flex-1"
-            />
+                className="mt-3 min-h-0 flex-1"
+            >
+                <div className="px-2 pb-2">
+                    <TabsList className="h-8">
+                        <TabsTrigger
+                            value="events"
+                            className="px-2.5 py-1 text-xs"
+                        >
+                            {language === 'en' ? 'Events' : 'Evenementen'}
+                        </TabsTrigger>
+                        {hasMeetingsTab ? (
+                            <TabsTrigger
+                                value="meetings"
+                                className="px-2.5 py-1 text-xs"
+                            >
+                                {language === 'en' ? 'Meetings' : 'Vergaderingen'}
+                            </TabsTrigger>
+                        ) : null}
+                    </TabsList>
+                </div>
+
+                <TabsContent value="events" className="min-h-0 flex-1">
+                    <RightSidebarTodayEvents
+                        events={events}
+                        language={language}
+                        anchorDate={eventsDate}
+                        timeblockColor={
+                            pageProps.currentWorkspace?.timeblock_color ??
+                            pageProps.currentWorkspace?.color ??
+                            null
+                        }
+                        workspaceColor={pageProps.currentWorkspace?.color ?? null}
+                        dateLongFormat={
+                            pageProps.auth?.user?.settings?.date_long_format ??
+                            null
+                        }
+                        timeFormat={pageProps.auth?.user?.settings?.time_format ?? null}
+                        timezone={pageProps.auth?.user?.settings?.timezone ?? null}
+                        onRefresh={
+                            eventsWorkspaceSlug !== '' ? refreshEvents : undefined
+                        }
+                        isRefreshing={isRefreshing || isSyncing}
+                        className="min-h-0 flex-1"
+                    />
+                </TabsContent>
+
+                {hasMeetingsTab ? (
+                    <TabsContent value="meetings" className="min-h-0 flex-1">
+                        <MeetingNotesSidebar
+                            meetingNotes={tabMeetingNotes}
+                            language={language}
+                            currentNoteId={pageProps.noteId ?? null}
+                            embedded
+                            className="h-full"
+                        />
+                    </TabsContent>
+                ) : null}
+            </Tabs>
         </section>
     );
 }

@@ -9,7 +9,6 @@ import { Plus } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
-import { MeetingNotesSidebar } from '@/components/meeting-notes-sidebar';
 import {
     NoteRelatedPanel,
     NoteRelatedPanelPlaceholder,
@@ -1000,15 +999,6 @@ function SimpleEditorComponent({
                 </EditorContext.Provider>
 
             </div>
-
-            {hasMeetingNotes && showMeetingNotes ? (
-                <MeetingNotesSidebar
-                    meetingNotes={meetingChildren}
-                    language={language}
-                    currentNoteId={id}
-                    onClose={() => setShowMeetingNotes(false)}
-                />
-            ) : null}
         </div>
     );
 }
