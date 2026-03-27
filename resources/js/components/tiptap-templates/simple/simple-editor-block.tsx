@@ -366,8 +366,16 @@ function SimpleEditorComponent({
             }
 
             const viewportBottom = viewport.height + viewport.offsetTop;
-            const keyboardInset = Math.max(0, Math.round(window.innerHeight - viewportBottom));
-            setMobileKeyboardInset(keyboardInset > 32 ? keyboardInset : 0);
+            const keyboardInset = Math.max(
+                0,
+                Math.round(window.innerHeight - viewportBottom),
+            );
+            const browserControlsInset = Math.max(
+                0,
+                Math.round(window.innerHeight - document.documentElement.clientHeight),
+            );
+
+            setMobileKeyboardInset(Math.max(keyboardInset, browserControlsInset));
         };
 
         updateKeyboardInset();
